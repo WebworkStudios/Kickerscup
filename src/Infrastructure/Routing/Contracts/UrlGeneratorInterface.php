@@ -14,7 +14,8 @@ interface UrlGeneratorInterface
      *
      * @param string $name Name der Route
      * @param array $parameters Parameter für die URL
+     * @param bool $absoluteUrl Ob eine absolute URL generiert werden soll
      * @return string Die generierte URL
      */
-    public function generate(string $name, array $parameters = []): string;
+    public function generate(string $name, array $parameters = [], bool $absoluteUrl = false): string;
 }

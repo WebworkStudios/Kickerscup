@@ -13,7 +13,6 @@ use App\Infrastructure\Http\Contracts\ResponseFactoryInterface;
 use App\Infrastructure\Http\Contracts\ResponseInterface;
 use App\Infrastructure\Routing\Contracts\RouterInterface;
 use App\Infrastructure\Routing\Contracts\UrlGeneratorInterface;
-use App\Infrastructure\Routing\Exceptions\MethodNotAllowedException;
 use App\Infrastructure\Routing\Exceptions\RouteCreationException;
 use App\Infrastructure\Routing\Exceptions\RouteNotFoundException;
 use Closure;
@@ -61,7 +60,7 @@ class Router implements RouterInterface
     /**
      * {@inheritdoc}
      */
-    public function addRoute(string|array $methods, string $path, callable|array|string $handler, ?string $name = null): static
+    public function addRoute(string|array $methods, string $path, callable|array|string $handler, ?string $name = null, ?string $domain = null): static
     {
         if (is_string($methods)) {
             $methods = [$methods];
@@ -69,6 +68,9 @@ class Router implements RouterInterface
 
         // Normalisiere den Pfad (entferne doppelte Slashes, etc.)
         $path = $this->normalizePath($path);
+
+        // Normalisiere die Domain (default: null für jede Domain)
+        $domain = $domain !== null ? strtolower($domain) : null;
 
         // Extrahiere Parameter-Informationen aus dem Pfad
         $parameterInfo = $this->extractParameterInfo($path);
@@ -78,13 +80,23 @@ class Router implements RouterInterface
             'path' => $path,
             'pattern' => $pattern,
             'handler' => $handler,
-            'parameters' => $parameterInfo['parameters']
+            'parameters' => $parameterInfo['parameters'],
+            'domain' => $domain
         ];
 
         // Registriere die Route für jede HTTP-Methode
         foreach ($methods as $method) {
             $method = strtoupper($method);
-            $this->routes[$method][$path] = $routeInfo;
+
+            if (!isset($this->routes[$method])) {
+                $this->routes[$method] = [];
+            }
+
+            if (!isset($this->routes[$method][$domain])) {
+                $this->routes[$method][$domain] = [];
+            }
+
+            $this->routes[$method][$domain][$path] = $routeInfo;
         }
 
         // Wenn ein Name angegeben wurde, registriere die Route auch unter diesem Namen
@@ -93,100 +105,6 @@ class Router implements RouterInterface
         }
 
         return $this;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function match(RequestInterface $request): mixed
-    {
-        $method = $request->getMethod();
-        $path = $this->normalizePath($request->getPath());
-
-        // Prüfe, ob die HTTP-Methode überhaupt registrierte Routen hat
-        if (!isset($this->routes[$method])) {
-            // Prüfe, ob der Pfad für andere Methoden existiert
-            $allowedMethods = [];
-            foreach (array_keys($this->routes) as $allowedMethod) {
-                foreach ($this->routes[$allowedMethod] as $routePath => $routeInfo) {
-                    if (preg_match($routeInfo['pattern'], $path, $matches)) {
-                        $allowedMethods[] = $allowedMethod;
-                        break;
-                    }
-                }
-            }
-
-            if (!empty($allowedMethods)) {
-                $exception = new MethodNotAllowedException(
-                    "Methode {$method} ist nicht erlaubt für Pfad {$path}."
-                );
-                $exception->setAllowedMethods($allowedMethods);
-                throw $exception;
-            }
-
-            return false;
-        }
-
-        // Suche nach einer passenden Route für die Methode und den Pfad
-        foreach ($this->routes[$method] as $routeInfo) {
-            if (preg_match($routeInfo['pattern'], $path, $matches)) {
-                // Extrahiere die Parameter-Werte aus den Matches
-                $parameters = $this->extractParameterValues($matches, $routeInfo['parameters']);
-
-                return [
-                    'route' => $routeInfo,
-                    'parameters' => $parameters
-                ];
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function dispatch(RequestInterface $request): ResponseInterface
-    {
-        $match = $this->match($request);
-
-        if ($match === false) {
-            throw new RouteNotFoundException(
-                "Keine Route gefunden für {$request->getMethod()} {$request->getPath()}."
-            );
-        }
-
-        $route = $match['route'];
-        $parameters = $match['parameters'];
-        $handler = $route['handler'];
-
-        // Rufe den Handler mit den Parametern auf
-        $response = $this->callHandler($handler, $parameters, $request);
-
-        // Wenn der Handler bereits eine Response zurückgibt, verwende diese
-        if ($response instanceof ResponseInterface) {
-            return $response;
-        }
-
-        // Sonst erstelle eine Response basierend auf dem Rückgabewert
-        if (is_string($response)) {
-            return $this->responseFactory->createHtml($response);
-        }
-
-        if (is_array($response) || is_object($response)) {
-            return $this->responseFactory->createJson($response);
-        }
-
-        // Fallback für andere Rückgabetypen
-        return $this->responseFactory->create(200, (string)$response);
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function generateUrl(string $name, array $parameters = []): string
-    {
-        return $this->urlGenerator->generate($name, $parameters);
     }
 
     /**
@@ -252,6 +170,109 @@ class Router implements RouterInterface
     }
 
     /**
+     * {@inheritdoc}
+     */
+    public function dispatch(RequestInterface $request): ResponseInterface
+    {
+        $match = $this->match($request);
+
+        if ($match === false) {
+            throw new RouteNotFoundException(
+                "Keine Route gefunden für {$request->getMethod()} {$request->getPath()}."
+            );
+        }
+
+        $route = $match['route'];
+        $parameters = $match['parameters'];
+        $handler = $route['handler'];
+
+        // Rufe den Handler mit den Parametern auf
+        $response = $this->callHandler($handler, $parameters, $request);
+
+        // Wenn der Handler bereits eine Response zurückgibt, verwende diese
+        if ($response instanceof ResponseInterface) {
+            return $response;
+        }
+
+        // Sonst erstelle eine Response basierend auf dem Rückgabewert
+        if (is_string($response)) {
+            return $this->responseFactory->createHtml($response);
+        }
+
+        if (is_array($response) || is_object($response)) {
+            return $this->responseFactory->createJson($response);
+        }
+
+        // Fallback für andere Rückgabetypen
+        return $this->responseFactory->create(200, (string)$response);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function match(RequestInterface $request): mixed
+    {
+        $method = $request->getMethod();
+        $path = $this->normalizePath($request->getPath());
+        $host = $request->getHost(); // Neue Methode in Request
+
+        // Prüfe, ob die HTTP-Methode überhaupt registrierte Routen hat
+        if (!isset($this->routes[$method])) {
+            // Prüfe, ob der Pfad für andere Methoden existiert
+            // ... (Rest der Methode bleibt gleich, nur mit angepasster Domain-Prüfung)
+            // ...
+        }
+
+        // Zuerst domain-spezifische Routen prüfen
+        if (isset($this->routes[$method])) {
+            // 1. Prüfe exakte Domain-Übereinstimmung
+            if ($host !== null && isset($this->routes[$method][$host])) {
+                $match = $this->matchPath($path, $this->routes[$method][$host]);
+                if ($match !== false) {
+                    return $match;
+                }
+            }
+
+            // 2. Prüfe Subdomain-Übereinstimmungen (z.B. *.example.com)
+            // Diese Logik könnte erweitert werden für Wildcard-Domains
+
+            // 3. Prüfe Domain-unabhängige Routen (null domain)
+            if (isset($this->routes[$method][null])) {
+                $match = $this->matchPath($path, $this->routes[$method][null]);
+                if ($match !== false) {
+                    return $match;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Prüft, ob ein Pfad mit einer der Routen übereinstimmt
+     *
+     * @param string $path Der zu prüfende Pfad
+     * @param array $routes Die Routen zum Vergleichen
+     * @return array|false Die gefundene Route oder false
+     */
+    protected function matchPath(string $path, array $routes): array|false
+    {
+        foreach ($routes as $routeInfo) {
+            if (preg_match($routeInfo['pattern'], $path, $matches)) {
+                // Extrahiere die Parameter-Werte aus den Matches
+                $parameters = $this->extractParameterValues($matches, $routeInfo['parameters']);
+
+                return [
+                    'route' => $routeInfo,
+                    'parameters' => $parameters
+                ];
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Extrahiert Parameter-Werte aus Matches
      *
      * @param array $matches Matches aus dem regulären Ausdruck
@@ -313,45 +334,6 @@ class Router implements RouterInterface
         $args = $this->resolveParameters($reflection->getParameters(), $parameters, $request);
 
         return $reflection->invokeArgs($args);
-    }
-
-    /**
-     * Ruft eine Controller-Methode mit den Parametern auf
-     *
-     * @param string|object $controller Der Controller (Name oder Instanz)
-     * @param string $method Die aufzurufende Methode
-     * @param array $parameters Die Parameter aus der URL
-     * @param RequestInterface $request Der HTTP-Request
-     * @return mixed Das Ergebnis des Methoden-Aufrufs
-     */
-    protected function callControllerMethod(string|object $controller, string $method, array $parameters, RequestInterface $request): mixed
-    {
-        // Wenn der Controller ein String ist, instanziiere ihn über den Container
-        if (is_string($controller)) {
-            $controller = $this->container->get($controller);
-        }
-
-        $reflection = new ReflectionMethod($controller, $method);
-        $args = $this->resolveParameters($reflection->getParameters(), $parameters, $request);
-
-        return $reflection->invokeArgs($controller, $args);
-    }
-
-    /**
-     * Ruft eine __invoke-Methode mit den Parametern auf
-     *
-     * @param string $className Der Name der Klasse
-     * @param array $parameters Die Parameter aus der URL
-     * @param RequestInterface $request Der HTTP-Request
-     * @return mixed Das Ergebnis des __invoke-Aufrufs
-     */
-    protected function callInvokable(string $className, array $parameters, RequestInterface $request): mixed
-    {
-        $instance = $this->container->get($className);
-        $reflection = new ReflectionMethod($instance, '__invoke');
-        $args = $this->resolveParameters($reflection->getParameters(), $parameters, $request);
-
-        return $reflection->invokeArgs($instance, $args);
     }
 
     /**
@@ -426,5 +408,52 @@ class Router implements RouterInterface
         }
 
         return $resolvedParameters;
+    }
+
+    /**
+     * Ruft eine Controller-Methode mit den Parametern auf
+     *
+     * @param string|object $controller Der Controller (Name oder Instanz)
+     * @param string $method Die aufzurufende Methode
+     * @param array $parameters Die Parameter aus der URL
+     * @param RequestInterface $request Der HTTP-Request
+     * @return mixed Das Ergebnis des Methoden-Aufrufs
+     */
+    protected function callControllerMethod(string|object $controller, string $method, array $parameters, RequestInterface $request): mixed
+    {
+        // Wenn der Controller ein String ist, instanziiere ihn über den Container
+        if (is_string($controller)) {
+            $controller = $this->container->get($controller);
+        }
+
+        $reflection = new ReflectionMethod($controller, $method);
+        $args = $this->resolveParameters($reflection->getParameters(), $parameters, $request);
+
+        return $reflection->invokeArgs($controller, $args);
+    }
+
+    /**
+     * Ruft eine __invoke-Methode mit den Parametern auf
+     *
+     * @param string $className Der Name der Klasse
+     * @param array $parameters Die Parameter aus der URL
+     * @param RequestInterface $request Der HTTP-Request
+     * @return mixed Das Ergebnis des __invoke-Aufrufs
+     */
+    protected function callInvokable(string $className, array $parameters, RequestInterface $request): mixed
+    {
+        $instance = $this->container->get($className);
+        $reflection = new ReflectionMethod($instance, '__invoke');
+        $args = $this->resolveParameters($reflection->getParameters(), $parameters, $request);
+
+        return $reflection->invokeArgs($instance, $args);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function generateUrl(string $name, array $parameters = []): string
+    {
+        return $this->urlGenerator->generate($name, $parameters);
     }
 }

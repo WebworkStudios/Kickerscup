@@ -51,7 +51,10 @@ class UrlGenerator implements UrlGeneratorInterface
     /**
      * {@inheritdoc}
      */
-    public function generate(string $name, array $parameters = []): string
+    /**
+     * {@inheritdoc}
+     */
+    public function generate(string $name, array $parameters = [], bool $absoluteUrl = false): string
     {
         if (!isset($this->namedRoutes[$name])) {
             throw new NamedRouteNotFoundException("Route mit dem Namen '{$name}' wurde nicht gefunden.");
@@ -83,6 +86,14 @@ class UrlGenerator implements UrlGeneratorInterface
         $queryParams = array_diff_key($parameters, $routeInfo['parameters']);
         if (!empty($queryParams)) {
             $path .= '?' . http_build_query($queryParams);
+        }
+
+        // Bei absoluter URL-Generierung die Domain berücksichtigen
+        if ($absoluteUrl) {
+            $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https://' : 'http://';
+            $domain = $routeInfo['domain'] ?? $_SERVER['HTTP_HOST'] ?? 'localhost';
+
+            return $protocol . $domain . $path;
         }
 
         return $path;

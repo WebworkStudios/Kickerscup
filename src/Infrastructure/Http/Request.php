@@ -99,6 +99,29 @@ class Request implements RequestInterface
     }
 
     /**
+     * Parst die HTTP-Headers aus den Server-Parametern
+     *
+     * @param array<string, string> $serverParams
+     * @return array<string, string>
+     */
+    protected function parseHeaders(array $serverParams): array
+    {
+        $headers = [];
+
+        foreach ($serverParams as $key => $value) {
+            if (str_starts_with($key, 'HTTP_')) {
+                $name = strtolower(str_replace('_', '-', substr($key, 5)));
+                $headers[$name] = $value;
+            } elseif (in_array($key, ['CONTENT_TYPE', 'CONTENT_LENGTH'])) {
+                $name = strtolower(str_replace('_', '-', $key));
+                $headers[$name] = $value;
+            }
+        }
+
+        return $headers;
+    }
+
+    /**
      * Gibt die HTTP-Methode zurück
      */
     public function getMethod(): string
@@ -107,19 +130,19 @@ class Request implements RequestInterface
     }
 
     /**
-     * Überprüft, ob die aktuelle Anfrage eine bestimmte HTTP-Methode verwendet
-     */
-    public function isMethod(string $method): bool
-    {
-        return $this->method === strtoupper($method);
-    }
-
-    /**
      * Überprüft, ob die Anfrage per GET erfolgte
      */
     public function isGet(): bool
     {
         return $this->isMethod('GET');
+    }
+
+    /**
+     * Überprüft, ob die aktuelle Anfrage eine bestimmte HTTP-Methode verwendet
+     */
+    public function isMethod(string $method): bool
+    {
+        return $this->method === strtoupper($method);
     }
 
     /**
@@ -198,22 +221,6 @@ class Request implements RequestInterface
     }
 
     /**
-     * Gibt einen bestimmten Query-Parameter zurück
-     */
-    public function getQueryParam(string $name, mixed $default = null): mixed
-    {
-        return $this->queryParams[$name] ?? $default;
-    }
-
-    /**
-     * Überprüft, ob ein Query-Parameter existiert
-     */
-    public function hasQueryParam(string $name): bool
-    {
-        return isset($this->queryParams[$name]);
-    }
-
-    /**
      * Gibt alle Post-Daten zurück
      *
      * @return array<string, mixed>
@@ -221,22 +228,6 @@ class Request implements RequestInterface
     public function getPostData(): array
     {
         return $this->postData;
-    }
-
-    /**
-     * Gibt einen bestimmten Post-Parameter zurück
-     */
-    public function getPostParam(string $name, mixed $default = null): mixed
-    {
-        return $this->postData[$name] ?? $default;
-    }
-
-    /**
-     * Überprüft, ob ein Post-Parameter existiert
-     */
-    public function hasPostParam(string $name): bool
-    {
-        return isset($this->postData[$name]);
     }
 
     /**
@@ -248,11 +239,43 @@ class Request implements RequestInterface
     }
 
     /**
+     * Gibt einen bestimmten Post-Parameter zurück
+     */
+    public function getPostParam(string $name, mixed $default = null): mixed
+    {
+        return $this->postData[$name] ?? $default;
+    }
+
+    /**
+     * Gibt einen bestimmten Query-Parameter zurück
+     */
+    public function getQueryParam(string $name, mixed $default = null): mixed
+    {
+        return $this->queryParams[$name] ?? $default;
+    }
+
+    /**
      * Überprüft, ob ein Input-Parameter existiert
      */
     public function hasInput(string $name): bool
     {
         return $this->hasQueryParam($name) || $this->hasPostParam($name);
+    }
+
+    /**
+     * Überprüft, ob ein Query-Parameter existiert
+     */
+    public function hasQueryParam(string $name): bool
+    {
+        return isset($this->queryParams[$name]);
+    }
+
+    /**
+     * Überprüft, ob ein Post-Parameter existiert
+     */
+    public function hasPostParam(string $name): bool
+    {
+        return isset($this->postData[$name]);
     }
 
     /**
@@ -348,52 +371,12 @@ class Request implements RequestInterface
     }
 
     /**
-     * Gibt einen bestimmten Header zurück
-     */
-    public function getHeader(string $name, mixed $default = null): mixed
-    {
-        $name = strtolower($name);
-        return $this->headers[$name] ?? $default;
-    }
-
-    /**
      * Überprüft, ob ein Header existiert
      */
     public function hasHeader(string $name): bool
     {
         $name = strtolower($name);
         return isset($this->headers[$name]);
-    }
-
-    /**
-     * Gibt den Content-Type zurück
-     */
-    public function getContentType(): ?string
-    {
-        return $this->getHeader('content-type');
-    }
-
-    /**
-     * Überprüft, ob die Anfrage ein bestimmten Content-Type hat
-     */
-    public function isContentType(string $contentType): bool
-    {
-        $currentContentType = $this->getContentType();
-        if ($currentContentType === null) {
-            return false;
-        }
-
-        // Vergleiche nur den MIME-Type ohne Parameter
-        $currentContentType = explode(';', $currentContentType)[0];
-        return strtolower($currentContentType) === strtolower($contentType);
-    }
-
-    /**
-     * Überprüft, ob die Anfrage eine JSON-Anfrage ist
-     */
-    public function isJson(): bool
-    {
-        return $this->isContentType('application/json');
     }
 
     /**
@@ -405,15 +388,12 @@ class Request implements RequestInterface
     }
 
     /**
-     * Gibt den Raw-Body zurück
+     * Gibt einen bestimmten Header zurück
      */
-    public function getRawBody(): string
+    public function getHeader(string $name, mixed $default = null): mixed
     {
-        if ($this->rawBody === null) {
-            $this->rawBody = file_get_contents('php://input') ?: '';
-        }
-
-        return $this->rawBody;
+        $name = strtolower($name);
+        return $this->headers[$name] ?? $default;
     }
 
     /**
@@ -438,6 +418,49 @@ class Request implements RequestInterface
         }
 
         return $data;
+    }
+
+    /**
+     * Überprüft, ob die Anfrage eine JSON-Anfrage ist
+     */
+    public function isJson(): bool
+    {
+        return $this->isContentType('application/json');
+    }
+
+    /**
+     * Überprüft, ob die Anfrage ein bestimmten Content-Type hat
+     */
+    public function isContentType(string $contentType): bool
+    {
+        $currentContentType = $this->getContentType();
+        if ($currentContentType === null) {
+            return false;
+        }
+
+        // Vergleiche nur den MIME-Type ohne Parameter
+        $currentContentType = explode(';', $currentContentType)[0];
+        return strtolower($currentContentType) === strtolower($contentType);
+    }
+
+    /**
+     * Gibt den Content-Type zurück
+     */
+    public function getContentType(): ?string
+    {
+        return $this->getHeader('content-type');
+    }
+
+    /**
+     * Gibt den Raw-Body zurück
+     */
+    public function getRawBody(): string
+    {
+        if ($this->rawBody === null) {
+            $this->rawBody = file_get_contents('php://input') ?: '';
+        }
+
+        return $this->rawBody;
     }
 
     /**
@@ -482,25 +505,31 @@ class Request implements RequestInterface
     }
 
     /**
-     * Parst die HTTP-Headers aus den Server-Parametern
+     * Gibt die Subdomain zurück
      *
-     * @param array<string, string> $serverParams
-     * @return array<string, string>
+     * @param string $baseDomain Die Basis-Domain (z.B. 'example.com')
+     * @return string|null Die Subdomain oder null, wenn keine existiert
      */
-    protected function parseHeaders(array $serverParams): array
+    public function getSubdomain(string $baseDomain): ?string
     {
-        $headers = [];
-
-        foreach ($serverParams as $key => $value) {
-            if (str_starts_with($key, 'HTTP_')) {
-                $name = strtolower(str_replace('_', '-', substr($key, 5)));
-                $headers[$name] = $value;
-            } elseif (in_array($key, ['CONTENT_TYPE', 'CONTENT_LENGTH'])) {
-                $name = strtolower(str_replace('_', '-', $key));
-                $headers[$name] = $value;
-            }
+        $host = $this->getHost();
+        if ($host === null) {
+            return null;
         }
 
-        return $headers;
+        // Prüfen, ob es sich um eine Subdomain handelt
+        if (str_ends_with($host, '.' . $baseDomain)) {
+            return substr($host, 0, strlen($host) - strlen('.' . $baseDomain));
+        }
+
+        return null;
+    }
+
+    /**
+     * Gibt den Host/Domain zurück
+     */
+    public function getHost(): ?string
+    {
+        return $this->serverParams['HTTP_HOST'] ?? null;
     }
 }

@@ -85,4 +85,17 @@ interface RequestInterface
      * Gibt die Client-IP-Adresse zurück
      */
     public function getClientIp(): string;
+
+    /**
+     * Gibt den Host/Domain zurück
+     */
+    public function getHost(): ?string;
+
+    /**
+     * Gibt die Subdomain zurück
+     *
+     * @param string $baseDomain Die Basis-Domain (z.B. 'example.com')
+     * @return string|null Die Subdomain oder null, wenn keine existiert
+     */
+    public function getSubdomain(string $baseDomain): ?string;
 }

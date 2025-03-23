@@ -20,9 +20,10 @@ interface RouterInterface
      * @param string $path URL-Pfad mit optionalen Parametern
      * @param callable|array $handler Zu rufende Funktion oder [Controller, Methode]
      * @param string|null $name Optionaler Name für die Route
+     * @param string|null $domain Optionale Domain/Subdomain für die Route
      * @return static
      */
-    public function addRoute(string|array $methods, string $path, callable|array|string $handler, ?string $name = null): static;
+    public function addRoute(string|array $methods, string $path, callable|array|string $handler, ?string $name = null, ?string $domain = null): static;
 
     /**
      * Findet eine Route für den gegebenen Request
@@ -48,4 +49,5 @@ interface RouterInterface
      * @return string Die generierte URL
      */
     public function generateUrl(string $name, array $parameters = []): string;
+
 }

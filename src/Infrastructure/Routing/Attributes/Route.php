@@ -17,11 +17,13 @@ class Route
      * @param string $path Der Pfad der Route (z.B. '/users/{id}')
      * @param array|string $methods Erlaubte HTTP-Methoden für diese Route
      * @param string|null $name Optionaler Name für die Route (für URL-Generierung)
+     * @param string|null $domain Optionale Domain/Subdomain für die Route
      */
     public function __construct(
         public readonly string       $path,
         public readonly array|string $methods = ['GET'],
-        public readonly ?string      $name = null
+        public readonly ?string      $name = null,
+        public readonly ?string      $domain = null
     )
     {
     }

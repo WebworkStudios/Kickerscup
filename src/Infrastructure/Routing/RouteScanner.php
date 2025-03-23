@@ -131,12 +131,13 @@ class RouteScanner implements RouteScannerInterface
                     $path = $routeAttribute->path;
                     $methods = $routeAttribute->methods;
                     $name = $routeAttribute->name;
+                    $domain = $routeAttribute->domain;
 
-                    // Registriere die Route mit der Klasse als Handler
-                    $this->router->addRoute($methods, $path, $className, $name);
+                    // Registriere die Route mit der Klasse als Handler und Domain
+                    $this->router->addRoute($methods, $path, $className, $name, $domain);
 
                     // Sammle Parameter-Attribute für die URL-Generierung
-                    $this->collectParameterAttributes($invokeMethod, $path, $name);
+                    $this->collectParameterAttributes($invokeMethod, $path, $name, $domain);
                 }
             }
 
@@ -155,12 +156,13 @@ class RouteScanner implements RouteScannerInterface
                     $path = $routeAttribute->path;
                     $methods = $routeAttribute->methods;
                     $name = $routeAttribute->name;
+                    $domain = $routeAttribute->domain;
 
-                    // Registriere die Route mit der Klasse und Methode als Handler
-                    $this->router->addRoute($methods, $path, [$className, $method->getName()], $name);
+                    // Registriere die Route mit der Klasse und Methode als Handler und Domain
+                    $this->router->addRoute($methods, $path, [$className, $method->getName()], $name, $domain);
 
                     // Sammle Parameter-Attribute für die URL-Generierung
-                    $this->collectParameterAttributes($method, $path, $name);
+                    $this->collectParameterAttributes($method, $path, $name, $domain);
                 }
             }
         } catch (ReflectionException $e) {
