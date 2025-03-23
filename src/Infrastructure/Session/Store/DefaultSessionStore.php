@@ -23,7 +23,19 @@ class DefaultSessionStore implements SessionStoreInterface
 
     public function read(string $id): string
     {
-        return (string)session_decode(session_id($id));
+
+        $oldId = session_id();
+        session_id($id);
+        $sessionData = '';
+
+        if (session_start()) {
+            $sessionData = session_encode() ?: '';
+            session_abort();
+        }
+
+        session_id($oldId);
+
+        return $sessionData;
     }
 
     public function write(string $id, string $data): bool

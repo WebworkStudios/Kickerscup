@@ -108,14 +108,13 @@ class Session implements SessionInterface
     protected function configureSession(): void
     {
         // Korrekte Verwendung von session_set_cookie_params mit einem Optionen-Array
-        // Diese Syntax wird von PHP 7.3+ unterstützt
         session_set_cookie_params([
             'lifetime' => $this->config->lifetime,
             'path' => $this->config->path,
             'domain' => $this->config->domain,
             'secure' => $this->config->secure,
             'httponly' => $this->config->httpOnly,
-            'samesite' => $this->config->sameSite,
+            'SameSite' => $this->config->sameSite,
         ]);
 
         // Garbage Collection konfigurieren

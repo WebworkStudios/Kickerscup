@@ -29,7 +29,6 @@ class SessionServiceProvider extends ServiceProvider
             return new SessionConfiguration();
         });
 
-        // Registriere den SessionStore basierend auf der Konfiguration
         $container->bind(SessionStoreInterface::class, function (ContainerInterface $c) {
             $config = $c->get(SessionConfiguration::class);
 
@@ -40,6 +39,8 @@ class SessionServiceProvider extends ServiceProvider
                 } else {
                     // Log eine Warnung, dass wir auf den Default-Store zurückfallen
                     error_log('Redis extension nicht verfügbar. Fallback auf Default-Session-Store.');
+                    // Expliziter Rückgabewert hinzugefügt
+                    return new DefaultSessionStore();
                 }
             }
 
