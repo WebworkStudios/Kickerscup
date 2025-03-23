@@ -43,6 +43,13 @@ class Router implements RouterInterface
     protected array $namedRoutes = [];
 
     /**
+     * CORS-Konfigurationen für Routen
+     *
+     * @var array<string, array>
+     */
+    protected array $corsConfigurations = [];
+
+    /**
      * Konstruktor
      *
      * @param ContainerInterface $container Container für die Auflösung von Controllern
@@ -174,6 +181,11 @@ class Router implements RouterInterface
      */
     public function dispatch(RequestInterface $request): ResponseInterface
     {
+        // CORS Preflight-Anfragen behandeln
+        if ($request->getMethod() === 'OPTIONS' && $request->hasHeader('access-control-request-method')) {
+            return $this->handleCorsPreflightRequest($request);
+        }
+
         $match = $this->match($request);
 
         if ($match === false) {
@@ -191,20 +203,121 @@ class Router implements RouterInterface
 
         // Wenn der Handler bereits eine Response zurückgibt, verwende diese
         if ($response instanceof ResponseInterface) {
+            // CORS-Header für normale Anfragen hinzufügen
+            $this->addCorsHeadersToResponse($response, $request);
             return $response;
         }
 
         // Sonst erstelle eine Response basierend auf dem Rückgabewert
         if (is_string($response)) {
-            return $this->responseFactory->createHtml($response);
+            $response = $this->responseFactory->createHtml($response);
+        } elseif (is_array($response) || is_object($response)) {
+            $response = $this->responseFactory->createJson($response);
+        } else {
+            // Fallback für andere Rückgabetypen
+            $response = $this->responseFactory->create(200, (string)$response);
         }
 
-        if (is_array($response) || is_object($response)) {
-            return $this->responseFactory->createJson($response);
+        // CORS-Header hinzufügen
+        $this->addCorsHeadersToResponse($response, $request);
+
+        return $response;
+    }
+
+    /**
+     * Behandelt CORS Preflight-Anfragen
+     *
+     * @param RequestInterface $request Der HTTP-Request
+     * @return ResponseInterface Die Response
+     */
+    protected function handleCorsPreflightRequest(RequestInterface $request): ResponseInterface
+    {
+        $path = $this->normalizePath($request->getPath());
+        $corsConfig = $this->findCorsConfigurationForPath($path);
+
+        // Wenn keine CORS-Konfiguration gefunden wurde, erstelle eine leere Response
+        if ($corsConfig === null) {
+            return $this->responseFactory->create(204);
         }
 
-        // Fallback für andere Rückgabetypen
-        return $this->responseFactory->create(200, (string)$response);
+        $response = $this->responseFactory->create(204);
+
+        // Origin-Header setzen
+        $requestOrigin = $request->getHeader('origin');
+        if ($requestOrigin !== null) {
+            if ($corsConfig['allowOrigin'] === '*') {
+                $response->setHeader('Access-Control-Allow-Origin', '*');
+            } elseif (is_array($corsConfig['allowOrigin']) && in_array($requestOrigin, $corsConfig['allowOrigin'])) {
+                $response->setHeader('Access-Control-Allow-Origin', $requestOrigin);
+                $response->setHeader('Vary', 'Origin');
+            } elseif (is_string($corsConfig['allowOrigin']) && $corsConfig['allowOrigin'] === $requestOrigin) {
+                $response->setHeader('Access-Control-Allow-Origin', $requestOrigin);
+                $response->setHeader('Vary', 'Origin');
+            }
+        }
+
+        // Methoden-Header setzen
+        if ($corsConfig['allowMethods'] === '*') {
+            $requestMethod = $request->getHeader('access-control-request-method');
+            if ($requestMethod !== null) {
+                $response->setHeader('Access-Control-Allow-Methods', $requestMethod);
+            }
+        } else {
+            $allowedMethods = is_array($corsConfig['allowMethods'])
+                ? implode(', ', $corsConfig['allowMethods'])
+                : $corsConfig['allowMethods'];
+            $response->setHeader('Access-Control-Allow-Methods', $allowedMethods);
+        }
+
+        // Header-Header setzen
+        if ($corsConfig['allowHeaders'] === '*') {
+            $requestHeaders = $request->getHeader('access-control-request-headers');
+            if ($requestHeaders !== null) {
+                $response->setHeader('Access-Control-Allow-Headers', $requestHeaders);
+            }
+        } else {
+            $allowedHeaders = is_array($corsConfig['allowHeaders'])
+                ? implode(', ', $corsConfig['allowHeaders'])
+                : $corsConfig['allowHeaders'];
+            $response->setHeader('Access-Control-Allow-Headers', $allowedHeaders);
+        }
+
+        // Credentials-Header setzen
+        if ($corsConfig['allowCredentials']) {
+            $response->setHeader('Access-Control-Allow-Credentials', 'true');
+        }
+
+        // Max-Age-Header setzen
+        $response->setHeader('Access-Control-Max-Age', (string)$corsConfig['maxAge']);
+
+        return $response;
+    }
+
+    /**
+     * Findet die CORS-Konfiguration für einen Pfad
+     *
+     * @param string $path Der Pfad
+     * @return array|null Die CORS-Konfiguration oder null
+     */
+    public function findCorsConfigurationForPath(string $path): ?array
+    {
+        // Exakte Übereinstimmung
+        if (isset($this->corsConfigurations[$path])) {
+            return $this->corsConfigurations[$path];
+        }
+
+        // Nearest match (z.B. /api/* für /api/users)
+        foreach ($this->corsConfigurations as $routePath => $config) {
+            // Pfad endet mit * (Wildcard)
+            if (str_ends_with($routePath, '*')) {
+                $prefix = rtrim(substr($routePath, 0, -1), '/');
+                if (str_starts_with($path, $prefix)) {
+                    return $config;
+                }
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -381,6 +494,30 @@ class Router implements RouterInterface
     }
 
     /**
+     * Erstellt ein reguläres Ausdrucksmuster für eine Domain-Pattern
+     *
+     * @param string $domainPattern Das Domain-Pattern
+     * @return string Das reguläre Ausdrucksmuster
+     */
+    protected function createDomainRegex(string $domainPattern): string
+    {
+        // Konvertiere das Pattern in einen regulären Ausdruck
+        $pattern = preg_replace_callback(
+            '#{([^:}]+)(?::([^}]+))?}#',
+            function ($matches) {
+                $name = $matches[1];
+                $regex = $matches[2] ?? '[^.]+';
+                return '(?<' . $name . '>' . $regex . ')';
+            },
+            $domainPattern
+        );
+
+        // Escape Punkten in der Domain und füge Anker hinzu
+        $pattern = str_replace('.', '\.', $pattern);
+        return '#^' . $pattern . '$#';
+    }
+
+    /**
      * Ruft den Handler mit den Parametern auf
      *
      * @param callable|array|string $handler Der Handler
@@ -538,6 +675,50 @@ class Router implements RouterInterface
     }
 
     /**
+     * Fügt CORS-Header zu einer Response hinzu
+     *
+     * @param ResponseInterface $response Die Response
+     * @param RequestInterface $request Der HTTP-Request
+     * @return void
+     */
+    protected function addCorsHeadersToResponse(ResponseInterface $response, RequestInterface $request): void
+    {
+        $path = $this->normalizePath($request->getPath());
+        $corsConfig = $this->findCorsConfigurationForPath($path);
+
+        if ($corsConfig === null) {
+            return;
+        }
+
+        // Origin-Header setzen
+        $requestOrigin = $request->getHeader('origin');
+        if ($requestOrigin !== null) {
+            if ($corsConfig['allowOrigin'] === '*') {
+                $response->setHeader('Access-Control-Allow-Origin', '*');
+            } elseif (is_array($corsConfig['allowOrigin']) && in_array($requestOrigin, $corsConfig['allowOrigin'])) {
+                $response->setHeader('Access-Control-Allow-Origin', $requestOrigin);
+                $response->setHeader('Vary', 'Origin');
+            } elseif (is_string($corsConfig['allowOrigin']) && $corsConfig['allowOrigin'] === $requestOrigin) {
+                $response->setHeader('Access-Control-Allow-Origin', $requestOrigin);
+                $response->setHeader('Vary', 'Origin');
+            }
+        }
+
+        // Credentials-Header setzen
+        if ($corsConfig['allowCredentials']) {
+            $response->setHeader('Access-Control-Allow-Credentials', 'true');
+        }
+
+        // Expose-Headers-Header setzen
+        if (!empty($corsConfig['exposeHeaders'])) {
+            $exposeHeaders = is_array($corsConfig['exposeHeaders'])
+                ? implode(', ', $corsConfig['exposeHeaders'])
+                : $corsConfig['exposeHeaders'];
+            $response->setHeader('Access-Control-Expose-Headers', $exposeHeaders);
+        }
+    }
+
+    /**
      * {@inheritdoc}
      */
     public function generateUrl(string $name, array $parameters = []): string
@@ -546,26 +727,21 @@ class Router implements RouterInterface
     }
 
     /**
-     * Erstellt ein reguläres Ausdrucksmuster für eine Domain-Pattern
+     * Fügt eine CORS-Konfiguration für eine Route hinzu
      *
-     * @param string $domainPattern Das Domain-Pattern
-     * @return string Das reguläre Ausdrucksmuster
+     * @param string $path Der Pfad der Route
+     * @param Cors $corsConfig Die CORS-Konfiguration
+     * @return void
      */
-    protected function createDomainRegex(string $domainPattern): string
+    public function addCorsConfiguration(string $path, Cors $corsConfig): void
     {
-        // Konvertiere das Pattern in einen regulären Ausdruck
-        $pattern = preg_replace_callback(
-            '#{([^:}]+)(?::([^}]+))?}#',
-            function ($matches) {
-                $name = $matches[1];
-                $regex = $matches[2] ?? '[^.]+';
-                return '(?<' . $name . '>' . $regex . ')';
-            },
-            $domainPattern
-        );
-
-        // Escape Punkten in der Domain und füge Anker hinzu
-        $pattern = str_replace('.', '\.', $pattern);
-        return '#^' . $pattern . '$#';
+        $this->corsConfigurations[$path] = [
+            'allowOrigin' => $corsConfig->allowOrigin,
+            'allowMethods' => $corsConfig->allowMethods,
+            'allowHeaders' => $corsConfig->allowHeaders,
+            'allowCredentials' => $corsConfig->allowCredentials,
+            'maxAge' => $corsConfig->maxAge,
+            'exposeHeaders' => $corsConfig->exposeHeaders
+        ];
     }
 }

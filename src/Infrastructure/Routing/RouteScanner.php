@@ -121,6 +121,10 @@ class RouteScanner implements RouteScannerInterface
             // Sammle alle Route-Attribute der Klasse
             $classRouteAttributes = $reflector->getAttributes(Route::class, ReflectionAttribute::IS_INSTANCEOF);
 
+            // Sammle CORS-Attribute der Klasse
+            $classCorsAttributes = $reflector->getAttributes(Cors::class);
+            $corsConfig = !empty($classCorsAttributes) ? $classCorsAttributes[0]->newInstance() : null;
+
             // Wenn die Klasse __invoke hat und Route-Attribute besitzt
             if ($hasInvokeMethod && !empty($classRouteAttributes)) {
                 $invokeMethod = $reflector->getMethod('__invoke');
@@ -136,6 +140,11 @@ class RouteScanner implements RouteScannerInterface
                     // Registriere die Route mit der Klasse als Handler und Domain
                     $this->router->addRoute($methods, $path, $className, $name, $domain);
 
+                    // Registriere CORS-Konfiguration, wenn vorhanden
+                    if ($corsConfig !== null) {
+                        $this->router->addCorsConfiguration($path, $corsConfig);
+                    }
+
                     // Sammle Parameter-Attribute für die URL-Generierung
                     $this->collectParameterAttributes($invokeMethod, $path, $name, $domain);
                 }
@@ -150,6 +159,12 @@ class RouteScanner implements RouteScannerInterface
 
                 $methodRouteAttributes = $method->getAttributes(Route::class, ReflectionAttribute::IS_INSTANCEOF);
 
+                // Überprüfe CORS-Attribute der Methode (überschreiben die Klassenattribute)
+                $methodCorsAttributes = $method->getAttributes(Cors::class);
+                $methodCorsConfig = !empty($methodCorsAttributes)
+                    ? $methodCorsAttributes[0]->newInstance()
+                    : $corsConfig; // Verwende Klassen-CORS, wenn keine Methoden-CORS
+
                 foreach ($methodRouteAttributes as $attribute) {
                     /** @var Route $routeAttribute */
                     $routeAttribute = $attribute->newInstance();
@@ -160,6 +175,11 @@ class RouteScanner implements RouteScannerInterface
 
                     // Registriere die Route mit der Klasse und Methode als Handler und Domain
                     $this->router->addRoute($methods, $path, [$className, $method->getName()], $name, $domain);
+
+                    // Registriere CORS-Konfiguration, wenn vorhanden
+                    if ($methodCorsConfig !== null) {
+                        $this->router->addCorsConfiguration($path, $methodCorsConfig);
+                    }
 
                     // Sammle Parameter-Attribute für die URL-Generierung
                     $this->collectParameterAttributes($method, $path, $name, $domain);
