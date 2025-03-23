@@ -68,4 +68,19 @@ interface RouterInterface
      */
     public function findCorsConfigurationForPath(string $path): ?array;
 
+    /**
+     * Fügt eine Umleitung hinzu
+     *
+     * @param string $fromPath Quellpfad
+     * @param string $toPath Zielpfad (kann auch eine benannte Route sein mit 'name:routeName')
+     * @param int $statusCode HTTP-Statuscode (301 = permanent, 302 = temporär)
+     * @param bool $preserveQueryString Ob der Query-String übernommen werden soll
+     * @return static
+     */
+    public function addRedirect(
+        string $fromPath,
+        string $toPath,
+        int    $statusCode = 302,
+        bool   $preserveQueryString = true
+    ): static;
 }

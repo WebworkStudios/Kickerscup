@@ -7,6 +7,8 @@ namespace App\Infrastructure\Routing;
 
 use App\Infrastructure\Container\Attributes\Injectable;
 use App\Infrastructure\Container\Attributes\Scoped;
+use App\Infrastructure\Routing\Attributes\Cors;
+use App\Infrastructure\Routing\Attributes\Redirect;
 use App\Infrastructure\Routing\Attributes\Route;
 use App\Infrastructure\Routing\Attributes\RouteParam;
 use App\Infrastructure\Routing\Contracts\RouterInterface;
@@ -125,6 +127,21 @@ class RouteScanner implements RouteScannerInterface
             $classCorsAttributes = $reflector->getAttributes(Cors::class);
             $corsConfig = !empty($classCorsAttributes) ? $classCorsAttributes[0]->newInstance() : null;
 
+            // Sammle Redirect-Attribute der Klasse
+            $redirectAttributes = $reflector->getAttributes(Redirect::class);
+
+            // Registriere Redirects aus den Attributen
+            foreach ($redirectAttributes as $attribute) {
+                /** @var Redirect $redirectAttr */
+                $redirectAttr = $attribute->newInstance();
+                $this->router->addRedirect(
+                    $redirectAttr->fromPath,
+                    $redirectAttr->toPath,
+                    $redirectAttr->statusCode,
+                    $redirectAttr->preserveQueryString
+                );
+            }
+
             // Wenn die Klasse __invoke hat und Route-Attribute besitzt
             if ($hasInvokeMethod && !empty($classRouteAttributes)) {
                 $invokeMethod = $reflector->getMethod('__invoke');
@@ -164,6 +181,20 @@ class RouteScanner implements RouteScannerInterface
                 $methodCorsConfig = !empty($methodCorsAttributes)
                     ? $methodCorsAttributes[0]->newInstance()
                     : $corsConfig; // Verwende Klassen-CORS, wenn keine Methoden-CORS
+
+                // Überprüfe Redirect-Attribute der Methode
+                $methodRedirectAttrs = $method->getAttributes(Redirect::class);
+
+                foreach ($methodRedirectAttrs as $attribute) {
+                    /** @var Redirect $redirectAttr */
+                    $redirectAttr = $attribute->newInstance();
+                    $this->router->addRedirect(
+                        $redirectAttr->fromPath,
+                        $redirectAttr->toPath,
+                        $redirectAttr->statusCode,
+                        $redirectAttr->preserveQueryString
+                    );
+                }
 
                 foreach ($methodRouteAttributes as $attribute) {
                     /** @var Route $routeAttribute */

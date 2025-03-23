@@ -13,6 +13,7 @@ use App\Infrastructure\Http\Contracts\ResponseFactoryInterface;
 use App\Infrastructure\Http\Contracts\ResponseInterface;
 use App\Infrastructure\Routing\Contracts\RouterInterface;
 use App\Infrastructure\Routing\Contracts\UrlGeneratorInterface;
+use App\Infrastructure\Routing\Exceptions\MethodNotAllowedException;
 use App\Infrastructure\Routing\Exceptions\RouteCreationException;
 use App\Infrastructure\Routing\Exceptions\RouteNotFoundException;
 use Closure;
@@ -48,6 +49,13 @@ class Router implements RouterInterface
      * @var array<string, array>
      */
     protected array $corsConfigurations = [];
+
+    /**
+     * Redirect-Einträge
+     * Struktur: [Quellpfad => [Zielpfad, Statuscode, preserveQueryString]]
+     * @var array<string, array>
+     */
+    protected array $redirects = [];
 
     /**
      * Konstruktor
@@ -110,6 +118,35 @@ class Router implements RouterInterface
         if ($name !== null) {
             $this->namedRoutes[$name] = $routeInfo;
         }
+
+        return $this;
+    }
+
+    /**
+     * Fügt eine Umleitung hinzu
+     *
+     * @param string $fromPath Quellpfad
+     * @param string $toPath Zielpfad (kann auch eine benannte Route sein mit 'name:routeName')
+     * @param int $statusCode HTTP-Statuscode (301 = permanent, 302 = temporär)
+     * @param bool $preserveQueryString Ob der Query-String übernommen werden soll
+     * @return static
+     */
+    public function addRedirect(
+        string $fromPath,
+        string $toPath,
+        int    $statusCode = 302,
+        bool   $preserveQueryString = true
+    ): static
+    {
+        // Normalisiere Quellpfad
+        $fromPath = $this->normalizePath($fromPath);
+
+        // Speichere die Umleitung
+        $this->redirects[$fromPath] = [
+            'toPath' => $toPath,
+            'statusCode' => $statusCode,
+            'preserveQueryString' => $preserveQueryString
+        ];
 
         return $this;
     }
@@ -178,153 +215,6 @@ class Router implements RouterInterface
 
     /**
      * {@inheritdoc}
-     */
-    public function dispatch(RequestInterface $request): ResponseInterface
-    {
-        // CORS Preflight-Anfragen behandeln
-        if ($request->getMethod() === 'OPTIONS' && $request->hasHeader('access-control-request-method')) {
-            return $this->handleCorsPreflightRequest($request);
-        }
-
-        $match = $this->match($request);
-
-        if ($match === false) {
-            throw new RouteNotFoundException(
-                "Keine Route gefunden für {$request->getMethod()} {$request->getPath()}."
-            );
-        }
-
-        $route = $match['route'];
-        $parameters = $match['parameters'];
-        $handler = $route['handler'];
-
-        // Rufe den Handler mit den Parametern auf
-        $response = $this->callHandler($handler, $parameters, $request);
-
-        // Wenn der Handler bereits eine Response zurückgibt, verwende diese
-        if ($response instanceof ResponseInterface) {
-            // CORS-Header für normale Anfragen hinzufügen
-            $this->addCorsHeadersToResponse($response, $request);
-            return $response;
-        }
-
-        // Sonst erstelle eine Response basierend auf dem Rückgabewert
-        if (is_string($response)) {
-            $response = $this->responseFactory->createHtml($response);
-        } elseif (is_array($response) || is_object($response)) {
-            $response = $this->responseFactory->createJson($response);
-        } else {
-            // Fallback für andere Rückgabetypen
-            $response = $this->responseFactory->create(200, (string)$response);
-        }
-
-        // CORS-Header hinzufügen
-        $this->addCorsHeadersToResponse($response, $request);
-
-        return $response;
-    }
-
-    /**
-     * Behandelt CORS Preflight-Anfragen
-     *
-     * @param RequestInterface $request Der HTTP-Request
-     * @return ResponseInterface Die Response
-     */
-    protected function handleCorsPreflightRequest(RequestInterface $request): ResponseInterface
-    {
-        $path = $this->normalizePath($request->getPath());
-        $corsConfig = $this->findCorsConfigurationForPath($path);
-
-        // Wenn keine CORS-Konfiguration gefunden wurde, erstelle eine leere Response
-        if ($corsConfig === null) {
-            return $this->responseFactory->create(204);
-        }
-
-        $response = $this->responseFactory->create(204);
-
-        // Origin-Header setzen
-        $requestOrigin = $request->getHeader('origin');
-        if ($requestOrigin !== null) {
-            if ($corsConfig['allowOrigin'] === '*') {
-                $response->setHeader('Access-Control-Allow-Origin', '*');
-            } elseif (is_array($corsConfig['allowOrigin']) && in_array($requestOrigin, $corsConfig['allowOrigin'])) {
-                $response->setHeader('Access-Control-Allow-Origin', $requestOrigin);
-                $response->setHeader('Vary', 'Origin');
-            } elseif (is_string($corsConfig['allowOrigin']) && $corsConfig['allowOrigin'] === $requestOrigin) {
-                $response->setHeader('Access-Control-Allow-Origin', $requestOrigin);
-                $response->setHeader('Vary', 'Origin');
-            }
-        }
-
-        // Methoden-Header setzen
-        if ($corsConfig['allowMethods'] === '*') {
-            $requestMethod = $request->getHeader('access-control-request-method');
-            if ($requestMethod !== null) {
-                $response->setHeader('Access-Control-Allow-Methods', $requestMethod);
-            }
-        } else {
-            $allowedMethods = is_array($corsConfig['allowMethods'])
-                ? implode(', ', $corsConfig['allowMethods'])
-                : $corsConfig['allowMethods'];
-            $response->setHeader('Access-Control-Allow-Methods', $allowedMethods);
-        }
-
-        // Header-Header setzen
-        if ($corsConfig['allowHeaders'] === '*') {
-            $requestHeaders = $request->getHeader('access-control-request-headers');
-            if ($requestHeaders !== null) {
-                $response->setHeader('Access-Control-Allow-Headers', $requestHeaders);
-            }
-        } else {
-            $allowedHeaders = is_array($corsConfig['allowHeaders'])
-                ? implode(', ', $corsConfig['allowHeaders'])
-                : $corsConfig['allowHeaders'];
-            $response->setHeader('Access-Control-Allow-Headers', $allowedHeaders);
-        }
-
-        // Credentials-Header setzen
-        if ($corsConfig['allowCredentials']) {
-            $response->setHeader('Access-Control-Allow-Credentials', 'true');
-        }
-
-        // Max-Age-Header setzen
-        $response->setHeader('Access-Control-Max-Age', (string)$corsConfig['maxAge']);
-
-        return $response;
-    }
-
-    /**
-     * Findet die CORS-Konfiguration für einen Pfad
-     *
-     * @param string $path Der Pfad
-     * @return array|null Die CORS-Konfiguration oder null
-     */
-    public function findCorsConfigurationForPath(string $path): ?array
-    {
-        // Exakte Übereinstimmung
-        if (isset($this->corsConfigurations[$path])) {
-            return $this->corsConfigurations[$path];
-        }
-
-        // Nearest match (z.B. /api/* für /api/users)
-        foreach ($this->corsConfigurations as $routePath => $config) {
-            // Pfad endet mit * (Wildcard)
-            if (str_ends_with($routePath, '*')) {
-                $prefix = rtrim(substr($routePath, 0, -1), '/');
-                if (str_starts_with($path, $prefix)) {
-                    return $config;
-                }
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Findet eine Route für den gegebenen Request
-     *
-     * @param RequestInterface $request Der HTTP-Request
-     * @return mixed Information über die passende Route oder false
      */
     public function match(RequestInterface $request): mixed
     {
@@ -515,6 +405,201 @@ class Router implements RouterInterface
         // Escape Punkten in der Domain und füge Anker hinzu
         $pattern = str_replace('.', '\.', $pattern);
         return '#^' . $pattern . '$#';
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function dispatch(RequestInterface $request): ResponseInterface
+    {
+        // Prüfe auf Redirects für diesen Pfad
+        $redirectResponse = $this->checkForRedirect($request);
+        if ($redirectResponse !== null) {
+            return $redirectResponse;
+        }
+
+        // CORS Preflight-Anfragen behandeln
+        if ($request->getMethod() === 'OPTIONS' && $request->hasHeader('access-control-request-method')) {
+            return $this->handleCorsPreflightRequest($request);
+        }
+
+        $match = $this->match($request);
+
+        if ($match === false) {
+            throw new RouteNotFoundException(
+                "Keine Route gefunden für {$request->getMethod()} {$request->getPath()}."
+            );
+        }
+
+        $route = $match['route'];
+        $parameters = $match['parameters'];
+        $handler = $route['handler'];
+
+        // Rufe den Handler mit den Parametern auf
+        $response = $this->callHandler($handler, $parameters, $request);
+
+        // Wenn der Handler bereits eine Response zurückgibt, verwende diese
+        if ($response instanceof ResponseInterface) {
+            // CORS-Header für normale Anfragen hinzufügen
+            $this->addCorsHeadersToResponse($response, $request);
+            return $response;
+        }
+
+        // Sonst erstelle eine Response basierend auf dem Rückgabewert
+        if (is_string($response)) {
+            $response = $this->responseFactory->createHtml($response);
+        } elseif (is_array($response) || is_object($response)) {
+            $response = $this->responseFactory->createJson($response);
+        } else {
+            // Fallback für andere Rückgabetypen
+            $response = $this->responseFactory->create(200, (string)$response);
+        }
+
+        // CORS-Header hinzufügen
+        $this->addCorsHeadersToResponse($response, $request);
+
+        return $response;
+    }
+
+    /**
+     * Prüft, ob für den Request eine Umleitung definiert ist
+     *
+     * @param RequestInterface $request Der HTTP-Request
+     * @return ResponseInterface|null Die Redirect-Response oder null, wenn keine Umleitung definiert ist
+     */
+    protected function checkForRedirect(RequestInterface $request): ?ResponseInterface
+    {
+        $path = $this->normalizePath($request->getPath());
+
+        // Prüfe direkte Pfadübereinstimmung
+        if (isset($this->redirects[$path])) {
+            $redirect = $this->redirects[$path];
+            return $this->createRedirectResponse($request, $redirect);
+        }
+
+        // Prüfe Wildcard-Umleitungen (z.B. /old/* -> /new/*)
+        foreach ($this->redirects as $fromPath => $redirect) {
+            if (str_ends_with($fromPath, '/*')) {
+                $prefix = substr($fromPath, 0, -2);
+
+                if (str_starts_with($path, $prefix)) {
+                    // Wildcard-Umleitung
+                    $suffix = substr($path, strlen($prefix));
+                    $toPath = $redirect['toPath'];
+
+                    // Falls Zielpfad auch mit Wildcard endet, Suffix hinzufügen
+                    if (str_ends_with($toPath, '/*')) {
+                        $toPath = substr($toPath, 0, -2) . $suffix;
+                    }
+
+                    // Umleitung mit angepasstem Zielpfad erstellen
+                    $wildcardRedirect = $redirect;
+                    $wildcardRedirect['toPath'] = $toPath;
+                    return $this->createRedirectResponse($request, $wildcardRedirect);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Erstellt eine Redirect-Response
+     *
+     * @param RequestInterface $request Der HTTP-Request
+     * @param array $redirect Die Redirect-Konfiguration
+     * @return ResponseInterface Die Response
+     */
+    protected function createRedirectResponse(RequestInterface $request, array $redirect): ResponseInterface
+    {
+        $toPath = $redirect['toPath'];
+
+        // Prüfe, ob der Zielpfad eine benannte Route ist
+        if (str_starts_with($toPath, 'name:')) {
+            $routeName = substr($toPath, 5);
+            $toPath = $this->generateUrl($routeName);
+        }
+
+        // Query-String hinzufügen, wenn gewünscht
+        if ($redirect['preserveQueryString']) {
+            $queryString = $request->getQueryString();
+            if ($queryString) {
+                $hasQueryString = str_contains($toPath, '?');
+                $toPath .= ($hasQueryString ? '&' : '?') . $queryString;
+            }
+        }
+
+        // Erstelle die Redirect-Response
+        return $this->responseFactory->createRedirect($toPath, $redirect['statusCode']);
+    }
+
+    /**
+     * Behandelt CORS Preflight-Anfragen
+     *
+     * @param RequestInterface $request Der HTTP-Request
+     * @return ResponseInterface Die Response
+     */
+    protected function handleCorsPreflightRequest(RequestInterface $request): ResponseInterface
+    {
+        $path = $this->normalizePath($request->getPath());
+        $corsConfig = $this->findCorsConfigurationForPath($path);
+
+        // Wenn keine CORS-Konfiguration gefunden wurde, erstelle eine leere Response
+        if ($corsConfig === null) {
+            return $this->responseFactory->create(204);
+        }
+
+        $response = $this->responseFactory->create(204);
+
+        // Origin-Header setzen
+        $requestOrigin = $request->getHeader('origin');
+        if ($requestOrigin !== null) {
+            if ($corsConfig['allowOrigin'] === '*') {
+                $response->setHeader('Access-Control-Allow-Origin', '*');
+            } elseif (is_array($corsConfig['allowOrigin']) && in_array($requestOrigin, $corsConfig['allowOrigin'])) {
+                $response->setHeader('Access-Control-Allow-Origin', $requestOrigin);
+                $response->setHeader('Vary', 'Origin');
+            } elseif (is_string($corsConfig['allowOrigin']) && $corsConfig['allowOrigin'] === $requestOrigin) {
+                $response->setHeader('Access-Control-Allow-Origin', $requestOrigin);
+                $response->setHeader('Vary', 'Origin');
+            }
+        }
+
+        // Methoden-Header setzen
+        if ($corsConfig['allowMethods'] === '*') {
+            $requestMethod = $request->getHeader('access-control-request-method');
+            if ($requestMethod !== null) {
+                $response->setHeader('Access-Control-Allow-Methods', $requestMethod);
+            }
+        } else {
+            $allowedMethods = is_array($corsConfig['allowMethods'])
+                ? implode(', ', $corsConfig['allowMethods'])
+                : $corsConfig['allowMethods'];
+            $response->setHeader('Access-Control-Allow-Methods', $allowedMethods);
+        }
+
+        // Header-Header setzen
+        if ($corsConfig['allowHeaders'] === '*') {
+            $requestHeaders = $request->getHeader('access-control-request-headers');
+            if ($requestHeaders !== null) {
+                $response->setHeader('Access-Control-Allow-Headers', $requestHeaders);
+            }
+        } else {
+            $allowedHeaders = is_array($corsConfig['allowHeaders'])
+                ? implode(', ', $corsConfig['allowHeaders'])
+                : $corsConfig['allowHeaders'];
+            $response->setHeader('Access-Control-Allow-Headers', $allowedHeaders);
+        }
+
+        // Credentials-Header setzen
+        if ($corsConfig['allowCredentials']) {
+            $response->setHeader('Access-Control-Allow-Credentials', 'true');
+        }
+
+        // Max-Age-Header setzen
+        $response->setHeader('Access-Control-Max-Age', (string)$corsConfig['maxAge']);
+
+        return $response;
     }
 
     /**
@@ -743,5 +828,29 @@ class Router implements RouterInterface
             'maxAge' => $corsConfig->maxAge,
             'exposeHeaders' => $corsConfig->exposeHeaders
         ];
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function findCorsConfigurationForPath(string $path): ?array
+    {
+        // Exakte Übereinstimmung
+        if (isset($this->corsConfigurations[$path])) {
+            return $this->corsConfigurations[$path];
+        }
+
+        // Nearest match (z.B. /api/* für /api/users)
+        foreach ($this->corsConfigurations as $routePath => $config) {
+            // Pfad endet mit * (Wildcard)
+            if (str_ends_with($routePath, '*')) {
+                $prefix = rtrim(substr($routePath, 0, -1), '/');
+                if (str_starts_with($path, $prefix)) {
+                    return $config;
+                }
+            }
+        }
+
+        return null;
     }
 }
