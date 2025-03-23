@@ -21,22 +21,15 @@ class Session implements SessionInterface
     protected bool $started = false;
 
     /**
-     * Der Session-Name
-     */
-    protected string $name = 'app_session';
-
-    /**
-     * Flash-Message-Handler
-     */
-    protected FlashMessageInterface $flash;
-
-    /**
      * Konstruktor
      */
-    public function __construct(FlashMessageInterface $flash)
+    public function __construct(
+        protected FlashMessageInterface $flash,
+        protected SessionConfiguration  $config
+    )
     {
-        $this->flash = $flash;
     }
+
 
     /**
      * {@inheritdoc}
@@ -47,14 +40,31 @@ class Session implements SessionInterface
             return true;
         }
 
+        // Konfiguriere die PHP-Session
+        $this->configureSession();
+
         // Setze den Session-Namen
-        session_name($this->name);
+        session_name($this->config->name);
 
         // Starte die Session
         $this->started = session_start();
 
-        // Lade Flash-Messages
         if ($this->started) {
+            // Prüfe, ob die Session gültig ist
+            if (!$this->isValid()) {
+                // Bei ungültiger Session: Neue starten
+                $this->destroy();
+                $this->started = session_start();
+                $this->saveFingerprint();
+            }
+
+            // Session-Aktivität aktualisieren
+            $this->checkActivity();
+
+            // Regelmäßige Session-ID-Rotation
+            $this->rotateId();
+
+            // Lade Flash-Messages
             $this->flash->load();
         }
 
@@ -288,5 +298,196 @@ class Session implements SessionInterface
 
         // Schreibe die Session-Daten und beende sie
         return session_write_close();
+    }
+
+    /**
+     * Konfiguriert die PHP-Session mit den Einstellungen aus der Konfiguration
+     */
+    protected function configureSession(): void
+    {
+        // Cookie-Parameter setzen
+        session_set_cookie_params([
+            'lifetime' => $this->config->lifetime,
+            'path' => $this->config->path,
+            'domain' => $this->config->domain,
+            'secure' => $this->config->secure,
+            'httponly' => $this->config->httpOnly,
+            'samesite' => $this->config->sameSite,
+        ]);
+
+        // Garbage Collection konfigurieren
+        ini_set('session.gc_probability', (string)$this->config->gcProbability);
+        ini_set('session.gc_divisor', (string)$this->config->gcDivisor);
+        ini_set('session.gc_maxlifetime', (string)$this->config->gcMaxLifetime);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function isValid(): bool
+    {
+        // Prüfe, ob die Session gestartet wurde
+        if (!$this->started) {
+            return false;
+        }
+
+        // Prüfe den Fingerprint, falls aktiviert
+        if ($this->config->fingerprintCheck && !$this->validateFingerprint()) {
+            return false;
+        }
+
+        // Prüfe den Idle-Timeout
+        if (!$this->checkActivity()) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function saveFingerprint(): void
+    {
+        if (!$this->started) {
+            $this->start();
+        }
+
+        // Erstelle einen Fingerprint basierend auf Client-Informationen
+        $fingerprint = $this->generateFingerprint();
+
+        // Speichere den Fingerprint in der Session
+        $_SESSION['_fingerprint'] = $fingerprint;
+    }
+
+    /**
+     * Generiert einen Fingerprint basierend auf Client-Informationen
+     *
+     * @return string Der generierte Fingerprint
+     */
+    protected function generateFingerprint(): string
+    {
+        // Sammle Client-Informationen
+        $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
+        $ipSegments = explode('.', $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1');
+        $ipPrefix = count($ipSegments) >= 3 ? $ipSegments[0] . '.' . $ipSegments[1] . '.' . $ipSegments[2] : '';
+
+        // Erstelle den Fingerprint (nur teilweise IP verwenden, um bei dynamischen IPs flexibel zu sein)
+        return hash('sha256', $userAgent . $ipPrefix);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function validateFingerprint(): bool
+    {
+        if (!$this->has('_fingerprint')) {
+            return false;
+        }
+
+        $storedFingerprint = $this->get('_fingerprint');
+        $currentFingerprint = $this->generateFingerprint();
+
+        return hash_equals($storedFingerprint, $currentFingerprint);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function generateCsrfToken(string $key = 'csrf'): string
+    {
+        if (!$this->started) {
+            $this->start();
+        }
+
+        // Generiere ein zufälliges Token
+        $token = bin2hex(random_bytes(32));
+
+        // Speichere das Token in der Session
+        $_SESSION['_csrf'][$key] = $token;
+
+        return $token;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function validateCsrfToken(string $token, string $key = 'csrf'): bool
+    {
+        if (!$this->started) {
+            $this->start();
+        }
+
+        // Prüfe, ob das Token existiert
+        if (!isset($_SESSION['_csrf'][$key])) {
+            return false;
+        }
+
+        $storedToken = $_SESSION['_csrf'][$key];
+
+        // Lösche das Token nach der Überprüfung (einmaliges Token)
+        unset($_SESSION['_csrf'][$key]);
+
+        // Überprüfe das Token mit konstanter Zeit (verhindert Timing-Angriffe)
+        return hash_equals($storedToken, $token);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function checkActivity(): bool
+    {
+        if (!$this->started) {
+            $this->start();
+        }
+
+        $now = time();
+        $lastActivity = $this->getLastActivity();
+
+        // Wenn keine letzte Aktivität vorhanden ist oder Idle-Timeout deaktiviert ist
+        if ($lastActivity === null || $this->config->idleTimeout <= 0) {
+            $this->set('last_activity', $now);
+            return true;
+        }
+
+        // Prüfe, ob die Session abgelaufen ist
+        if (($now - $lastActivity) > $this->config->idleTimeout) {
+            return false;
+        }
+
+        // Aktualisiere die letzte Aktivität
+        $this->set('last_activity', $now);
+        return true;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function rotateId(bool $force = false): bool
+    {
+        if (!$this->started) {
+            $this->start();
+        }
+
+        // Wenn Rotation deaktiviert ist und nicht erzwungen wird
+        if ($this->config->regenerateIdInterval <= 0 && !$force) {
+            return false;
+        }
+
+        // Wenn last_rotation nicht gesetzt ist oder das Intervall überschritten wurde
+        $lastRotation = $this->get('_last_rotation', 0);
+        $now = time();
+
+        if ($force || !$lastRotation || ($now - $lastRotation) > $this->config->regenerateIdInterval) {
+            $result = $this->regenerate(true);
+
+            if ($result) {
+                $this->set('_last_rotation', $now);
+            }
+
+            return $result;
+        }
+
+        return false;
     }
 }

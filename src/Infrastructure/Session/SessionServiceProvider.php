@@ -1,6 +1,5 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Infrastructure\Session;
@@ -17,6 +16,13 @@ class SessionServiceProvider extends ServiceProvider
      */
     public function register(ContainerInterface $container): void
     {
+        // Registriere die Session-Konfiguration
+        $container->singleton(SessionConfiguration::class, function () {
+            // Hier können wir die Konfiguration aus einer Konfigurations-Datei laden
+            // Für jetzt verwenden wir die Standard-Konfiguration
+            return new SessionConfiguration();
+        });
+
         // Registriere die Interfaces
         $container->bind(SessionInterface::class, Session::class);
         $container->bind(FlashMessageInterface::class, FlashMessage::class);

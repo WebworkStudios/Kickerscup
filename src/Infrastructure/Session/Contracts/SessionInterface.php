@@ -145,4 +145,57 @@ interface SessionInterface
      * @return bool True, wenn die Session erfolgreich gespeichert wurde
      */
     public function flush(): bool;
+
+    /**
+     * Überprüft, ob die Session gültig ist (nicht abgelaufen, Fingerprint stimmt, etc.)
+     *
+     * @return bool True, wenn die Session gültig ist
+     */
+    public function isValid(): bool;
+
+    /**
+     * Speichert einen Fingerprint in der Session
+     *
+     * @return void
+     */
+    public function saveFingerprint(): void;
+
+    /**
+     * Überprüft, ob der aktuelle Fingerprint mit dem gespeicherten übereinstimmt
+     *
+     * @return bool True, wenn der Fingerprint übereinstimmt
+     */
+    public function validateFingerprint(): bool;
+
+    /**
+     * Generiert ein CSRF-Token und speichert es in der Session
+     *
+     * @param string $key Der Schlüssel für das Token
+     * @return string Das generierte Token
+     */
+    public function generateCsrfToken(string $key = 'csrf'): string;
+
+    /**
+     * Validiert ein CSRF-Token
+     *
+     * @param string $token Das zu validierende Token
+     * @param string $key Der Schlüssel für das Token
+     * @return bool True, wenn das Token gültig ist
+     */
+    public function validateCsrfToken(string $token, string $key = 'csrf'): bool;
+
+    /**
+     * Prüft, ob die Session inaktiv ist und aktualisiert den Timestamp
+     *
+     * @return bool True, wenn die Session aktiv ist (nicht abgelaufen)
+     */
+    public function checkActivity(): bool;
+
+    /**
+     * Rotiert die Session-ID basierend auf Zeit oder Events
+     *
+     * @param bool $force Erzwingt die Rotation, unabhängig vom Intervall
+     * @return bool True, wenn die Session-ID erfolgreich rotiert wurde
+     */
+    public function rotateId(bool $force = false): bool;
 }
