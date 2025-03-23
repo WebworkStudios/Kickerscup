@@ -83,4 +83,13 @@ interface RouterInterface
         int    $statusCode = 302,
         bool   $preserveQueryString = true
     ): static;
+
+    /**
+     * Registriert einen Handler für einen HTTP-Fehlercode
+     *
+     * @param int $statusCode HTTP-Statuscode
+     * @param callable|array|string $handler Handler-Funktion oder Controller
+     * @return static
+     */
+    public function registerErrorHandler(int $statusCode, callable|array|string $handler): static;
 }

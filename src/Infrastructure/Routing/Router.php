@@ -58,6 +58,14 @@ class Router implements RouterInterface
     protected array $redirects = [];
 
     /**
+     * Registrierte Error-Handler
+     *
+     * @var array<int, callable|array|string>
+     */
+    protected array $errorHandlers = [];
+
+
+    /**
      * Konstruktor
      *
      * @param ContainerInterface $container Container für die Auflösung von Controllern
@@ -410,55 +418,62 @@ class Router implements RouterInterface
     /**
      * {@inheritdoc}
      */
+// In der Router-Klasse, dispatch-Methode ändern:
     public function dispatch(RequestInterface $request): ResponseInterface
     {
-        // Prüfe auf Redirects für diesen Pfad
-        $redirectResponse = $this->checkForRedirect($request);
-        if ($redirectResponse !== null) {
-            return $redirectResponse;
-        }
+        try {
+            // Prüfe auf Redirects für diesen Pfad
+            $redirectResponse = $this->checkForRedirect($request);
+            if ($redirectResponse !== null) {
+                return $redirectResponse;
+            }
 
-        // CORS Preflight-Anfragen behandeln
-        if ($request->getMethod() === 'OPTIONS' && $request->hasHeader('access-control-request-method')) {
-            return $this->handleCorsPreflightRequest($request);
-        }
+            // CORS Preflight-Anfragen behandeln
+            if ($request->getMethod() === 'OPTIONS' && $request->hasHeader('access-control-request-method')) {
+                return $this->handleCorsPreflightRequest($request);
+            }
 
-        $match = $this->match($request);
+            $match = $this->match($request);
 
-        if ($match === false) {
-            throw new RouteNotFoundException(
-                "Keine Route gefunden für {$request->getMethod()} {$request->getPath()}."
-            );
-        }
+            if ($match === false) {
+                throw new RouteNotFoundException(
+                    "Keine Route gefunden für {$request->getMethod()} {$request->getPath()}."
+                );
+            }
 
-        $route = $match['route'];
-        $parameters = $match['parameters'];
-        $handler = $route['handler'];
+            $route = $match['route'];
+            $parameters = $match['parameters'];
+            $handler = $route['handler'];
 
-        // Rufe den Handler mit den Parametern auf
-        $response = $this->callHandler($handler, $parameters, $request);
+            // Rufe den Handler mit den Parametern auf
+            $response = $this->callHandler($handler, $parameters, $request);
 
-        // Wenn der Handler bereits eine Response zurückgibt, verwende diese
-        if ($response instanceof ResponseInterface) {
-            // CORS-Header für normale Anfragen hinzufügen
+            // Wenn der Handler bereits eine Response zurückgibt, verwende diese
+            if ($response instanceof ResponseInterface) {
+                // CORS-Header für normale Anfragen hinzufügen
+                $this->addCorsHeadersToResponse($response, $request);
+                return $response;
+            }
+
+            // Sonst erstelle eine Response basierend auf dem Rückgabewert
+            if (is_string($response)) {
+                $response = $this->responseFactory->createHtml($response);
+            } elseif (is_array($response) || is_object($response)) {
+                $response = $this->responseFactory->createJson($response);
+            } else {
+                // Fallback für andere Rückgabetypen
+                $response = $this->responseFactory->create(200, (string)$response);
+            }
+
+            // CORS-Header hinzufügen
             $this->addCorsHeadersToResponse($response, $request);
+
             return $response;
+        } catch (RouteNotFoundException $e) {
+            return $this->handleNotFoundError($request, $e);
+        } catch (MethodNotAllowedException $e) {
+            return $this->handleMethodNotAllowedError($request, $e);
         }
-
-        // Sonst erstelle eine Response basierend auf dem Rückgabewert
-        if (is_string($response)) {
-            $response = $this->responseFactory->createHtml($response);
-        } elseif (is_array($response) || is_object($response)) {
-            $response = $this->responseFactory->createJson($response);
-        } else {
-            // Fallback für andere Rückgabetypen
-            $response = $this->responseFactory->create(200, (string)$response);
-        }
-
-        // CORS-Header hinzufügen
-        $this->addCorsHeadersToResponse($response, $request);
-
-        return $response;
     }
 
     /**
@@ -852,5 +867,91 @@ class Router implements RouterInterface
         }
 
         return null;
+    }
+
+    /**
+     * Behandelt 404 Not Found Fehler
+     *
+     * @param RequestInterface $request Der HTTP-Request
+     * @param RouteNotFoundException $exception Die ausgelöste Exception
+     * @return ResponseInterface Die Fehler-Response
+     */
+    protected function handleNotFoundError(RequestInterface $request, RouteNotFoundException $exception): ResponseInterface
+    {
+        // Prüfen, ob ein Handler für 404 registriert wurde
+        if (isset($this->errorHandlers[404])) {
+            return $this->callErrorHandler($this->errorHandlers[404], $request, $exception);
+        }
+
+        // Standard 404-Response
+        return $this->responseFactory->createNotFound($exception->getMessage());
+    }
+
+    /**
+     * Behandelt 405 Method Not Allowed Fehler
+     *
+     * @param RequestInterface $request Der HTTP-Request
+     * @param MethodNotAllowedException $exception Die ausgelöste Exception
+     * @return ResponseInterface Die Fehler-Response
+     */
+    protected function handleMethodNotAllowedError(RequestInterface $request, MethodNotAllowedException $exception): ResponseInterface
+    {
+        // Setze den Allow-Header mit den erlaubten Methoden
+        $response = $this->responseFactory->create(405, $exception->getMessage());
+        $response->setHeader('Allow', implode(', ', $exception->getAllowedMethods()));
+
+        // Prüfen, ob ein Handler für 405 registriert wurde
+        if (isset($this->errorHandlers[405])) {
+            $customResponse = $this->callErrorHandler($this->errorHandlers[405], $request, $exception);
+
+            // Stelle sicher, dass der Allow-Header auch in der benutzerdefinierten Response gesetzt ist
+            if (!$customResponse->hasHeader('Allow')) {
+                $customResponse->setHeader('Allow', implode(', ', $exception->getAllowedMethods()));
+            }
+
+            return $customResponse;
+        }
+
+        return $response;
+    }
+
+    /**
+     * Ruft einen benutzerdefinierten Error-Handler auf
+     *
+     * @param callable|array|string $handler Der Error-Handler
+     * @param RequestInterface $request Der HTTP-Request
+     * @param \Exception $exception Die ausgelöste Exception
+     * @return ResponseInterface Die Response vom Handler
+     */
+    protected function callErrorHandler(callable|array|string $handler, RequestInterface $request, \Exception $exception): ResponseInterface
+    {
+        $response = $this->callHandler($handler, ['exception' => $exception], $request);
+
+        // Wenn der Handler keine Response zurückgibt, erstelle eine Standard-Response
+        if (!$response instanceof ResponseInterface) {
+            if (is_string($response)) {
+                $response = $this->responseFactory->createHtml($response, $exception instanceof MethodNotAllowedException ? 405 : 404);
+            } elseif (is_array($response) || is_object($response)) {
+                $response = $this->responseFactory->createJson($response, $exception instanceof MethodNotAllowedException ? 405 : 404);
+            } else {
+                $statusCode = $exception instanceof MethodNotAllowedException ? 405 : 404;
+                $response = $this->responseFactory->create($statusCode, (string)$response);
+            }
+        }
+
+        return $response;
+    }
+
+    /**
+     * Registriert einen Handler für einen HTTP-Fehlercode
+     *
+     * @param int $statusCode HTTP-Statuscode
+     * @param callable|array|string $handler Handler-Funktion oder Controller
+     * @return static
+     */
+    public function registerErrorHandler(int $statusCode, callable|array|string $handler): static
+    {
+        $this->errorHandlers[$statusCode] = $handler;
+        return $this;
     }
 }
