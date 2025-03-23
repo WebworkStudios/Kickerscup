@@ -117,4 +117,32 @@ interface SessionInterface
      * @return static
      */
     public function clear(): static;
+
+    /**
+     * Gibt alle Session-Daten zurück
+     *
+     * @return array Alle Session-Daten
+     */
+    public function getAll(): array;
+
+    /**
+     * Gibt den User-Agent des aktuellen Benutzers zurück
+     *
+     * @return string|null Der User-Agent oder null, wenn nicht vorhanden
+     */
+    public function getUserAgent(): ?string;
+
+    /**
+     * Gibt den Zeitpunkt der letzten Aktivität zurück
+     *
+     * @return int|null Der Zeitpunkt der letzten Aktivität oder null, wenn nicht gesetzt
+     */
+    public function getLastActivity(): ?int;
+
+    /**
+     * Schreibt alle Daten in die Session und beendet sie.
+     *
+     * @return bool True, wenn die Session erfolgreich gespeichert wurde
+     */
+    public function flush(): bool;
 }

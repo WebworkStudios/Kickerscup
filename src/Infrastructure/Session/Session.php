@@ -237,4 +237,56 @@ class Session implements SessionInterface
 
         return $this;
     }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getAll(): array
+    {
+        if (!$this->started) {
+            $this->start();
+        }
+
+        return $_SESSION;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getUserAgent(): ?string
+    {
+        if (!$this->started) {
+            $this->start();
+        }
+
+        return $_SERVER['HTTP_USER_AGENT'] ?? null;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getLastActivity(): ?int
+    {
+        if (!$this->started) {
+            $this->start();
+        }
+
+        return $this->get('last_activity');
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function flush(): bool
+    {
+        if (!$this->started) {
+            $this->start();
+        }
+
+        // Aktualisiere den Zeitpunkt der letzten Aktivität
+        $this->set('last_activity', time());
+
+        // Schreibe die Session-Daten und beende sie
+        return session_write_close();
+    }
 }
