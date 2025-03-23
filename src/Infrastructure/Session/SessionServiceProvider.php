@@ -52,6 +52,9 @@ class SessionServiceProvider extends ServiceProvider
         $container->bind(SessionInterface::class, Session::class);
         $container->bind(FlashMessageInterface::class, FlashMessage::class);
 
+        // Registriere den FlashMessageProvider
+        $container->singleton(FlashMessageProvider::class);
+
         // Registriere die Klassen als Singletons
         $container->singleton(Session::class);
         $container->singleton(FlashMessage::class);

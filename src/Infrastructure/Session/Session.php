@@ -1,13 +1,11 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Infrastructure\Session;
 
 use App\Infrastructure\Container\Attributes\Injectable;
 use App\Infrastructure\Container\Attributes\Singleton;
-use App\Infrastructure\Session\Contracts\FlashMessageInterface;
 use App\Infrastructure\Session\Contracts\SessionInterface;
 use App\Infrastructure\Session\Contracts\SessionStoreInterface;
 use App\Infrastructure\Session\Contracts\UserSessionStoreInterface;
@@ -28,15 +26,11 @@ class Session implements SessionInterface
      */
     protected const string USER_SESSION_KEY = '_user_session';
 
-
-    /**
-     * Konstruktor
-     */
     /**
      * Konstruktor
      */
     public function __construct(
-        protected FlashMessageInterface $flash,
+        protected FlashMessageProvider  $flashProvider,
         protected SessionConfiguration  $config,
         protected SessionStoreInterface $store
     )
@@ -105,10 +99,12 @@ class Session implements SessionInterface
                 $this->saveFingerprint();
             }
 
-            // Bestehender Code für Aktivitätsprüfung und Flash-Messages …
+            // Bestehender Code für Aktivitätsprüfung und Flash-Messages …
             $this->checkActivity();
             $this->rotateId();
-            $this->flash->load();
+
+            // FlashMessage über den Provider laden
+            $this->flashProvider->getFlashMessage()->load();
         }
 
         return $this->started;
@@ -409,7 +405,7 @@ class Session implements SessionInterface
      */
     public function flash(string $key, mixed $value): static
     {
-        $this->flash->add($key, $value);
+        $this->flashProvider->getFlashMessage()->add($key, $value);
 
         return $this;
     }
@@ -419,7 +415,7 @@ class Session implements SessionInterface
      */
     public function getFlash(string $key, mixed $default = null): mixed
     {
-        return $this->flash->get($key, $default);
+        return $this->flashProvider->getFlashMessage()->get($key, $default);
     }
 
     /**
