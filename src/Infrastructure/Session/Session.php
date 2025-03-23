@@ -9,6 +9,8 @@ use App\Infrastructure\Container\Attributes\Injectable;
 use App\Infrastructure\Container\Attributes\Singleton;
 use App\Infrastructure\Session\Contracts\FlashMessageInterface;
 use App\Infrastructure\Session\Contracts\SessionInterface;
+use App\Infrastructure\Session\Contracts\SessionStoreInterface;
+use App\Infrastructure\Session\Store\DefaultSessionStore;
 use Exception;
 use Random\RandomException;
 use RuntimeException;
@@ -25,11 +27,27 @@ class Session implements SessionInterface
     /**
      * Konstruktor
      */
+    /**
+     * Konstruktor
+     */
     public function __construct(
         protected FlashMessageInterface $flash,
-        protected SessionConfiguration  $config
+        protected SessionConfiguration  $config,
+        protected SessionStoreInterface $store
     )
     {
+        // Wenn ein benutzerdefinierter Store verwendet wird, registriere
+        // ihn als Session-Handler
+        if (!$store instanceof DefaultSessionStore) {
+            session_set_save_handler(
+                [$store, 'open'],
+                [$store, 'close'],
+                [$store, 'read'],
+                [$store, 'write'],
+                [$store, 'destroy'],
+                [$store, 'gc']
+            );
+        }
     }
 
     /**

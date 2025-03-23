@@ -8,6 +8,12 @@ use App\Infrastructure\Container\Contracts\ContainerInterface;
 use App\Infrastructure\Container\ServiceProvider;
 use App\Infrastructure\Session\Contracts\FlashMessageInterface;
 use App\Infrastructure\Session\Contracts\SessionInterface;
+use App\Infrastructure\Session\Contracts\SessionStoreInterface;
+use App\Infrastructure\Session\Store\DefaultSessionStore;
+use App\Infrastructure\Session\Store\RedisSessionStore;
+use Redis;
+use RuntimeException;
+use Throwable;
 
 class SessionServiceProvider extends ServiceProvider
 {
@@ -23,6 +29,24 @@ class SessionServiceProvider extends ServiceProvider
             return new SessionConfiguration();
         });
 
+        // Registriere den SessionStore basierend auf der Konfiguration
+        $container->bind(SessionStoreInterface::class, function (ContainerInterface $c) {
+            $config = $c->get(SessionConfiguration::class);
+
+            // Wenn Redis als Store-Typ konfiguriert ist, prüfe ob die Erweiterung verfügbar ist
+            if ($config->storeType === 'redis') {
+                if (extension_loaded('redis')) {
+                    return $this->createRedisStore($config);
+                } else {
+                    // Log eine Warnung, dass wir auf den Default-Store zurückfallen
+                    error_log('Redis extension nicht verfügbar. Fallback auf Default-Session-Store.');
+                }
+            }
+
+            // Default-Store verwenden
+            return new DefaultSessionStore();
+        });
+
         // Registriere die Interfaces
         $container->bind(SessionInterface::class, Session::class);
         $container->bind(FlashMessageInterface::class, FlashMessage::class);
@@ -30,5 +54,49 @@ class SessionServiceProvider extends ServiceProvider
         // Registriere die Klassen als Singletons
         $container->singleton(Session::class);
         $container->singleton(FlashMessage::class);
+    }
+
+    /**
+     * Erstellt einen Redis-Session-Store
+     */
+    private function createRedisStore(SessionConfiguration $config): RedisSessionStore
+    {
+        $redisConfig = $config->storeConfig['redis'] ?? [];
+
+        $redis = new Redis();
+
+        try {
+            $connected = $redis->connect(
+                $redisConfig['host'] ?? '127.0.0.1',
+                $redisConfig['port'] ?? 6379,
+                $redisConfig['timeout'] ?? 1.0
+            );
+
+            if (!$connected) {
+                throw new RuntimeException('Verbindung zum Redis-Server fehlgeschlagen');
+            }
+
+            if (!empty($redisConfig['auth'])) {
+                if (!$redis->auth($redisConfig['auth'])) {
+                    throw new RuntimeException('Redis-Authentifizierung fehlgeschlagen');
+                }
+            }
+
+            if (isset($redisConfig['database'])) {
+                if (!$redis->select($redisConfig['database'])) {
+                    throw new RuntimeException('Redis-Datenbankauswahl fehlgeschlagen');
+                }
+            }
+
+            return new RedisSessionStore(
+                $redis,
+                $redisConfig['prefix'] ?? 'sess:',
+                $config->lifetime
+            );
+        } catch (Throwable $e) {
+            // Bei Verbindungsproblemen Fehler loggen und Default-Store verwenden
+            error_log('Redis-Verbindungsfehler: ' . $e->getMessage());
+            throw new RuntimeException('Redis-Verbindung konnte nicht hergestellt werden: ' . $e->getMessage());
+        }
     }
 }

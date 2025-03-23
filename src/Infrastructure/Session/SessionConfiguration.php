@@ -1,6 +1,5 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Infrastructure\Session;
@@ -21,6 +20,8 @@ class SessionConfiguration
      * @param int $idleTimeout Timeout für inaktive Sessions in Sekunden (0 = deaktiviert)
      * @param bool $fingerprintCheck Ob die Session-Fingerprint-Überprüfung aktiviert sein soll
      * @param bool $regenerateIdInterval Zeit in Sekunden, nach der die Session-ID automatisch regeneriert wird (0 = deaktiviert)
+     * @param string $storeType Der zu verwendende Session-Store ('default', 'redis')
+     * @param array $storeConfig Konfiguration für den Session-Store
      */
     public function __construct(
         public readonly string  $name = 'app_session',
@@ -35,7 +36,18 @@ class SessionConfiguration
         public readonly int     $gcMaxLifetime = 7200,     // 2 Stunden
         public readonly int     $idleTimeout = 3600,       // 1 Stunde
         public readonly bool    $fingerprintCheck = true,
-        public readonly int     $regenerateIdInterval = 1800 // 30 Minuten
+        public readonly int     $regenerateIdInterval = 1800, // 30 Minuten
+        public readonly string  $storeType = 'default',    // 'default', 'redis'
+        public readonly array   $storeConfig = [
+            'redis' => [
+                'host' => '127.0.0.1',
+                'port' => 6379,
+                'timeout' => 1.0,
+                'prefix' => 'sess:',
+                'auth' => null,
+                'database' => 0,
+            ]
+        ]
     )
     {
     }
