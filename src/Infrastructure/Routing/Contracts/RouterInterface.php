@@ -8,6 +8,7 @@ namespace App\Infrastructure\Routing\Contracts;
 use App\Infrastructure\Http\Contracts\RequestInterface;
 use App\Infrastructure\Http\Contracts\ResponseInterface;
 use App\Infrastructure\Routing\Attributes\Cors;
+use App\Infrastructure\Security\Csrf\Attributes\CsrfProtection;
 
 /**
  * Interface für Router
@@ -19,7 +20,7 @@ interface RouterInterface
      *
      * @param string|array $methods HTTP-Methode(n)
      * @param string $path URL-Pfad mit optionalen Parametern
-     * @param callable|array $handler Zu rufende Funktion oder [Controller, Methode]
+     * @param callable|array|string $handler Zu rufende Funktion oder [Controller, Methode]
      * @param string|null $name Optionaler Name für die Route
      * @param string|null $domain Optionale Domain/Subdomain für die Route
      * @return static
@@ -72,7 +73,7 @@ interface RouterInterface
      * Fügt eine Umleitung hinzu
      *
      * @param string $fromPath Quellpfad
-     * @param string $toPath Zielpfad (kann auch eine benannte Route sein mit 'name:routeName')
+     * @param string $toPath Zielpfad (kann auch eine benannte Route sein mit 'name: routeName')
      * @param int $statusCode HTTP-Statuscode (301 = permanent, 302 = temporär)
      * @param bool $preserveQueryString Ob der Query-String übernommen werden soll
      * @return static
@@ -92,4 +93,13 @@ interface RouterInterface
      * @return static
      */
     public function registerErrorHandler(int $statusCode, callable|array|string $handler): static;
+
+    /**
+     * Fügt eine CSRF-Konfiguration für eine Route hinzu
+     *
+     * @param string $path Der Pfad der Route
+     * @param CsrfProtection $csrfConfig Die CSRF-Konfiguration
+     * @return void
+     */
+    public function addCsrfConfiguration(string $path, CsrfProtection $csrfConfig): void;
 }

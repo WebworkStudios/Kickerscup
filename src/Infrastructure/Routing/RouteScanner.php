@@ -14,6 +14,7 @@ use App\Infrastructure\Routing\Attributes\RouteParam;
 use App\Infrastructure\Routing\Contracts\RouterInterface;
 use App\Infrastructure\Routing\Contracts\RouteScannerInterface;
 use App\Infrastructure\Routing\Contracts\UrlGeneratorInterface;
+use App\Infrastructure\Security\Csrf\Attributes\CsrfProtection;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use ReflectionAttribute;
@@ -158,8 +159,12 @@ class RouteScanner implements RouteScannerInterface
                     $this->router->addRoute($methods, $path, $className, $name, $domain);
 
                     // Registriere CORS-Konfiguration, wenn vorhanden
-                    if ($corsConfig !== null) {
-                        $this->router->addCorsConfiguration($path, $corsConfig);
+                    $this->addCorsConfigurationIfExists($path, $corsConfig);
+
+                    $csrfAttributes = $invokeMethod->getAttributes(CsrfProtection::class);
+                    if (!empty($csrfAttributes)) {
+                        $csrfConfig = $csrfAttributes[0]->newInstance();
+                        $this->router->addCsrfConfiguration($path, $csrfConfig);
                     }
 
                     // Sammle Parameter-Attribute für die URL-Generierung
@@ -170,7 +175,7 @@ class RouteScanner implements RouteScannerInterface
             // Scanne auch Methoden nach Route-Attributen
             foreach ($reflector->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
                 // Überspringe Konstruktor und magische Methoden
-                if ($method->isConstructor() || strpos($method->getName(), '__') === 0) {
+                if ($method->isConstructor() || str_starts_with($method->getName(), '__')) {
                     continue;
                 }
 
@@ -207,17 +212,35 @@ class RouteScanner implements RouteScannerInterface
                     // Registriere die Route mit der Klasse und Methode als Handler und Domain
                     $this->router->addRoute($methods, $path, [$className, $method->getName()], $name, $domain);
 
-                    // Registriere CORS-Konfiguration, wenn vorhanden
-                    if ($methodCorsConfig !== null) {
-                        $this->router->addCorsConfiguration($path, $methodCorsConfig);
+                    $this->addCorsConfigurationIfExists($path, $methodCorsConfig);
+
+                    // Sammle CSRF-Attribute der Methode
+                    $csrfAttributes = $method->getAttributes(CsrfProtection::class);
+                    if (!empty($csrfAttributes)) {
+                        $csrfConfig = $csrfAttributes[0]->newInstance();
+                        $this->router->addCsrfConfiguration($path, $csrfConfig);
                     }
 
                     // Sammle Parameter-Attribute für die URL-Generierung
                     $this->collectParameterAttributes($method, $path, $name, $domain);
                 }
             }
-        } catch (ReflectionException $e) {
+        } catch (ReflectionException) {
             // Ignoriere Reflection-Fehler und mache mit dem nächsten weiter
+        }
+    }
+
+    /**
+     * Fügt eine CORS-Konfiguration für einen Pfad hinzu, wenn vorhanden
+     *
+     * @param string $path Der Pfad der Route
+     * @param Cors|null $corsConfig Die CORS-Konfiguration
+     * @return void
+     */
+    private function addCorsConfigurationIfExists(string $path, ?Cors $corsConfig): void
+    {
+        if ($corsConfig !== null) {
+            $this->router->addCorsConfiguration($path, $corsConfig);
         }
     }
 

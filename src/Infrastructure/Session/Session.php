@@ -10,9 +10,8 @@ use App\Infrastructure\Container\Attributes\Singleton;
 use App\Infrastructure\Session\Contracts\FlashMessageInterface;
 use App\Infrastructure\Session\Contracts\SessionInterface;
 use App\Infrastructure\Session\Contracts\SessionStoreInterface;
+use App\Infrastructure\Session\Contracts\UserSessionStoreInterface;
 use App\Infrastructure\Session\Store\DefaultSessionStore;
-use Exception;
-use Random\RandomException;
 use RuntimeException;
 
 #[Injectable]
@@ -27,7 +26,7 @@ class Session implements SessionInterface
     /**
      * Konstante für Benutzer-Session-Metadaten
      */
-    protected const USER_SESSION_KEY = '_user_session';
+    protected const string USER_SESSION_KEY = '_user_session';
 
 
     /**
@@ -106,7 +105,7 @@ class Session implements SessionInterface
                 $this->saveFingerprint();
             }
 
-            // Bestehender Code für Aktivitätsprüfung und Flash-Messages...
+            // Bestehender Code für Aktivitätsprüfung und Flash-Messages …
             $this->checkActivity();
             $this->rotateId();
             $this->flash->load();
@@ -136,9 +135,6 @@ class Session implements SessionInterface
         ini_set('session.gc_maxlifetime', (string)$this->config->gcMaxLifetime);
     }
 
-    /**
-     * {@inheritdoc}
-     */
     /**
      * {@inheritdoc}
      */
@@ -382,7 +378,7 @@ class Session implements SessionInterface
 
         if ($force || !$lastRotation || ($now - $lastRotation) > $this->config->regenerateIdInterval) {
             // Verwende true als expliziten Wert, um die Warnung zu vermeiden
-            $result = $this->regenerate(deleteOldSession: true);
+            $result = $this->regenerate();
 
             if ($result) {
                 $this->set('_last_rotation', $now);
@@ -528,61 +524,6 @@ class Session implements SessionInterface
         return session_write_close();
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function generateCsrfToken(string $key = 'csrf'): string
-    {
-        if (!$this->started) {
-            $this->start();
-        }
-
-        try {
-            // Generiere ein zufälliges Token
-            $token = bin2hex(random_bytes(32));
-
-            // Speichere das Token in der Session
-            $_SESSION['_csrf'][$key] = $token;
-
-            return $token;
-        } catch (RandomException $e) {
-            // Fallback für den Fall, dass random_bytes() fehlschlägt
-            $token = bin2hex(openssl_random_pseudo_bytes(32));
-            $_SESSION['_csrf'][$key] = $token;
-
-            return $token;
-        } catch (Exception $e) {
-            // Absoluter Fallback, falls beide Methoden fehlschlagen
-            $token = md5(uniqid((string)mt_rand(), true));
-            $_SESSION['_csrf'][$key] = $token;
-
-            return $token;
-        }
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function validateCsrfToken(string $token, string $key = 'csrf'): bool
-    {
-        if (!$this->started) {
-            $this->start();
-        }
-
-        // Prüfe, ob das Token existiert
-        if (!isset($_SESSION['_csrf'][$key])) {
-            return false;
-        }
-
-        $storedToken = $_SESSION['_csrf'][$key];
-
-        // Lösche das Token nach der Überprüfung (einmaliges Token)
-        unset($_SESSION['_csrf'][$key]);
-
-        // Überprüfe das Token mit konstanter Zeit (verhindert Timing-Angriffe)
-        return hash_equals($storedToken, $token);
-    }
-
     // Neue Methode zum Überprüfen der absoluten Lebensdauer
     protected function hasAbsoluteLifetimeExpired(): bool
     {
@@ -615,7 +556,7 @@ class Session implements SessionInterface
         ]);
 
         // Regeneriere die Session-ID, um Session-Fixation zu verhindern
-        $this->regenerate(true);
+        $this->regenerate();
 
         return $this;
     }
@@ -652,13 +593,13 @@ class Session implements SessionInterface
     public function invalidateUserSessions(int|string $userId): bool
     {
         // Diese Methode benötigt eine Store-Implementation, die alle Sessions durchsuchen kann
-        // Für den Standard-PHP-Store müsste eine externe Tracking-Tabelle verwendet werden
+        // für den Standard-PHP-Store müsste eine externe Tracking-Tabelle verwendet werden
 
         if ($this->store instanceof UserSessionStoreInterface) {
             return $this->store->invalidateUserSessions($userId);
         }
 
-        // Wenn das aktuelle Session-Store nicht unterstützt wird, zumindest die aktuelle Session invalidieren
+        // Wenn der aktuelle Session-Store nicht unterstützt wird, zumindest die aktuelle Session invalidieren
         if ($this->isBoundToUser($userId)) {
             return $this->destroy();
         }

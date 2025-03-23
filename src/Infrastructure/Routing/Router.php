@@ -8,16 +8,22 @@ namespace App\Infrastructure\Routing;
 use App\Infrastructure\Container\Attributes\Injectable;
 use App\Infrastructure\Container\Attributes\Singleton;
 use App\Infrastructure\Container\Contracts\ContainerInterface;
+use App\Infrastructure\Container\Exceptions\ContainerException;
+use App\Infrastructure\Container\Exceptions\NotFoundException;
 use App\Infrastructure\Http\Contracts\RequestInterface;
 use App\Infrastructure\Http\Contracts\ResponseFactoryInterface;
 use App\Infrastructure\Http\Contracts\ResponseInterface;
+use App\Infrastructure\Routing\Attributes\Cors;
 use App\Infrastructure\Routing\Contracts\RouterInterface;
 use App\Infrastructure\Routing\Contracts\UrlGeneratorInterface;
 use App\Infrastructure\Routing\Exceptions\MethodNotAllowedException;
 use App\Infrastructure\Routing\Exceptions\RouteCreationException;
 use App\Infrastructure\Routing\Exceptions\RouteNotFoundException;
+use App\Infrastructure\Security\Csrf\Attributes\CsrfProtection;
+use App\Infrastructure\Security\Csrf\Contracts\CsrfProtectionInterface;
 use Closure;
 use Exception;
+use ReflectionException;
 use ReflectionFunction;
 use ReflectionMethod;
 use ReflectionParameter;
@@ -63,6 +69,13 @@ class Router implements RouterInterface
      * @var array<int, callable|array|string>
      */
     protected array $errorHandlers = [];
+
+    /**
+     * CSRF-Konfigurationen für Routen
+     *
+     * @var array<string, CsrfProtection>
+     */
+    protected array $csrfConfigurations = [];
 
 
     /**
@@ -134,7 +147,7 @@ class Router implements RouterInterface
      * Fügt eine Umleitung hinzu
      *
      * @param string $fromPath Quellpfad
-     * @param string $toPath Zielpfad (kann auch eine benannte Route sein mit 'name:routeName')
+     * @param string $toPath Zielpfad (kann auch eine benannte Route sein mit 'name: routeName')
      * @param int $statusCode HTTP-Statuscode (301 = permanent, 302 = temporär)
      * @param bool $preserveQueryString Ob der Query-String übernommen werden soll
      * @return static
@@ -191,7 +204,7 @@ class Router implements RouterInterface
         $parameters = [];
         $pattern = $path;
 
-        // Parameter im Format {name} oder {name:regex} erkennen
+        // Parameter im Format {name} oder {name: regex} erkennen
         if (preg_match_all('#{([^:}]+)(?::([^}]+))?}#', $path, $matches, PREG_SET_ORDER)) {
             foreach ($matches as $match) {
                 $name = $match[1];
@@ -223,8 +236,9 @@ class Router implements RouterInterface
 
     /**
      * {@inheritdoc}
+     * @throws MethodNotAllowedException
      */
-    public function match(RequestInterface $request): mixed
+    public function match(RequestInterface $request): array|false
     {
         $method = $request->getMethod();
         $path = $this->normalizePath($request->getPath());
@@ -254,7 +268,7 @@ class Router implements RouterInterface
                             continue;
                         }
 
-                        if (strpos($domainPattern, '{') !== false) {
+                        if (str_contains($domainPattern, '{')) {
                             $domainRegex = $this->createDomainRegex($domainPattern);
                             if (preg_match($domainRegex, $host) && $this->matchPath($path, $domainRoutes) !== false) {
                                 $allowedMethods[] = $routeMethod;
@@ -275,7 +289,7 @@ class Router implements RouterInterface
 
             if (!empty($allowedMethods)) {
                 $exception = new MethodNotAllowedException(
-                    "Methode {$method} ist nicht erlaubt für Pfad {$path}. Erlaubte Methoden: " . implode(', ', $allowedMethods)
+                    "Methode $method ist nicht erlaubt für Pfad $path. Erlaubte Methoden: " . implode(', ', $allowedMethods)
                 );
                 $exception->setAllowedMethods($allowedMethods);
                 throw $exception;
@@ -302,7 +316,7 @@ class Router implements RouterInterface
             // Sortiere Domain-Patterns nach Spezifität
             $domainPatterns = array_filter(
                 array_keys($this->routes[$method] ?? []),
-                fn($pattern) => $pattern !== null && $pattern !== $host && strpos($pattern, '{') !== false
+                fn($pattern) => $pattern !== null && $pattern !== $host && str_contains($pattern, '{') !== false
             );
 
             // Priorisiere Patterns mit weniger Parametern (spezifischere zuerst)
@@ -417,8 +431,13 @@ class Router implements RouterInterface
 
     /**
      * {@inheritdoc}
+     * @param RequestInterface $request
+     * @return ResponseInterface
+     * @throws ContainerException
+     * @throws NotFoundException
+     * @throws RouteCreationException
+     * @throws ReflectionException
      */
-// In der Router-Klasse, dispatch-Methode ändern:
     public function dispatch(RequestInterface $request): ResponseInterface
     {
         try {
@@ -444,6 +463,22 @@ class Router implements RouterInterface
             $route = $match['route'];
             $parameters = $match['parameters'];
             $handler = $route['handler'];
+            $path = $request->getPath();
+
+            // CSRF-Validierung durchführen, wenn nötig
+            $csrfConfig = $this->findCsrfConfigurationForPath($path);
+            if ($csrfConfig !== null && $csrfConfig->enabled && $this->shouldValidateCsrf($request)) {
+                $csrfService = $this->container->get(CsrfProtectionInterface::class);
+                $token = $this->getTokenFromRequest($request);
+
+                if (!$token || !$csrfService->validateToken($token, $csrfConfig->tokenKey)) {
+                    return $this->handleCsrfError();
+                }
+
+                if ($csrfConfig->validateOrigin && !$csrfService->validateOrigin([])) {
+                    return $this->handleCsrfError("Ungültiger Request-Origin");
+                }
+            }
 
             // Rufe den Handler mit den Parametern auf
             $response = $this->callHandler($handler, $parameters, $request);
@@ -567,18 +602,7 @@ class Router implements RouterInterface
         $response = $this->responseFactory->create(204);
 
         // Origin-Header setzen
-        $requestOrigin = $request->getHeader('origin');
-        if ($requestOrigin !== null) {
-            if ($corsConfig['allowOrigin'] === '*') {
-                $response->setHeader('Access-Control-Allow-Origin', '*');
-            } elseif (is_array($corsConfig['allowOrigin']) && in_array($requestOrigin, $corsConfig['allowOrigin'])) {
-                $response->setHeader('Access-Control-Allow-Origin', $requestOrigin);
-                $response->setHeader('Vary', 'Origin');
-            } elseif (is_string($corsConfig['allowOrigin']) && $corsConfig['allowOrigin'] === $requestOrigin) {
-                $response->setHeader('Access-Control-Allow-Origin', $requestOrigin);
-                $response->setHeader('Vary', 'Origin');
-            }
-        }
+        $this->setCorsHeaders($request, $response, $corsConfig);
 
         // Methoden-Header setzen
         if ($corsConfig['allowMethods'] === '*') {
@@ -624,6 +648,10 @@ class Router implements RouterInterface
      * @param array $parameters Die Parameter aus der URL
      * @param RequestInterface $request Der HTTP-Request
      * @return mixed Das Ergebnis des Handler-Aufrufs
+     * @throws ContainerException
+     * @throws NotFoundException
+     * @throws RouteCreationException
+     * @throws ReflectionException
      */
     protected function callHandler(callable|array|string $handler, array $parameters, RequestInterface $request): mixed
     {
@@ -652,6 +680,8 @@ class Router implements RouterInterface
      * @param array $parameters Die Parameter aus der URL
      * @param RequestInterface $request Der HTTP-Request
      * @return mixed Das Ergebnis des Closure-Aufrufs
+     * @throws RouteCreationException
+     * @throws ReflectionException
      */
     protected function callClosure(Closure $closure, array $parameters, RequestInterface $request): mixed
     {
@@ -668,6 +698,7 @@ class Router implements RouterInterface
      * @param array $routeParameters Die Parameter aus der Route
      * @param RequestInterface $request Der HTTP-Request
      * @return array Die aufgelösten Parameter
+     * @throws RouteCreationException
      */
     protected function resolveParameters(array $methodParameters, array $routeParameters, RequestInterface $request): array
     {
@@ -688,7 +719,7 @@ class Router implements RouterInterface
             if (isset($routeParameters[$paramName])) {
                 $value = $routeParameters[$paramName];
 
-                // Typkonvertierung wenn nötig und möglich
+                // Typ konvertierung, wenn nötig und möglich
                 if ($paramType !== null && $paramType->isBuiltin()) {
                     $typeName = $paramType->getName();
                     if ($typeName === 'int' && is_numeric($value)) {
@@ -715,7 +746,7 @@ class Router implements RouterInterface
                 try {
                     $resolvedParameters[] = $this->container->get($paramType->getName());
                     continue;
-                } catch (Exception $e) {
+                } catch (Exception) {
                     // Ignoriere Fehler und versuche weitere Auflösungsmethoden
                 }
             }
@@ -728,7 +759,7 @@ class Router implements RouterInterface
 
             // Wenn wir hier ankommen, konnte der Parameter nicht aufgelöst werden
             throw new RouteCreationException(
-                "Parameter {$paramName} konnte nicht aufgelöst werden."
+                "Parameter $paramName konnte nicht aufgelöst werden."
             );
         }
 
@@ -743,6 +774,10 @@ class Router implements RouterInterface
      * @param array $parameters Die Parameter aus der URL
      * @param RequestInterface $request Der HTTP-Request
      * @return mixed Das Ergebnis des Methoden-Aufrufs
+     * @throws RouteCreationException
+     * @throws ContainerException
+     * @throws NotFoundException
+     * @throws ReflectionException
      */
     protected function callControllerMethod(string|object $controller, string $method, array $parameters, RequestInterface $request): mixed
     {
@@ -764,6 +799,10 @@ class Router implements RouterInterface
      * @param array $parameters Die Parameter aus der URL
      * @param RequestInterface $request Der HTTP-Request
      * @return mixed Das Ergebnis des __invoke-Aufrufs
+     * @throws ContainerException
+     * @throws NotFoundException
+     * @throws RouteCreationException
+     * @throws ReflectionException
      */
     protected function callInvokable(string $className, array $parameters, RequestInterface $request): mixed
     {
@@ -791,18 +830,7 @@ class Router implements RouterInterface
         }
 
         // Origin-Header setzen
-        $requestOrigin = $request->getHeader('origin');
-        if ($requestOrigin !== null) {
-            if ($corsConfig['allowOrigin'] === '*') {
-                $response->setHeader('Access-Control-Allow-Origin', '*');
-            } elseif (is_array($corsConfig['allowOrigin']) && in_array($requestOrigin, $corsConfig['allowOrigin'])) {
-                $response->setHeader('Access-Control-Allow-Origin', $requestOrigin);
-                $response->setHeader('Vary', 'Origin');
-            } elseif (is_string($corsConfig['allowOrigin']) && $corsConfig['allowOrigin'] === $requestOrigin) {
-                $response->setHeader('Access-Control-Allow-Origin', $requestOrigin);
-                $response->setHeader('Vary', 'Origin');
-            }
-        }
+        $this->setCorsHeaders($request, $response, $corsConfig);
 
         // Credentials-Header setzen
         if ($corsConfig['allowCredentials']) {
@@ -875,6 +903,10 @@ class Router implements RouterInterface
      * @param RequestInterface $request Der HTTP-Request
      * @param RouteNotFoundException $exception Die ausgelöste Exception
      * @return ResponseInterface Die Fehler-Response
+     * @throws ContainerException
+     * @throws NotFoundException
+     * @throws ReflectionException
+     * @throws RouteCreationException
      */
     protected function handleNotFoundError(RequestInterface $request, RouteNotFoundException $exception): ResponseInterface
     {
@@ -893,6 +925,10 @@ class Router implements RouterInterface
      * @param RequestInterface $request Der HTTP-Request
      * @param MethodNotAllowedException $exception Die ausgelöste Exception
      * @return ResponseInterface Die Fehler-Response
+     * @throws ContainerException
+     * @throws NotFoundException
+     * @throws ReflectionException
+     * @throws RouteCreationException
      */
     protected function handleMethodNotAllowedError(RequestInterface $request, MethodNotAllowedException $exception): ResponseInterface
     {
@@ -920,10 +956,14 @@ class Router implements RouterInterface
      *
      * @param callable|array|string $handler Der Error-Handler
      * @param RequestInterface $request Der HTTP-Request
-     * @param \Exception $exception Die ausgelöste Exception
+     * @param Exception $exception Die ausgelöste Exception
      * @return ResponseInterface Die Response vom Handler
+     * @throws ContainerException
+     * @throws NotFoundException
+     * @throws ReflectionException
+     * @throws RouteCreationException
      */
-    protected function callErrorHandler(callable|array|string $handler, RequestInterface $request, \Exception $exception): ResponseInterface
+    protected function callErrorHandler(callable|array|string $handler, RequestInterface $request, Exception $exception): ResponseInterface
     {
         $response = $this->callHandler($handler, ['exception' => $exception], $request);
 
@@ -953,5 +993,109 @@ class Router implements RouterInterface
     {
         $this->errorHandlers[$statusCode] = $handler;
         return $this;
+    }
+
+    /**
+     * Fügt eine CSRF-Konfiguration für eine Route hinzu
+     *
+     * @param string $path Der Pfad der Route
+     * @param CsrfProtection $csrfConfig Die CSRF-Konfiguration
+     * @return void
+     */
+    public function addCsrfConfiguration(string $path, CsrfProtection $csrfConfig): void
+    {
+        $this->csrfConfigurations[$path] = $csrfConfig;
+    }
+
+    /**
+     * Findet die CSRF-Konfiguration für einen Pfad
+     *
+     * @param string $path Der Pfad
+     * @return CsrfProtection|null Die CSRF-Konfiguration oder null
+     */
+    public function findCsrfConfigurationForPath(string $path): ?CsrfProtection
+    {
+        // Exakte Übereinstimmung
+        if (isset($this->csrfConfigurations[$path])) {
+            return $this->csrfConfigurations[$path];
+        }
+
+        // Nearest match (z.B. /admin/* für /admin/users)
+        foreach ($this->csrfConfigurations as $routePath => $config) {
+            // Pfad endet mit * (Wildcard)
+            if (str_ends_with($routePath, '*')) {
+                $prefix = rtrim(substr($routePath, 0, -1), '/');
+                if (str_starts_with($path, $prefix)) {
+                    return $config;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param RequestInterface $request
+     * @return bool
+     * @throws ContainerException
+     * @throws NotFoundException
+     */
+    protected function shouldValidateCsrf(RequestInterface $request): bool
+    {
+        $csrfService = $this->container->get(CsrfProtectionInterface::class);
+        return $csrfService->shouldProtectRequest($request);
+    }
+
+    /**
+     * Extrahiert das CSRF-Token aus dem Request
+     */
+    protected function getTokenFromRequest(RequestInterface $request): ?string
+    {
+        // Token aus POST/PUT-Parameter
+        $token = $request->getInput('_csrf_token');
+        if ($token) {
+            return $token;
+        }
+
+        // Token aus Header (für AJAX-Requests)
+        $token = $request->getHeader('X-CSRF-TOKEN');
+        if ($token) {
+            return $token;
+        }
+
+        // Token aus X-XSRF-TOKEN Header (für AJAX mit Cookies)
+        $token = $request->getHeader('X-XSRF-TOKEN');
+        if ($token) {
+            return $token;
+        }
+
+        return null;
+    }
+
+    protected function setCorsHeaders(RequestInterface $request, ResponseInterface $response, array $corsConfig): void
+    {
+        // Origin-Header setzen
+        $requestOrigin = $request->getHeader('origin');
+        if ($requestOrigin !== null) {
+            if ($corsConfig['allowOrigin'] === '*') {
+                $response->setHeader('Access-Control-Allow-Origin', '*');
+            } elseif (is_array($corsConfig['allowOrigin']) && in_array($requestOrigin, $corsConfig['allowOrigin'])) {
+                $response->setHeader('Access-Control-Allow-Origin', $requestOrigin);
+                $response->setHeader('Vary', 'Origin');
+            } elseif (is_string($corsConfig['allowOrigin']) && $corsConfig['allowOrigin'] === $requestOrigin) {
+                $response->setHeader('Access-Control-Allow-Origin', $requestOrigin);
+                $response->setHeader('Vary', 'Origin');
+            }
+        }
+    }
+
+    /**
+     * Behandelt CSRF-Fehler
+     * @param string|null $detailMessage
+     * @return ResponseInterface
+     */
+    protected function handleCsrfError(?string $detailMessage = null): ResponseInterface
+    {
+        return $this->responseFactory->createForbidden("CSRF-Fehler: " . ($detailMessage ?? "Token ungültig"));
     }
 }

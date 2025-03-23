@@ -31,7 +31,7 @@ interface ResponseInterface
     public function setHeader(string $name, string $value): self;
 
     /**
-     * Fügt einen HTTP-Header hinzu (läßt mehrere Werte für den gleichen Header zu)
+     * Fügt einen HTTP-Header hinzu (lässt mehrere Werte für den gleichen Header zu)
      */
     public function addHeader(string $name, string $value): self;
 

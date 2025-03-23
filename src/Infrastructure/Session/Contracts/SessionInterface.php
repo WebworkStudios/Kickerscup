@@ -168,23 +168,6 @@ interface SessionInterface
     public function validateFingerprint(): bool;
 
     /**
-     * Generiert ein CSRF-Token und speichert es in der Session
-     *
-     * @param string $key Der Schlüssel für das Token
-     * @return string Das generierte Token
-     */
-    public function generateCsrfToken(string $key = 'csrf'): string;
-
-    /**
-     * Validiert ein CSRF-Token
-     *
-     * @param string $token Das zu validierende Token
-     * @param string $key Der Schlüssel für das Token
-     * @return bool True, wenn das Token gültig ist
-     */
-    public function validateCsrfToken(string $token, string $key = 'csrf'): bool;
-
-    /**
      * Prüft, ob die Session inaktiv ist und aktualisiert den Timestamp
      *
      * @return bool True, wenn die Session aktiv ist (nicht abgelaufen)

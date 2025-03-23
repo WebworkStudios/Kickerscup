@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Infrastructure\Routing;
 
 use App\Infrastructure\Container\Contracts\ContainerInterface;
+use App\Infrastructure\Container\Exceptions\ContainerException;
+use App\Infrastructure\Container\Exceptions\NotFoundException;
 use App\Infrastructure\Container\ServiceProvider;
 use App\Infrastructure\Http\Contracts\ResponseFactoryInterface;
 use App\Infrastructure\Routing\Contracts\RouterInterface;
@@ -21,6 +23,8 @@ class RoutingServiceProvider extends ServiceProvider
      *
      * @param ContainerInterface $container
      * @return void
+     * @throws ContainerException
+     * @throws NotFoundException
      */
     public function register(ContainerInterface $container): void
     {
@@ -34,10 +38,10 @@ class RoutingServiceProvider extends ServiceProvider
         $container->singleton(UrlGenerator::class);
 
         // Standardfehlerbehandlung konfigurieren, falls gewünscht
-        // Dies ist optional und kann auch nach der Registrierung direkt im Router erfolgen
+        // dies ist optional und kann auch nach der Registrierung direkt im Router erfolgen
         $router = $container->get(RouterInterface::class);
 
-        // Standardmäßig den Router mit Fehlerseiten-Handlern konfigurieren
+        // Standardmäßig den Router mit Fehlerseiten-Handlers konfigurieren
         $this->setupErrorHandlers($router, $container);
     }
 
@@ -51,15 +55,15 @@ class RoutingServiceProvider extends ServiceProvider
     protected function setupErrorHandlers(RouterInterface $router, ContainerInterface $container): void
     {
         // Beispiel für die Registrierung von Standardfehlern
-        // In einer vollständigen Implementation würde hier auf Konfigurationen zugegriffen
+        // in einer vollständigen Implementation würde hier auf Konfigurationen zugegriffen
         // oder Controller registriert
 
         // 404 Not Found Handler
-        $router->registerErrorHandler(404, function ($request, $exception) {
-            // Einfacher Standardhandler für 404-Fehler
-            // In der Praxis würde hier ein vollständiger Controller verwendet
+        $router->registerErrorHandler(404, function ($request) use ($container) {
+            // Einfacher Standard-handler für 404-Fehler
+            // in der Praxis würde hier ein vollständiger Controller verwendet
             $content = '<!DOCTYPE html>
-                <html>
+                <html lang="de">
                 <head>
                     <title>404 Nicht gefunden</title>
                     <style>
@@ -86,7 +90,7 @@ class RoutingServiceProvider extends ServiceProvider
             $allowedMethods = $exception->getAllowedMethods();
 
             $content = '<!DOCTYPE html>
-                <html>
+                <html lang="de">
                 <head>
                     <title>405 Methode nicht erlaubt</title>
                     <style>

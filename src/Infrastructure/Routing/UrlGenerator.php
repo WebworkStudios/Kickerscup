@@ -50,11 +50,13 @@ class UrlGenerator implements UrlGeneratorInterface
 
     /**
      * {@inheritdoc}
+     * @throws NamedRouteNotFoundException
+     * @throws RouteCreationException
      */
     public function generate(string $name, array $parameters = [], bool $absoluteUrl = false): string
     {
         if (!isset($this->namedRoutes[$name])) {
-            throw new NamedRouteNotFoundException("Route mit dem Namen '{$name}' wurde nicht gefunden.");
+            throw new NamedRouteNotFoundException("Route mit dem Namen '$name' wurde nicht gefunden.");
         }
 
         $routeInfo = $this->namedRoutes[$name];
@@ -64,7 +66,7 @@ class UrlGenerator implements UrlGeneratorInterface
         // Ersetze alle Parameter im Pfad
         foreach ($routeInfo['parameters'] as $paramName => $paramInfo) {
             if (!isset($parameters[$paramName]) && (!isset($paramInfo['optional']) || !$paramInfo['optional'])) {
-                throw new RouteCreationException("Parameter '{$paramName}' wird benötigt für Route '{$name}'.");
+                throw new RouteCreationException("Parameter '$paramName' wird benötigt für Route '$name'.");
             }
 
             // Wenn Parameter vorhanden ist oder optional mit Default
@@ -74,7 +76,7 @@ class UrlGenerator implements UrlGeneratorInterface
                 // Validiere den Parameter gegen den regulären Ausdruck
                 if (!empty($paramInfo['regex']) && !preg_match('/^' . $paramInfo['regex'] . '$/', (string)$paramValue)) {
                     throw new RouteCreationException(
-                        "Parameter '{$paramName}' mit Wert '{$paramValue}' entspricht nicht dem Muster '{$paramInfo['regex']}'."
+                        "Parameter '$paramName' mit Wert '$paramValue' entspricht nicht dem Muster '{$paramInfo['regex']}'."
                     );
                 }
 
@@ -88,10 +90,10 @@ class UrlGenerator implements UrlGeneratorInterface
         }
 
         // Wenn eine Domain mit Parametern vorhanden ist, ersetze auch diese
-        if ($domain !== null && isset($routeInfo['domainParameters']) && !empty($routeInfo['domainParameters'])) {
+        if ($domain !== null && !empty($routeInfo['domainParameters'])) {
             foreach ($routeInfo['domainParameters'] as $paramName => $paramInfo) {
                 if (!isset($parameters[$paramName]) && (!isset($paramInfo['optional']) || !$paramInfo['optional'])) {
-                    throw new RouteCreationException("Domain-Parameter '{$paramName}' wird benötigt für Route '{$name}'.");
+                    throw new RouteCreationException("Domain-Parameter '$paramName' wird benötigt für Route '$name'.");
                 }
 
                 // Wenn Parameter vorhanden ist oder optional mit Default
@@ -101,7 +103,7 @@ class UrlGenerator implements UrlGeneratorInterface
                     // Validiere den Parameter gegen den regulären Ausdruck
                     if (!empty($paramInfo['regex']) && !preg_match('/^' . $paramInfo['regex'] . '$/', (string)$paramValue)) {
                         throw new RouteCreationException(
-                            "Domain-Parameter '{$paramName}' mit Wert '{$paramValue}' entspricht nicht dem Muster '{$paramInfo['regex']}'."
+                            "Domain-Parameter '$paramName' mit Wert '$paramValue' entspricht nicht dem Muster '{$paramInfo['regex']}'."
                         );
                     }
 

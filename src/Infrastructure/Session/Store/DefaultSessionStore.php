@@ -5,10 +5,12 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Session\Store;
 
+use AllowDynamicProperties;
 use App\Infrastructure\Container\Attributes\Injectable;
 use App\Infrastructure\Session\Contracts\SessionStoreInterface;
+use App\Infrastructure\Session\SessionConfiguration;
 
-#[Injectable]
+#[AllowDynamicProperties] #[Injectable]
 class DefaultSessionStore implements SessionStoreInterface
 {
     public function __construct(SessionConfiguration $sessionConfig)
@@ -58,7 +60,7 @@ class DefaultSessionStore implements SessionStoreInterface
         // Nutzen wir die konfigurierte absolute Lebensdauer statt des übergebenen maxlifetime
         // Dies ermöglicht uns strengere Regeln als die PHP-Standardeinstellung
 
-        // Da die Standard-PHP-GC automatisch läuft, müssen wir hier nichts zusätzliches tun,
+        // Da die Standard-PHP-GC automatisch läuft, müssen wir hier nichts Zusätzliches tun,
         // außer sicherzustellen, dass die PHP-Einstellung korrekt ist.
         ini_set('session.gc_maxlifetime', (string)$this->sessionConfig->absoluteLifetime);
 

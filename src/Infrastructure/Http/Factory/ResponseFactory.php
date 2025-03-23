@@ -8,6 +8,7 @@ namespace App\Infrastructure\Http\Factory;
 use App\Infrastructure\Container\Attributes\Injectable;
 use App\Infrastructure\Http\Contracts\ResponseFactoryInterface;
 use App\Infrastructure\Http\Response;
+use JsonException;
 
 /**
  * Factory für Response-Objekte
@@ -27,6 +28,7 @@ class ResponseFactory implements ResponseFactoryInterface
      * Erstellt eine Response mit JSON-Inhalt
      *
      * @param mixed $data Die zu serialisierenden Daten
+     * @throws JsonException
      */
     public function createJson(mixed $data, int $statusCode = 200, int $options = 0): Response
     {

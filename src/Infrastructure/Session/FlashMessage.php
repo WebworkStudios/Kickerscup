@@ -14,12 +14,12 @@ class FlashMessage implements FlashMessageInterface
     /**
      * Der Session-Schlüssel für Flash-Messages
      */
-    protected const FLASH_KEY = '_flash';
+    protected const string FLASH_KEY = '_flash';
 
     /**
      * Der Session-Schlüssel für neue Flash-Messages
      */
-    protected const FLASH_NEW = '_flash_new';
+    protected const string FLASH_NEW = '_flash_new';
 
     /**
      * Konstruktor

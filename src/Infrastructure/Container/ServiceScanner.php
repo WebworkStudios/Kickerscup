@@ -150,7 +150,7 @@ class ServiceScanner
                     $this->container->bind($interface->getName(), $className);
                 }
             }
-        } catch (ReflectionException $e) {
+        } catch (ReflectionException) {
             // Ignoriere Reflection-Fehler und mache mit dem nächsten weiter
         }
     }

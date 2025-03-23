@@ -12,7 +12,7 @@ use Attribute;
  * Parameter Attribut für Route-Parameter
  */
 #[Attribute(Attribute::TARGET_PARAMETER)]
-class RouteParam
+readonly class RouteParam
 {
     /**
      * Konstruktor
@@ -22,9 +22,9 @@ class RouteParam
      * @param mixed $default Standardwert für optionale Parameter
      */
     public function __construct(
-        public readonly ?string $regex = null,
-        public readonly bool    $optional = false,
-        public readonly mixed   $default = null
+        public ?string $regex = null,
+        public bool    $optional = false,
+        public mixed   $default = null
     )
     {
     }

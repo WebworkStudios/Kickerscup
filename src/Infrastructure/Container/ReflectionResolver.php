@@ -7,6 +7,8 @@ namespace App\Infrastructure\Container;
 
 use App\Infrastructure\Container\Contracts\ContainerInterface;
 use App\Infrastructure\Container\Exceptions\BindingResolutionException;
+use App\Infrastructure\Container\Exceptions\ContainerException;
+use App\Infrastructure\Container\Exceptions\NotFoundException;
 use ReflectionClass;
 use ReflectionException;
 use ReflectionParameter;
@@ -36,6 +38,8 @@ class ReflectionResolver
      * @param array $parameters Zusätzliche Parameter
      * @return object Die aufgelöste Instanz
      * @throws BindingResolutionException
+     * @throws ContainerException
+     * @throws NotFoundException
      */
     public function resolve(string $concrete, array $parameters = []): object
     {
@@ -44,7 +48,7 @@ class ReflectionResolver
 
             // Prüfe, ob die Klasse instantiierbar ist
             if (!$reflector->isInstantiable()) {
-                throw new BindingResolutionException("Typ {$concrete} ist nicht instantiierbar.");
+                throw new BindingResolutionException("Typ $concrete ist nicht instantiierbar.");
             }
 
             // Hole den Konstruktor
@@ -61,7 +65,7 @@ class ReflectionResolver
             // Erstelle die Instanz mit den aufgelösten Abhängigkeiten
             return $reflector->newInstanceArgs($dependencies);
         } catch (ReflectionException $e) {
-            throw new BindingResolutionException("Fehler beim Auflösen des Typs {$concrete}: " . $e->getMessage(), 0, $e);
+            throw new BindingResolutionException("Fehler beim Auflösen des Typs $concrete: " . $e->getMessage(), 0, $e);
         }
     }
 
@@ -72,6 +76,8 @@ class ReflectionResolver
      * @param array $primitives Zusätzliche primitive Parameter
      * @return array Die aufgelösten Parameter
      * @throws BindingResolutionException
+     * @throws ContainerException
+     * @throws NotFoundException
      */
     protected function resolveDependencies(array $parameters, array $primitives): array
     {
@@ -85,7 +91,7 @@ class ReflectionResolver
                 continue;
             }
 
-            // Wenn der Parameter einen Typ hat und dieser ein Klassennname ist
+            // Wenn der Parameter einen Typ hat und dieser ein Klassenname ist
             $paramType = $parameter->getType();
 
             if ($paramType !== null && !$paramType->isBuiltin()) {
@@ -119,7 +125,7 @@ class ReflectionResolver
 
             // Sonst können wir den Parameter nicht auflösen
             throw new BindingResolutionException(
-                "Konnte Parameter {$paramName} für Klasse nicht auflösen."
+                "Konnte Parameter $paramName für Klasse nicht auflösen."
             );
         }
 

@@ -11,7 +11,7 @@ use Attribute;
  * CORS-Konfiguration für eine Route oder Routengruppe
  */
 #[Attribute(Attribute::TARGET_METHOD | Attribute::TARGET_CLASS)]
-class Cors
+readonly class Cors
 {
     /**
      * Konstruktor
@@ -24,12 +24,12 @@ class Cors
      * @param array|string $exposeHeaders Header, die im Browser zugänglich gemacht werden sollen
      */
     public function __construct(
-        public readonly array|string $allowOrigin = '*',
-        public readonly array|string $allowMethods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-        public readonly array|string $allowHeaders = '*',
-        public readonly bool         $allowCredentials = false,
-        public readonly int          $maxAge = 86400, // 24 Stunden
-        public readonly array|string $exposeHeaders = []
+        public array|string $allowOrigin = '*',
+        public array|string $allowMethods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+        public array|string $allowHeaders = '*',
+        public bool         $allowCredentials = false,
+        public int          $maxAge = 86400, // 24 Stunden
+        public array|string $exposeHeaders = []
     )
     {
     }

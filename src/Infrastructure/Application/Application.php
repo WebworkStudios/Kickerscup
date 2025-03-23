@@ -8,11 +8,14 @@ namespace App\Infrastructure\Application;
 use App\Infrastructure\Container\Attributes\Injectable;
 use App\Infrastructure\Container\Attributes\Singleton;
 use App\Infrastructure\Container\Contracts\ContainerInterface;
+use App\Infrastructure\Container\Exceptions\ContainerException;
+use App\Infrastructure\Container\Exceptions\NotFoundException;
 use App\Infrastructure\Http\Contracts\RequestFactoryInterface;
 use App\Infrastructure\Http\Contracts\ResponseInterface;
+use App\Infrastructure\Http\Request;
 use App\Infrastructure\Routing\Contracts\RouterInterface;
 use App\Infrastructure\Session\Contracts\SessionInterface;
-use App\Infrastructure\Http\Request;
+use Throwable;
 
 #[Injectable]
 #[Singleton]
@@ -34,6 +37,8 @@ class Application
      * Führt die Anwendung aus
      *
      * @return ResponseInterface
+     * @throws ContainerException
+     * @throws NotFoundException
      */
     public function run(): ResponseInterface
     {
@@ -46,7 +51,7 @@ class Application
         try {
             // Router ausführen
             $response = $this->router->dispatch($request);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             // Fehlerbehandlung - hier könnten Sie einen Error-Handler aufrufen
             $response = $this->handleException($e, $request);
         } finally {
@@ -62,6 +67,8 @@ class Application
      *
      * @param Request $request Das zu verarbeitende Request-Objekt
      * @return ResponseInterface
+     * @throws ContainerException
+     * @throws NotFoundException
      */
     public function handle(Request $request): ResponseInterface
     {
@@ -71,7 +78,7 @@ class Application
         try {
             // Router ausführen
             $response = $this->router->dispatch($request);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             // Fehlerbehandlung
             $response = $this->handleException($e, $request);
         } finally {
@@ -85,16 +92,18 @@ class Application
     /**
      * Behandelt Ausnahmen, die während der Verarbeitung auftreten
      *
-     * @param \Throwable $e Die aufgetretene Ausnahme
+     * @param Throwable $e Die aufgetretene Ausnahme
      * @param Request $request Der aktuelle Request
      * @return ResponseInterface
+     * @throws ContainerException
+     * @throws NotFoundException
      */
-    protected function handleException(\Throwable $e, Request $request): ResponseInterface
+    protected function handleException(Throwable $e, Request $request): ResponseInterface
     {
-        // Hier würde eine spezifische Fehlerbehandlung stattfinden
-        // Im einfachsten Fall könnten Sie den Exception-Handler des Routers verwenden
+        // Log error details including request information
+        error_log("Error handling request to {$request->getPath()}: {$e->getMessage()}");
 
-        // Senden Sie einen 500 Internal Server Error zurück, wenn kein spezifischer Handler existiert
+        // Oder den Request an einen spezifischeren Error-Handler übergeben
         return $this->container->get('App\Infrastructure\Http\Contracts\ResponseFactoryInterface')
             ->createServerError('Ein Fehler ist aufgetreten: ' . $e->getMessage());
     }

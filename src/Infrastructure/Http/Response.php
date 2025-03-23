@@ -94,7 +94,7 @@ class Response implements ResponseInterface
     }
 
     /**
-     * Fügt einen HTTP-Header hinzu (läßt mehrere Werte für den gleichen Header zu)
+     * Fügt einen HTTP-Header hinzu (lint mehrere Werte für den gleichen Header zu)
      */
     public function addHeader(string $name, string $value): self
     {
@@ -178,7 +178,7 @@ class Response implements ResponseInterface
     }
 
     /**
-     * Setzt den Content-Type
+     * Setzt der Content-Type
      */
     public function setContentType(string $contentType): self
     {
@@ -212,9 +212,6 @@ class Response implements ResponseInterface
         return $this;
     }
 
-    /**
-     * Löscht ein Cookie
-     */
     public function deleteCookie(string $name, string $path = '/', ?string $domain = null): self
     {
         return $this->setCookie(
@@ -222,9 +219,7 @@ class Response implements ResponseInterface
             '',
             time() - 3600,
             $path,
-            $domain,
-            false,
-            true
+            $domain
         );
     }
 

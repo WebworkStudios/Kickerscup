@@ -10,7 +10,7 @@ namespace App\Infrastructure\Routing\Contracts;
 interface UrlGeneratorInterface
 {
     /**
-     * Generiert eine URL für einen benannten Route
+     * Generiert eine URL für eine benannte Route
      *
      * @param string $name Name der Route
      * @param array $parameters Parameter für die URL

@@ -329,8 +329,7 @@ class Request implements RequestInterface
      */
     public function hasFile(string $name): bool
     {
-        return isset($this->files[$name]) &&
-            isset($this->files[$name]['error']) &&
+        return isset($this->files[$name]['error']) &&
             $this->files[$name]['error'] !== UPLOAD_ERR_NO_FILE;
     }
 
@@ -429,7 +428,7 @@ class Request implements RequestInterface
     }
 
     /**
-     * Überprüft, ob die Anfrage ein bestimmten Content-Type hat
+     * Überprüft, ob die Anfrage einer bestimmten Content-Type hat
      */
     public function isContentType(string $contentType): bool
     {
@@ -438,13 +437,13 @@ class Request implements RequestInterface
             return false;
         }
 
-        // Vergleiche nur den MIME-Type ohne Parameter
+        // Vergleiche nur der MIME-Type ohne Parameter
         $currentContentType = explode(';', $currentContentType)[0];
         return strtolower($currentContentType) === strtolower($contentType);
     }
 
     /**
-     * Gibt den Content-Type zurück
+     * Gibt der Content-Type zurück
      */
     public function getContentType(): ?string
     {

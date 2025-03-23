@@ -144,6 +144,7 @@ class Container implements ContainerInterface
 
     /**
      * {@inheritdoc}
+     * @throws ContainerException
      */
     public function makeWith(string $abstract, array $parameters = []): mixed
     {
@@ -194,7 +195,7 @@ class Container implements ContainerInterface
                 return $this->reflectionResolver->resolve($abstract, $parameters);
             }
 
-            throw new NotFoundException("Typ {$abstract} konnte nicht gefunden werden.");
+            throw new NotFoundException("Typ $abstract konnte nicht gefunden werden.");
         }
 
         $concrete = $this->bindings[$abstract]['concrete'];
