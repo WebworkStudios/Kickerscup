@@ -7,6 +7,7 @@ namespace App\Infrastructure\Session\Store;
 
 use App\Infrastructure\Container\Attributes\Injectable;
 use App\Infrastructure\Session\Contracts\SessionStoreInterface;
+use App\Infrastructure\Session\SessionConfiguration;
 use Redis;
 
 #[Injectable]
@@ -17,14 +18,14 @@ class RedisSessionStore implements SessionStoreInterface
     private int $ttl;
 
     public function __construct(
-        Redis  $redis,
-        string $prefix = 'sess:',
-        int    $ttl = 86400
+        Redis                $redis,
+        SessionConfiguration $config,
+        string               $prefix = 'sess:'
     )
     {
         $this->redis = $redis;
         $this->prefix = $prefix;
-        $this->ttl = $ttl;
+        $this->ttl = $config->absoluteLifetime; // Ändere TTL auf die absolute Lebensdauer
     }
 
     public function open(string $path, string $name): bool

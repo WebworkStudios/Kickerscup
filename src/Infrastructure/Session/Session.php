@@ -71,31 +71,38 @@ class Session implements SessionInterface
             return true;
         }
 
-        // Konfiguriere die PHP-Session
+        // Bestehende Konfiguration...
         $this->configureSession();
-
-        // Setze den Session-Namen
         session_name($this->config->name);
 
-        // Starte die Session
         $this->started = session_start();
 
         if ($this->started) {
-            // Prüfe, ob die Session gültig ist
+            // Prüfe, ob die Session einen Erstellungszeitpunkt hat
+            if (!$this->has('_created_at')) {
+                $this->set('_created_at', time());
+            }
+
+            // Überprüfe absolute Lebensdauer
+            if ($this->hasAbsoluteLifetimeExpired()) {
+                // Session ist zu alt, erstelle eine neue
+                $this->destroy();
+                $this->started = session_start();
+                if ($this->started) {
+                    $this->set('_created_at', time());
+                }
+            }
+
+            // Vorhandene Session-Validierung
             if (!$this->isValid()) {
-                // Bei ungültiger Session: Neue starten
                 $this->destroy();
                 $this->started = session_start();
                 $this->saveFingerprint();
             }
 
-            // Session-Aktivität aktualisieren
+            // Bestehender Code für Aktivitätsprüfung und Flash-Messages...
             $this->checkActivity();
-
-            // Regelmäßige Session-ID-Rotation
             $this->rotateId();
-
-            // Lade Flash-Messages
             $this->flash->load();
         }
 
@@ -523,5 +530,19 @@ class Session implements SessionInterface
 
         // Überprüfe das Token mit konstanter Zeit (verhindert Timing-Angriffe)
         return hash_equals($storedToken, $token);
+    }
+
+    // Neue Methode zum Überprüfen der absoluten Lebensdauer
+    protected function hasAbsoluteLifetimeExpired(): bool
+    {
+        $createdAt = $this->get('_created_at');
+        if (!$createdAt) {
+            return false; // Keine Erstellungszeit, kann nicht prüfen
+        }
+
+        $now = time();
+        $maxAge = $this->config->absoluteLifetime;
+
+        return ($now - $createdAt) > $maxAge;
     }
 }

@@ -26,6 +26,7 @@ class SessionConfiguration
     public function __construct(
         public readonly string  $name = 'app_session',
         public readonly int     $lifetime = 86400,         // 24 Stunden
+        public readonly int     $absoluteLifetime = 2592000, // 30 Tage in Sekunden
         public readonly string  $path = '/',
         public readonly ?string $domain = null,
         public readonly bool    $secure = true,           // HTTPS empfohlen

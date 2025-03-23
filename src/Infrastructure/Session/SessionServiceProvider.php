@@ -25,27 +25,27 @@ class SessionServiceProvider extends ServiceProvider
         // Registriere die Session-Konfiguration
         $container->singleton(SessionConfiguration::class, function () {
             // Hier können wir die Konfiguration aus einer Konfigurations-Datei laden
-            // Für jetzt verwenden wir die Standard-Konfiguration
+            // für jetzt verwenden wir die Standard-Konfiguration
             return new SessionConfiguration();
         });
 
         $container->bind(SessionStoreInterface::class, function (ContainerInterface $c) {
             $config = $c->get(SessionConfiguration::class);
 
-            // Wenn Redis als Store-Typ konfiguriert ist, prüfe ob die Erweiterung verfügbar ist
+            // Wenn Redis als Store-Typ konfiguriert ist, prüfe, ob die Erweiterung verfügbar ist
             if ($config->storeType === 'redis') {
                 if (extension_loaded('redis')) {
                     return $this->createRedisStore($config);
                 } else {
                     // Log eine Warnung, dass wir auf den Default-Store zurückfallen
                     error_log('Redis extension nicht verfügbar. Fallback auf Default-Session-Store.');
-                    // Expliziter Rückgabewert hinzugefügt
-                    return new DefaultSessionStore();
+                    // Übergebe die Konfiguration an den DefaultSessionStore
+                    return new DefaultSessionStore($config);
                 }
             }
 
-            // Default-Store verwenden
-            return new DefaultSessionStore();
+            // Default-Store verwenden, mit Konfiguration
+            return new DefaultSessionStore($config);
         });
 
         // Registriere die Interfaces
@@ -91,8 +91,8 @@ class SessionServiceProvider extends ServiceProvider
 
             return new RedisSessionStore(
                 $redis,
-                $redisConfig['prefix'] ?? 'sess:',
-                $config->lifetime
+                $config,
+                $redisConfig['prefix'] ?? 'sess:'
             );
         } catch (Throwable $e) {
             // Bei Verbindungsproblemen Fehler loggen und Default-Store verwenden
