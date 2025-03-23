@@ -208,40 +208,128 @@ class Router implements RouterInterface
     }
 
     /**
-     * {@inheritdoc}
+     * Findet eine Route für den gegebenen Request
+     *
+     * @param RequestInterface $request Der HTTP-Request
+     * @return mixed Information über die passende Route oder false
      */
     public function match(RequestInterface $request): mixed
     {
         $method = $request->getMethod();
         $path = $this->normalizePath($request->getPath());
-        $host = $request->getHost(); // Neue Methode in Request
+        $host = $request->getHost();
 
         // Prüfe, ob die HTTP-Methode überhaupt registrierte Routen hat
         if (!isset($this->routes[$method])) {
             // Prüfe, ob der Pfad für andere Methoden existiert
-            // ... (Rest der Methode bleibt gleich, nur mit angepasster Domain-Prüfung)
-            // ...
-        }
+            $allowedMethods = [];
 
-        // Zuerst domain-spezifische Routen prüfen
-        if (isset($this->routes[$method])) {
-            // 1. Prüfe exakte Domain-Übereinstimmung
-            if ($host !== null && isset($this->routes[$method][$host])) {
-                $match = $this->matchPath($path, $this->routes[$method][$host]);
-                if ($match !== false) {
-                    return $match;
+            foreach (array_keys($this->routes) as $routeMethod) {
+                // Prüfe Domain-spezifische und allgemeine Routen
+                $domainMatched = false;
+
+                // Exakte Domain-Prüfung
+                if ($host !== null && isset($this->routes[$routeMethod][$host])) {
+                    if ($this->matchPath($path, $this->routes[$routeMethod][$host]) !== false) {
+                        $allowedMethods[] = $routeMethod;
+                        $domainMatched = true;
+                    }
+                }
+
+                // Dynamische Domain-Prüfung
+                if ($host !== null && !$domainMatched) {
+                    foreach ($this->routes[$routeMethod] as $domainPattern => $domainRoutes) {
+                        if ($domainPattern === null || $domainPattern === $host) {
+                            continue;
+                        }
+
+                        if (strpos($domainPattern, '{') !== false) {
+                            $domainRegex = $this->createDomainRegex($domainPattern);
+                            if (preg_match($domainRegex, $host) && $this->matchPath($path, $domainRoutes) !== false) {
+                                $allowedMethods[] = $routeMethod;
+                                $domainMatched = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // Allgemeine Routen-Prüfung (null domain)
+                if (!$domainMatched && isset($this->routes[$routeMethod][null])) {
+                    if ($this->matchPath($path, $this->routes[$routeMethod][null]) !== false) {
+                        $allowedMethods[] = $routeMethod;
+                    }
                 }
             }
 
-            // 2. Prüfe Subdomain-Übereinstimmungen (z.B. *.example.com)
-            // Diese Logik könnte erweitert werden für Wildcard-Domains
+            if (!empty($allowedMethods)) {
+                $exception = new MethodNotAllowedException(
+                    "Methode {$method} ist nicht erlaubt für Pfad {$path}. Erlaubte Methoden: " . implode(', ', $allowedMethods)
+                );
+                $exception->setAllowedMethods($allowedMethods);
+                throw $exception;
+            }
 
-            // 3. Prüfe Domain-unabhängige Routen (null domain)
-            if (isset($this->routes[$method][null])) {
-                $match = $this->matchPath($path, $this->routes[$method][null]);
-                if ($match !== false) {
-                    return $match;
+            return false;
+        }
+
+        // Strategie für Domain-Matching mit Prioritäten:
+        // 1. Exakte Domain-Übereinstimmung
+        // 2. Dynamische Domain mit Parametern
+        // 3. Domain-unabhängige Routen (null domain)
+
+        // 1. Exakte Domain-Übereinstimmung
+        if ($host !== null && isset($this->routes[$method][$host])) {
+            $match = $this->matchPath($path, $this->routes[$method][$host]);
+            if ($match !== false) {
+                return $match;
+            }
+        }
+
+        // 2. Dynamische Domain-Übereinstimmung
+        if ($host !== null) {
+            // Sortiere Domain-Patterns nach Spezifität
+            $domainPatterns = array_filter(
+                array_keys($this->routes[$method] ?? []),
+                fn($pattern) => $pattern !== null && $pattern !== $host && strpos($pattern, '{') !== false
+            );
+
+            // Priorisiere Patterns mit weniger Parametern (spezifischere zuerst)
+            usort($domainPatterns, function ($a, $b) {
+                $aCount = substr_count($a, '{');
+                $bCount = substr_count($b, '{');
+                return $aCount <=> $bCount;
+            });
+
+            foreach ($domainPatterns as $domainPattern) {
+                $domainRegex = $this->createDomainRegex($domainPattern);
+                if (preg_match($domainRegex, $host, $domainMatches)) {
+                    $match = $this->matchPath($path, $this->routes[$method][$domainPattern]);
+                    if ($match !== false) {
+                        // Extrahiere benannte Parameter aus den Domain-Matches
+                        foreach ($domainMatches as $key => $value) {
+                            if (is_string($key)) {
+                                $match['parameters'][$key] = $value;
+                            }
+                        }
+
+                        // Füge die Domain-Informationen zum Match hinzu
+                        $match['domain'] = [
+                            'pattern' => $domainPattern,
+                            'matched' => $host
+                        ];
+
+                        return $match;
+                    }
                 }
+            }
+        }
+
+        // 3. Domain-unabhängige Routen (null domain)
+        if (isset($this->routes[$method][null])) {
+            $match = $this->matchPath($path, $this->routes[$method][null]);
+            if ($match !== false) {
+                return $match;
             }
         }
 
@@ -455,5 +543,29 @@ class Router implements RouterInterface
     public function generateUrl(string $name, array $parameters = []): string
     {
         return $this->urlGenerator->generate($name, $parameters);
+    }
+
+    /**
+     * Erstellt ein reguläres Ausdrucksmuster für eine Domain-Pattern
+     *
+     * @param string $domainPattern Das Domain-Pattern
+     * @return string Das reguläre Ausdrucksmuster
+     */
+    protected function createDomainRegex(string $domainPattern): string
+    {
+        // Konvertiere das Pattern in einen regulären Ausdruck
+        $pattern = preg_replace_callback(
+            '#{([^:}]+)(?::([^}]+))?}#',
+            function ($matches) {
+                $name = $matches[1];
+                $regex = $matches[2] ?? '[^.]+';
+                return '(?<' . $name . '>' . $regex . ')';
+            },
+            $domainPattern
+        );
+
+        // Escape Punkten in der Domain und füge Anker hinzu
+        $pattern = str_replace('.', '\.', $pattern);
+        return '#^' . $pattern . '$#';
     }
 }

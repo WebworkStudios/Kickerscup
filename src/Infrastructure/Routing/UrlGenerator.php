@@ -51,9 +51,6 @@ class UrlGenerator implements UrlGeneratorInterface
     /**
      * {@inheritdoc}
      */
-    /**
-     * {@inheritdoc}
-     */
     public function generate(string $name, array $parameters = [], bool $absoluteUrl = false): string
     {
         if (!isset($this->namedRoutes[$name])) {
@@ -62,28 +59,64 @@ class UrlGenerator implements UrlGeneratorInterface
 
         $routeInfo = $this->namedRoutes[$name];
         $path = $routeInfo['path'];
+        $domain = $routeInfo['domain'] ?? null;
 
         // Ersetze alle Parameter im Pfad
         foreach ($routeInfo['parameters'] as $paramName => $paramInfo) {
-            if (!isset($parameters[$paramName])) {
+            if (!isset($parameters[$paramName]) && (!isset($paramInfo['optional']) || !$paramInfo['optional'])) {
                 throw new RouteCreationException("Parameter '{$paramName}' wird benötigt für Route '{$name}'.");
             }
 
-            // Validiere den Parameter gegen den regulären Ausdruck
-            $paramValue = $parameters[$paramName];
-            if (!empty($paramInfo['regex']) && !preg_match('/^' . $paramInfo['regex'] . '$/', (string)$paramValue)) {
-                throw new RouteCreationException(
-                    "Parameter '{$paramName}' mit Wert '{$paramValue}' entspricht nicht dem Muster '{$paramInfo['regex']}'."
-                );
-            }
+            // Wenn Parameter vorhanden ist oder optional mit Default
+            if (isset($parameters[$paramName]) || (isset($paramInfo['optional']) && isset($paramInfo['default']))) {
+                $paramValue = $parameters[$paramName] ?? $paramInfo['default'];
 
-            // Ersetze den Parameter im Pfad
-            $path = str_replace('{' . $paramName . '}', (string)$paramValue, $path);
-            $path = str_replace('{' . $paramName . ':' . $paramInfo['regex'] . '}', (string)$paramValue, $path);
+                // Validiere den Parameter gegen den regulären Ausdruck
+                if (!empty($paramInfo['regex']) && !preg_match('/^' . $paramInfo['regex'] . '$/', (string)$paramValue)) {
+                    throw new RouteCreationException(
+                        "Parameter '{$paramName}' mit Wert '{$paramValue}' entspricht nicht dem Muster '{$paramInfo['regex']}'."
+                    );
+                }
+
+                // Ersetze den Parameter im Pfad
+                $path = str_replace('{' . $paramName . '}', (string)$paramValue, $path);
+                $path = str_replace('{' . $paramName . ':' . $paramInfo['regex'] . '}', (string)$paramValue, $path);
+
+                // Entferne den Parameter aus der Parameter-Liste, damit er nicht als Query-Parameter verwendet wird
+                unset($parameters[$paramName]);
+            }
+        }
+
+        // Wenn eine Domain mit Parametern vorhanden ist, ersetze auch diese
+        if ($domain !== null && isset($routeInfo['domainParameters']) && !empty($routeInfo['domainParameters'])) {
+            foreach ($routeInfo['domainParameters'] as $paramName => $paramInfo) {
+                if (!isset($parameters[$paramName]) && (!isset($paramInfo['optional']) || !$paramInfo['optional'])) {
+                    throw new RouteCreationException("Domain-Parameter '{$paramName}' wird benötigt für Route '{$name}'.");
+                }
+
+                // Wenn Parameter vorhanden ist oder optional mit Default
+                if (isset($parameters[$paramName]) || (isset($paramInfo['optional']) && isset($paramInfo['default']))) {
+                    $paramValue = $parameters[$paramName] ?? $paramInfo['default'];
+
+                    // Validiere den Parameter gegen den regulären Ausdruck
+                    if (!empty($paramInfo['regex']) && !preg_match('/^' . $paramInfo['regex'] . '$/', (string)$paramValue)) {
+                        throw new RouteCreationException(
+                            "Domain-Parameter '{$paramName}' mit Wert '{$paramValue}' entspricht nicht dem Muster '{$paramInfo['regex']}'."
+                        );
+                    }
+
+                    // Ersetze den Parameter in der Domain
+                    $domain = str_replace('{' . $paramName . '}', (string)$paramValue, $domain);
+                    $domain = str_replace('{' . $paramName . ':' . $paramInfo['regex'] . '}', (string)$paramValue, $domain);
+
+                    // Entferne den Parameter aus der Parameter-Liste
+                    unset($parameters[$paramName]);
+                }
+            }
         }
 
         // Erstelle die finale URL mit Query-Parametern
-        $queryParams = array_diff_key($parameters, $routeInfo['parameters']);
+        $queryParams = $parameters; // Alle verbliebenen Parameter sind Query-Parameter
         if (!empty($queryParams)) {
             $path .= '?' . http_build_query($queryParams);
         }
@@ -91,9 +124,9 @@ class UrlGenerator implements UrlGeneratorInterface
         // Bei absoluter URL-Generierung die Domain berücksichtigen
         if ($absoluteUrl) {
             $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https://' : 'http://';
-            $domain = $routeInfo['domain'] ?? $_SERVER['HTTP_HOST'] ?? 'localhost';
+            $hostDomain = $domain ?? $_SERVER['HTTP_HOST'] ?? 'localhost';
 
-            return $protocol . $domain . $path;
+            return $protocol . $hostDomain . $path;
         }
 
         return $path;

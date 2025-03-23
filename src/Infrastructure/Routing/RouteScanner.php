@@ -176,15 +176,17 @@ class RouteScanner implements RouteScannerInterface
      * @param ReflectionMethod $method Die Methode
      * @param string $path Der Pfad der Route
      * @param string|null $name Der Name der Route
+     * @param string|null $domain Die Domain der Route
      * @return void
      */
-    protected function collectParameterAttributes(ReflectionMethod $method, string $path, ?string $name): void
+    protected function collectParameterAttributes(ReflectionMethod $method, string $path, ?string $name, ?string $domain = null): void
     {
         if ($name === null) {
             return;
         }
 
         $parameterInfo = [];
+        $domainParameterInfo = [];
 
         // Extrahiere Parameter aus dem Pfad (z.B. {id})
         preg_match_all('#{([^:}]+)(?::([^}]+))?}#', $path, $matches, PREG_SET_ORDER);
@@ -199,12 +201,28 @@ class RouteScanner implements RouteScannerInterface
             ];
         }
 
+        // Extrahiere Parameter aus der Domain (z.B. {subdomain})
+        if ($domain !== null) {
+            preg_match_all('#{([^:}]+)(?::([^}]+))?}#', $domain, $domainMatches, PREG_SET_ORDER);
+
+            foreach ($domainMatches as $match) {
+                $paramName = $match[1];
+                $regex = $match[2] ?? '[^.]+';
+
+                $domainParameterInfo[$paramName] = [
+                    'name' => $paramName,
+                    'regex' => $regex,
+                    'isDomain' => true
+                ];
+            }
+        }
+
         // Überprüfe Parameter-Attribute
         foreach ($method->getParameters() as $parameter) {
             $paramName = $parameter->getName();
 
-            // Überspringe Parameter, die nicht im Pfad vorkommen
-            if (!isset($parameterInfo[$paramName])) {
+            // Überspringe Parameter, die weder im Pfad noch in der Domain vorkommen
+            if (!isset($parameterInfo[$paramName]) && !isset($domainParameterInfo[$paramName])) {
                 continue;
             }
 
@@ -214,17 +232,25 @@ class RouteScanner implements RouteScannerInterface
                 /** @var RouteParam $routeParam */
                 $routeParam = $routeParamAttrs[0]->newInstance();
 
-                // Aktualisiere Regex, wenn im Attribut angegeben
-                if ($routeParam->regex !== null) {
-                    $parameterInfo[$paramName]['regex'] = $routeParam->regex;
-                }
-
-                // Markiere als optional, wenn im Attribut angegeben
-                $parameterInfo[$paramName]['optional'] = $routeParam->optional;
-
-                // Setze Standardwert, wenn im Attribut angegeben
-                if ($routeParam->default !== null) {
-                    $parameterInfo[$paramName]['default'] = $routeParam->default;
+                // Aktualisiere Parameter für Pfad oder Domain
+                if (isset($parameterInfo[$paramName])) {
+                    // Pfad-Parameter aktualisieren
+                    if ($routeParam->regex !== null) {
+                        $parameterInfo[$paramName]['regex'] = $routeParam->regex;
+                    }
+                    $parameterInfo[$paramName]['optional'] = $routeParam->optional;
+                    if ($routeParam->default !== null) {
+                        $parameterInfo[$paramName]['default'] = $routeParam->default;
+                    }
+                } else if (isset($domainParameterInfo[$paramName])) {
+                    // Domain-Parameter aktualisieren
+                    if ($routeParam->regex !== null) {
+                        $domainParameterInfo[$paramName]['regex'] = $routeParam->regex;
+                    }
+                    $domainParameterInfo[$paramName]['optional'] = $routeParam->optional;
+                    if ($routeParam->default !== null) {
+                        $domainParameterInfo[$paramName]['default'] = $routeParam->default;
+                    }
                 }
             }
         }
@@ -232,7 +258,9 @@ class RouteScanner implements RouteScannerInterface
         // Füge Route-Infos zum URL-Generator hinzu
         $routeInfo = [
             'path' => $path,
-            'parameters' => $parameterInfo
+            'parameters' => $parameterInfo,
+            'domain' => $domain,
+            'domainParameters' => $domainParameterInfo
         ];
 
         $this->urlGenerator->addNamedRoute($name, $routeInfo);
