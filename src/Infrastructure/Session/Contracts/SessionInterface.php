@@ -1,0 +1,120 @@
+<?php
+
+
+declare(strict_types=1);
+
+namespace App\Infrastructure\Session\Contracts;
+
+interface SessionInterface
+{
+    /**
+     * Startet eine neue Session oder verwendet eine bestehende
+     *
+     * @return bool True, wenn die Session erfolgreich gestartet wurde
+     */
+    public function start(): bool;
+
+    /**
+     * Beendet die aktuelle Session
+     *
+     * @return bool True, wenn die Session erfolgreich beendet wurde
+     */
+    public function destroy(): bool;
+
+    /**
+     * Regeneriert die Session-ID
+     *
+     * @param bool $deleteOldSession Ob die alte Session gelöscht werden soll
+     * @return bool True, wenn die Session-ID erfolgreich regeneriert wurde
+     */
+    public function regenerate(bool $deleteOldSession = true): bool;
+
+    /**
+     * Speichert einen Wert in der Session
+     *
+     * @param string $key Der Schlüssel
+     * @param mixed $value Der zu speichernde Wert
+     * @return static
+     */
+    public function set(string $key, mixed $value): static;
+
+    /**
+     * Holt einen Wert aus der Session
+     *
+     * @param string $key Der Schlüssel
+     * @param mixed $default Der Standardwert, falls der Schlüssel nicht existiert
+     * @return mixed Der gespeicherte Wert oder der Standardwert
+     */
+    public function get(string $key, mixed $default = null): mixed;
+
+    /**
+     * Prüft, ob ein Schlüssel in der Session existiert
+     *
+     * @param string $key Der zu prüfende Schlüssel
+     * @return bool True, wenn der Schlüssel existiert
+     */
+    public function has(string $key): bool;
+
+    /**
+     * Entfernt einen Schlüssel aus der Session
+     *
+     * @param string $key Der zu entfernende Schlüssel
+     * @return static
+     */
+    public function remove(string $key): static;
+
+    /**
+     * Speichert eine Flash-Message in der Session
+     *
+     * @param string $key Der Schlüssel
+     * @param mixed $value Der Wert
+     * @return static
+     */
+    public function flash(string $key, mixed $value): static;
+
+    /**
+     * Holt eine Flash-Message aus der Session und entfernt sie
+     *
+     * @param string $key Der Schlüssel
+     * @param mixed $default Der Standardwert
+     * @return mixed Der Wert oder der Standardwert
+     */
+    public function getFlash(string $key, mixed $default = null): mixed;
+
+    /**
+     * Gibt die aktuelle Session-ID zurück
+     *
+     * @return string|null Die Session-ID oder null, wenn keine Session aktiv ist
+     */
+    public function getId(): ?string;
+
+    /**
+     * Setzt die Session-ID
+     *
+     * @param string $id Die neue Session-ID
+     * @return static
+     */
+    public function setId(string $id): static;
+
+    /**
+     * Gibt den Session-Namen zurück
+     *
+     * @return string Der Session-Name
+     */
+    public function getName(): string;
+
+    /**
+     * Setzt den Session-Namen
+     *
+     * @param string $name Der neue Session-Name
+     * @return static
+     */
+    public function setName(string $name): static;
+
+    /**
+     * Löscht alle Daten aus der Session
+     *
+     * @return static
+     */
+    public function clear(): static;
+}
