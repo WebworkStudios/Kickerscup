@@ -198,4 +198,43 @@ interface SessionInterface
      * @return bool True, wenn die Session-ID erfolgreich rotiert wurde
      */
     public function rotateId(bool $force = false): bool;
+
+    /**
+     * Bindet eine Session an einen Benutzer
+     *
+     * @param int|string $userId Die Benutzer-ID
+     * @return static
+     */
+    public function bindToUser(int|string $userId): static;
+
+    /**
+     * Prüft, ob die Session an einen bestimmten Benutzer gebunden ist
+     *
+     * @param int|string $userId Die zu prüfende Benutzer-ID
+     * @return bool
+     */
+    public function isBoundToUser(int|string $userId): bool;
+
+    /**
+     * Gibt die Benutzer-ID zurück, an die die Session gebunden ist
+     *
+     * @return int|string|null Die Benutzer-ID oder null, wenn nicht gebunden
+     */
+    public function getBoundUserId(): int|string|null;
+
+    /**
+     * Invalidiert alle Sessions für einen bestimmten Benutzer
+     *
+     * @param int|string $userId Die Benutzer-ID
+     * @return bool
+     */
+    public function invalidateUserSessions(int|string $userId): bool;
+
+    /**
+     * Gibt alle aktiven Sessions für einen Benutzer zurück
+     *
+     * @param int|string $userId Die Benutzer-ID
+     * @return array Liste aktiver Sessions mit Metadaten
+     */
+    public function getUserActiveSessions(int|string $userId): array;
 }

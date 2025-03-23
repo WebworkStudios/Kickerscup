@@ -25,6 +25,12 @@ class Session implements SessionInterface
     protected bool $started = false;
 
     /**
+     * Konstante für Benutzer-Session-Metadaten
+     */
+    protected const USER_SESSION_KEY = '_user_session';
+
+
+    /**
      * Konstruktor
      */
     /**
@@ -133,6 +139,9 @@ class Session implements SessionInterface
     /**
      * {@inheritdoc}
      */
+    /**
+     * {@inheritdoc}
+     */
     public function isValid(): bool
     {
         // Prüfe, ob die Session gestartet wurde
@@ -148,6 +157,48 @@ class Session implements SessionInterface
         // Prüfe den Idle-Timeout
         if (!$this->checkActivity()) {
             return false;
+        }
+
+        // Prüfe die absolute Lebensdauer
+        if ($this->hasAbsoluteLifetimeExpired()) {
+            return false;
+        }
+
+        // Prüfe Benutzer-Session
+        if ($this->has(self::USER_SESSION_KEY)) {
+            // Wenn an einen Benutzer gebunden, führe zusätzliche Validierungen durch
+            $sessionData = $this->get(self::USER_SESSION_KEY);
+
+            // Prüfe, ob die gespeicherten Daten plausibel sind
+            if (!isset($sessionData['user_id']) || !isset($sessionData['bound_at'])) {
+                return false;
+            }
+
+            // Prüfe, ob der User-Agent konsistent ist
+            $currentUserAgent = $this->getUserAgent();
+            $storedUserAgent = $sessionData['user_agent'] ?? null;
+
+            if ($storedUserAgent !== null && $currentUserAgent !== null && $storedUserAgent !== $currentUserAgent) {
+                // User-Agent hat sich geändert - potenzielles Sicherheitsrisiko
+                return false;
+            }
+
+            // Optional: IP-Bereichsverifizierung
+            // Hinweis: Dies könnte Probleme für mobile Benutzer verursachen, die zwischen Netzen wechseln
+            if ($this->config->strictIpCheck && isset($sessionData['client_ip'])) {
+                $currentIp = $_SERVER['REMOTE_ADDR'] ?? '';
+                $storedIp = $sessionData['client_ip'];
+
+                // Vergleiche die ersten 2 Oktette für IPv4-Adressen
+                $currentIpParts = explode('.', $currentIp);
+                $storedIpParts = explode('.', $storedIp);
+
+                if (count($currentIpParts) >= 2 && count($storedIpParts) >= 2) {
+                    if ($currentIpParts[0] !== $storedIpParts[0] || $currentIpParts[1] !== $storedIpParts[1]) {
+                        return false;
+                    }
+                }
+            }
         }
 
         return true;
@@ -544,5 +595,100 @@ class Session implements SessionInterface
         $maxAge = $this->config->absoluteLifetime;
 
         return ($now - $createdAt) > $maxAge;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function bindToUser(int|string $userId): static
+    {
+        if (!$this->started) {
+            $this->start();
+        }
+
+        // Speichere die Benutzer-ID in der Session
+        $this->set(self::USER_SESSION_KEY, [
+            'user_id' => $userId,
+            'bound_at' => time(),
+            'client_ip' => $_SERVER['REMOTE_ADDR'] ?? null,
+            'user_agent' => $this->getUserAgent(),
+        ]);
+
+        // Regeneriere die Session-ID, um Session-Fixation zu verhindern
+        $this->regenerate(true);
+
+        return $this;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function isBoundToUser(int|string $userId): bool
+    {
+        if (!$this->started) {
+            $this->start();
+        }
+
+        $sessionData = $this->get(self::USER_SESSION_KEY);
+        return $sessionData !== null && $sessionData['user_id'] == $userId;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getBoundUserId(): int|string|null
+    {
+        if (!$this->started) {
+            $this->start();
+        }
+
+        $sessionData = $this->get(self::USER_SESSION_KEY);
+        return $sessionData['user_id'] ?? null;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function invalidateUserSessions(int|string $userId): bool
+    {
+        // Diese Methode benötigt eine Store-Implementation, die alle Sessions durchsuchen kann
+        // Für den Standard-PHP-Store müsste eine externe Tracking-Tabelle verwendet werden
+
+        if ($this->store instanceof UserSessionStoreInterface) {
+            return $this->store->invalidateUserSessions($userId);
+        }
+
+        // Wenn das aktuelle Session-Store nicht unterstützt wird, zumindest die aktuelle Session invalidieren
+        if ($this->isBoundToUser($userId)) {
+            return $this->destroy();
+        }
+
+        return false;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getUserActiveSessions(int|string $userId): array
+    {
+        if ($this->store instanceof UserSessionStoreInterface) {
+            return $this->store->getUserActiveSessions($userId);
+        }
+
+        // Fallback: Nur die aktuelle Session zurückgeben, wenn sie zum Benutzer gehört
+        if ($this->isBoundToUser($userId)) {
+            return [
+                [
+                    'id' => $this->getId(),
+                    'created_at' => $this->get('_created_at'),
+                    'last_activity' => $this->getLastActivity(),
+                    'user_agent' => $this->getUserAgent(),
+                    'ip_address' => $_SERVER['REMOTE_ADDR'] ?? null,
+                    'current' => true
+                ]
+            ];
+        }
+
+        return [];
     }
 }
