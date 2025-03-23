@@ -26,14 +26,8 @@ class FlashMessage implements FlashMessageInterface
      */
     public function __construct()
     {
-        // Initialisiere Flash-Arrays, falls nötig
-        if (!isset($_SESSION[self::FLASH_KEY])) {
-            $_SESSION[self::FLASH_KEY] = [];
-        }
-
-        if (!isset($_SESSION[self::FLASH_NEW])) {
-            $_SESSION[self::FLASH_NEW] = [];
-        }
+        $_SESSION[self::FLASH_KEY] ??= [];
+        $_SESSION[self::FLASH_NEW] ??= [];
     }
 
     /**
@@ -51,8 +45,12 @@ class FlashMessage implements FlashMessageInterface
      */
     public function get(string $key, mixed $default = null): mixed
     {
+
         $value = $_SESSION[self::FLASH_KEY][$key] ?? $default;
-        unset($_SESSION[self::FLASH_KEY][$key]);
+
+        if (isset($_SESSION[self::FLASH_KEY][$key])) {
+            unset($_SESSION[self::FLASH_KEY][$key]);
+        }
 
         return $value;
     }
