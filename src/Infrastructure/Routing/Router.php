@@ -455,6 +455,10 @@ class Router implements RouterInterface
             $match = $this->match($request);
 
             if ($match === false) {
+                $this->logger->info('Route not found', [
+                    'method' => $request->getMethod(),
+                    'path' => $request->getPath()
+                ]);
                 throw new RouteNotFoundException(
                     "Keine Route gefunden für {$request->getMethod()} {$request->getPath()}."
                 );

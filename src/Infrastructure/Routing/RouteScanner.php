@@ -21,6 +21,7 @@ use ReflectionAttribute;
 use ReflectionClass;
 use ReflectionException;
 use ReflectionMethod;
+use Throwable;
 
 /**
  * Scanner für automatische Routen-Registrierung
@@ -225,8 +226,19 @@ class RouteScanner implements RouteScannerInterface
                     $this->collectParameterAttributes($method, $path, $name, $domain);
                 }
             }
-        } catch (ReflectionException) {
-            // Ignoriere Reflection-Fehler und mache mit dem nächsten weiter
+        } catch (ReflectionException $e) {
+            // Hier ExceptionHandler einsetzen statt nur ignorieren
+            if (isset($this->container) && $this->container->has(ExceptionHandlerInterface::class)) {
+                try {
+                    $exceptionHandler = $this->container->get(ExceptionHandlerInterface::class);
+                    $exceptionHandler->report($e, [
+                        'class' => $className,
+                        'context' => 'route_scanning'
+                    ]);
+                } catch (Throwable) {
+                    // Ignorieren, wenn der ExceptionHandler nicht verfügbar ist
+                }
+            }
         }
     }
 

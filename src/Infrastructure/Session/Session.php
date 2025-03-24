@@ -70,17 +70,13 @@ class Session implements SessionInterface
             return true;
         }
 
-        // Bestehende Konfiguration...
         $this->configureSession();
         session_name($this->config->name);
 
         $this->started = session_start();
 
         if ($this->started) {
-            // Prüfe, ob die Session einen Erstellungszeitpunkt hat
-            if (!$this->has('_created_at')) {
-                $this->set('_created_at', time());
-            }
+            $this->logger->debug('Session started', ['id' => $this->getId()]);
 
             // Überprüfe absolute Lebensdauer
             if ($this->hasAbsoluteLifetimeExpired()) {
@@ -94,6 +90,10 @@ class Session implements SessionInterface
 
             // Vorhandene Session-Validierung
             if (!$this->isValid()) {
+                $this->logger->warning('Invalid session detected', [
+                    'id' => $this->getId(),
+                    'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
+                ]);
                 $this->destroy();
                 $this->started = session_start();
                 $this->saveFingerprint();
@@ -103,8 +103,7 @@ class Session implements SessionInterface
             $this->checkActivity();
             $this->rotateId();
 
-            // FlashMessage über den Provider laden
-            $this->flashProvider->getFlashMessage()->load();
+            $this->logger->error('Failed to start session');
         }
 
         return $this->started;
@@ -503,14 +502,24 @@ class Session implements SessionInterface
 
         return $_SERVER['HTTP_USER_AGENT'] ?? null;
     }
-
+    
     /**
-     * {@inheritdoc}
+     * @return bool
      */
     public function flush(): bool
     {
         if (!$this->started) {
-            $this->start();
+            try {
+                $this->start();
+            } catch (Throwable $e) {
+                // ExceptionHandler verwenden, wenn verfügbar
+                if (isset($this->container) && $this->container->has(ExceptionHandlerInterface::class)) {
+                    $this->container->get(ExceptionHandlerInterface::class)->report($e, [
+                        'context' => 'session_flush'
+                    ]);
+                }
+                return false;
+            }
         }
 
         // Aktualisiere den Zeitpunkt der letzten Aktivität

@@ -42,21 +42,35 @@ class Application
      */
     public function run(): ResponseInterface
     {
+        $this->logger->info('Application starting');
         // Session am Anfang des Requests starten und validieren
         $this->session->start();
 
         // Request erstellen
         $request = $this->requestFactory->createFromGlobals();
+        $this->logger->debug('Request created', [
+            'method' => $request->getMethod(),
+            'path' => $request->getPath(),
+            'ip' => $request->getClientIp()
+        ]);
 
         try {
             // Router ausführen
             $response = $this->router->dispatch($request);
+            $this->logger->info('Request processed successfully', [
+                'status' => $response->getStatusCode()
+            ]);
         } catch (Throwable $e) {
+            $this->logger->error('Exception during request processing', [
+                'exception' => get_class($e),
+                'message' => $e->getMessage()
+            ]);
             // Fehlerbehandlung - hier könnten Sie einen Error-Handler aufrufen
             $response = $this->handleException($e, $request);
         } finally {
             // Session am Ende des Requests speichern
             $this->session->flush();
+            $this->logger->debug('Request finished');
         }
 
         return $response;
@@ -100,14 +114,16 @@ class Application
      */
     protected function handleException(Throwable $e, Request $request): ResponseInterface
     {
-        // Rufe den zentralen Exception-Handler auf, falls verfügbar
+        // Rufe den zentralen Exception-Handler auf
         try {
             $exceptionHandler = $this->container->get(ExceptionHandlerInterface::class);
             $exceptionHandler->handle($e, ['request' => $request]);
         } catch (Throwable $handlerException) {
-            // Fallback, wenn der Exception-Handler nicht verfügbar ist
-            error_log("Error handling request to {$request->getPath()}: {$e->getMessage()}");
-            error_log("Exception handler error: {$handlerException->getMessage()}");
+            // Fallback wenn Exception-Handler selbst eine Exception wirft
+            $this->logger->critical('Error in exception handler', [
+                'original_exception' => get_class($e) . ': ' . $e->getMessage(),
+                'handler_exception' => $handlerException->getMessage()
+            ]);
         }
 
         // Erstelle eine Response basierend auf der Exception
@@ -128,7 +144,7 @@ class Application
         $factory = $this->container->get('App\Infrastructure\Http\Contracts\ResponseFactoryInterface');
 
         // Je nach Exception-Typ eine passende Response erstellen
-        return match(true) {
+        return match (true) {
             $e instanceof \App\Infrastructure\Routing\Exceptions\RouteNotFoundException =>
             $factory->createNotFound('Die angeforderte Seite wurde nicht gefunden.'),
 

@@ -10,6 +10,7 @@ use App\Infrastructure\Container\Contracts\FactoryInterface;
 use App\Infrastructure\Container\Exceptions\BindingResolutionException;
 use App\Infrastructure\Container\Exceptions\ContainerException;
 use App\Infrastructure\Container\Exceptions\NotFoundException;
+use App\Infrastructure\ErrorHandling\Contracts\ExceptionHandlerInterface;
 use Closure;
 use Throwable;
 
@@ -137,21 +138,33 @@ class Container implements ContainerInterface
 
     /**
      * {@inheritdoc}
-     * @throws NotFoundException Wenn der angeforderte Typ nicht gefunden wird
+     * @param string $id
+     * @return mixed
      * @throws BindingResolutionException Wenn ein Zirkelbezug erkannt wird oder ein anderes Problem bei der Auflösung auftritt
+     * @throws ContainerException
+     * @throws NotFoundException Wenn der angeforderte Typ nicht gefunden wird
+     * @throws Throwable
      */
+// In der get-Methode:
     public function get(string $id): mixed
     {
         try {
             return $this->resolve($id);
         } catch (NotFoundException $e) {
-            // Die NotFoundException wird direkt weitergeleitet, wie vom Interface erwartet
+            // Die NotFoundException wird direkt weitergeleitet
             throw $e;
         } catch (BindingResolutionException $e) {
-            // Bindungsprobleme, einschließlich Zirkelbezüge, werden ebenfalls weitergeleitet
+            // Bindungsprobleme werden auch weitergeleitet
             throw $e;
         } catch (Throwable $e) {
             // Andere Fehler werden als ContainerException gekapselt
+            $exceptionHandler = $this->has(ExceptionHandlerInterface::class) ?
+                $this->resolve(ExceptionHandlerInterface::class) : null;
+
+            if ($exceptionHandler) {
+                $exceptionHandler->report($e, ['container_id' => $id]);
+            }
+
             throw new ContainerException(
                 "Fehler bei der Auflösung von '$id': " . $e->getMessage(),
                 previous: $e
@@ -188,8 +201,15 @@ class Container implements ContainerInterface
      */
     protected function resolve(string $abstract, array $parameters = []): mixed
     {
+        // Füge Logging hinzu
+        $this->logger->debug('Resolving dependency', ['abstract' => $abstract]);
+
         // Prüfe auf zirkuläre Abhängigkeit
         if (in_array($abstract, $this->resolutionStack)) {
+            $this->logger->error('Circular dependency detected', [
+                'stack' => $this->resolutionStack,
+                'current' => $abstract
+            ]);
             throw new BindingResolutionException(
                 "Zirkuläre Abhängigkeit erkannt: " .
                 implode(' -> ', $this->resolutionStack) . " -> $abstract"
