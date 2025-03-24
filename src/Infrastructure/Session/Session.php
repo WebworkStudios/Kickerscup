@@ -284,7 +284,9 @@ class Session implements SessionInterface
     }
 
     /**
-     * {@inheritdoc}
+     * Gibt den Zeitpunkt der letzten Aktivität zurück
+     *
+     * @return int|null Der Zeitpunkt der letzten Aktivität oder null, wenn nicht gesetzt
      */
     public function getLastActivity(): ?int
     {

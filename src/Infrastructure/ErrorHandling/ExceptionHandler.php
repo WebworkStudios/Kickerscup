@@ -151,7 +151,7 @@ class ExceptionHandler implements ExceptionHandlerInterface
         $additionalContext = [];
 
         // Grundlegende Informationen über die Anwendung
-        $additionalContext['environment'] = $_ENV['APP_ENV'] ?? 'production';
+        $additionalContext['environment'] = (new \App\Infrastructure\Config\Config)->get('app.env', 'production');
         $additionalContext['php_version'] = PHP_VERSION;
         $additionalContext['memory_usage'] = memory_get_usage(true);
 

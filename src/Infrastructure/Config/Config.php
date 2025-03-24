@@ -1,4 +1,4 @@
-<?php
+<?php /** @noinspection PhpUnused */
 
 
 declare(strict_types=1);
@@ -16,6 +16,26 @@ class Config
      * @var array
      */
     protected array $items = [];
+
+
+    // Internale Eigenschaft für app.name z.B.
+    private string $_appName;
+
+    // Property Hook
+
+    public string $appName {
+        get {
+            if (!isset($this->_appName)) {
+                $this->_appName = $this->get('app.name', 'Default App Name');
+            }
+            return $this->_appName;
+        }
+        set {
+            $this->_appName = $value;
+            // Aktualisiere auch im items Array
+            $this->items['app']['name'] = $value;
+        }
+    }
 
     /**
      * Lädt die Konfigurationsdateien

@@ -16,22 +16,22 @@ use App\Infrastructure\Session\SessionServiceProvider;
 
 
 // Create the container
-$container = new Container();
+$container = new Container;
 
 // Register core services
-$routingProvider = new RoutingServiceProvider();
+$routingProvider = new RoutingServiceProvider;
 $routingProvider->register($container);
 
-$sessionProvider = new SessionServiceProvider();
+$sessionProvider = new SessionServiceProvider;
 $sessionProvider->register($container);
 
-$csrfProvider = new CsrfServiceProvider();
+$csrfProvider = new CsrfServiceProvider;
 $csrfProvider->register($container);
 
-$loggerProvider = new LoggerServiceProvider();
+$loggerProvider = new LoggerServiceProvider;
 $loggerProvider->register($container);
 
-$errorHandlingProvider = new ErrorHandlingServiceProvider();
+$errorHandlingProvider = new ErrorHandlingServiceProvider;
 $errorHandlingProvider->register($container);
 
 // Register HTTP factories

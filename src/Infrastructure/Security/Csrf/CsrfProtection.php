@@ -71,7 +71,12 @@ class CsrfProtection implements CsrfProtectionInterface
     }
 
     /**
-     * {@inheritdoc}
+     * Validiert ein CSRF-Token
+     *
+     * @param string $token Das zu validierende Token
+     * @param string $key Schlüssel/Identifikator für das Token
+     * @param bool $removeAfterValidation Ob das Token nach der Validierung entfernt werden soll
+     * @return bool True wenn das Token gültig ist
      */
     public function validateToken(string $token, string $key = 'default', bool $removeAfterValidation = true): bool
     {
@@ -142,9 +147,7 @@ class CsrfProtection implements CsrfProtectionInterface
             $allowedOrigins = array_merge($allowedOrigins, $this->config->trustedOrigins);
         }
 
-        // Überprüfe, ob der Referer eine der erlaubten Origins enthält
         return array_any($allowedOrigins, fn($allowed) => str_starts_with($referer, $allowed));
-
     }
 
     /**

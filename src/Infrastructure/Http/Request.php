@@ -69,6 +69,19 @@ class Request implements RequestInterface
      */
     protected ?string $rawBody = null;
 
+    private string $_path;
+
+    public string $path {
+        get {
+            return $this->_path;
+        }
+        set {
+            // Normalisiere den Pfad beim Setzen
+            $path = trim($value, '/');
+            $this->_path = '/' . $path;
+        }
+    }
+
     /**
      * Konstruktor
      *

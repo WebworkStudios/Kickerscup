@@ -368,7 +368,7 @@ class Router implements RouterInterface
      *
      * @param string $path Der zu prüfende Pfad
      * @param array $routes Die Routen zum Vergleichen
-     * @return array|false Die gefundene Route oder false
+     * @return array{route: array, parameters: array}|false Die gefundene Route oder false
      */
     protected function matchPath(string $path, array $routes): array|false
     {

@@ -4,11 +4,39 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Session;
 
-readonly class SessionConfiguration
+use InvalidArgumentException;
+
+class SessionConfiguration
 {
+    private string $_name = 'app_session';
+
+    public string $name {
+        get {
+            return $this->_name;
+        }
+        set {
+            if (empty($value)) {
+                throw new InvalidArgumentException('Session name cannot be empty');
+            }
+            $this->_name = $value;
+        }
+    }
+
+    private int $_lifetime = 86400;
+
+    public int $lifetime {
+        get {
+            return $this->_lifetime;
+        }
+        set {
+            if ($value < 0) {
+                throw new InvalidArgumentException('Lifetime cannot be negative');
+            }
+            $this->_lifetime = $value;
+        }
+    }
+
     /**
-     * @param string $name Der Session-Name
-     * @param int $lifetime Die Lebensdauer des Session-Cookies in Sekunden
      * @param int $absoluteLifetime
      * @param string $path Der Pfad für das Session-Cookie
      * @param string|null $domain Die Domain für das Session-Cookie (null für aktuelle Domain)
@@ -26,8 +54,6 @@ readonly class SessionConfiguration
      * @param array $storeConfig Konfiguration für den Session-Store
      */
     public function __construct(
-        public string  $name = 'app_session',
-        public int     $lifetime = 86400,         // 24 Stunden
         public int     $absoluteLifetime = 2592000, // 30 Tage in Sekunden
         public string  $path = '/',
         public ?string $domain = null,

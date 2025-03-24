@@ -69,7 +69,21 @@ class Container implements ContainerInterface
     /**
      * Der integrierte Logger.
      */
-    protected ?LoggerInterface $logger = null;
+    // Beispiel für einen Logger Service
+    private ?LoggerInterface $_logger = null;
+
+    public ?LoggerInterface $logger {
+        get {
+            if ($this->_logger === null && $this->has(LoggerInterface::class)) {
+                $this->_logger = $this->get(LoggerInterface::class);
+            }
+            return $this->_logger;
+        }
+        set {
+            $this->_logger = $value;
+            $this->instances[LoggerInterface::class] = $value;
+        }
+    }
 
     /**
      * Container-Konstruktor.
@@ -261,6 +275,15 @@ class Container implements ContainerInterface
      * @throws ContainerException
      * @throws Throwable
      */
+    /**
+     * Löst einen Typ auf und gibt eine Instanz zurück.
+     *
+     * @param string $abstract
+     * @param array $parameters
+     * @return mixed
+     * @throws ContainerException
+     * @throws Throwable
+     */
     protected function resolve(string $abstract, array $parameters = []): mixed
     {
         // Logging-Versuch mit Fallback
@@ -278,7 +301,7 @@ class Container implements ContainerInterface
                     'stack' => $this->resolutionStack,
                     'current' => $abstract
                 ]);
-            } catch (Throwable $loggerError) {
+            } catch (Throwable) {
                 error_log('Circular dependency: ' . implode(' -> ', $this->resolutionStack) . " -> $abstract");
             }
 
