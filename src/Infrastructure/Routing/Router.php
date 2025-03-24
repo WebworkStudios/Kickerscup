@@ -13,6 +13,7 @@ use App\Infrastructure\Container\Exceptions\NotFoundException;
 use App\Infrastructure\Http\Contracts\RequestInterface;
 use App\Infrastructure\Http\Contracts\ResponseFactoryInterface;
 use App\Infrastructure\Http\Contracts\ResponseInterface;
+use App\Infrastructure\Logging\Contracts\LoggerInterface;
 use App\Infrastructure\Routing\Attributes\Cors;
 use App\Infrastructure\Routing\Contracts\RouterInterface;
 use App\Infrastructure\Routing\Contracts\UrlGeneratorInterface;
@@ -88,7 +89,8 @@ class Router implements RouterInterface
     public function __construct(
         protected ContainerInterface       $container,
         protected UrlGeneratorInterface    $urlGenerator,
-        protected ResponseFactoryInterface $responseFactory
+        protected ResponseFactoryInterface $responseFactory,
+        protected LoggerInterface          $logger
     )
     {
     }

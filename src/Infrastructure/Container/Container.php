@@ -1,6 +1,5 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Infrastructure\Container;
@@ -11,6 +10,9 @@ use App\Infrastructure\Container\Exceptions\BindingResolutionException;
 use App\Infrastructure\Container\Exceptions\ContainerException;
 use App\Infrastructure\Container\Exceptions\NotFoundException;
 use App\Infrastructure\ErrorHandling\Contracts\ExceptionHandlerInterface;
+use App\Infrastructure\Logging\Contracts\LoggerInterface;
+use App\Infrastructure\Logging\FileLogger;
+use App\Infrastructure\Logging\LoggerConfiguration;
 use Closure;
 use Throwable;
 
@@ -65,6 +67,11 @@ class Container implements ContainerInterface
     protected ReflectionResolver $reflectionResolver;
 
     /**
+     * Der integrierte Logger.
+     */
+    protected ?LoggerInterface $logger = null;
+
+    /**
      * Container-Konstruktor.
      */
     public function __construct()
@@ -74,6 +81,50 @@ class Container implements ContainerInterface
         // Registriere den Container selbst als Singleton
         $this->instances[ContainerInterface::class] = $this;
         $this->instances[self::class] = $this;
+
+        // Standardmäßigen Logger initialisieren
+        $this->initializeDefaultLogger();
+    }
+
+    /**
+     * Initialisiert den Standard-Logger
+     */
+    protected function initializeDefaultLogger(): void
+    {
+        try {
+            // Erstelle eine Standard-Logger-Instanz
+            $this->logger = new FileLogger(
+                new LoggerConfiguration()
+            );
+
+            // Registriere den Logger als Singleton
+            $this->instances[LoggerInterface::class] = $this->logger;
+        } catch (Throwable $e) {
+            // Fallback-Logging, falls Initialisierung fehlschlägt
+            error_log('Fehler bei Logger-Initialisierung: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Setzt einen benutzerdefinierten Logger
+     *
+     * @param LoggerInterface $logger
+     * @return void
+     */
+    public function setLogger(LoggerInterface $logger): void
+    {
+        $this->logger = $logger;
+        $this->instances[LoggerInterface::class] = $logger;
+    }
+
+    /**
+     * Gibt den aktuellen Logger zurück
+     *
+     * @return LoggerInterface|null
+     */
+    public function getLogger(): ?LoggerInterface
+    {
+        return $this->logger;
     }
 
     /**
@@ -140,12 +191,11 @@ class Container implements ContainerInterface
      * {@inheritdoc}
      * @param string $id
      * @return mixed
-     * @throws BindingResolutionException Wenn ein Zirkelbezug erkannt wird oder ein anderes Problem bei der Auflösung auftritt
+     * @throws BindingResolutionException
      * @throws ContainerException
-     * @throws NotFoundException Wenn der angeforderte Typ nicht gefunden wird
+     * @throws NotFoundException
      * @throws Throwable
      */
-// In der get-Methode:
     public function get(string $id): mixed
     {
         try {
@@ -165,6 +215,16 @@ class Container implements ContainerInterface
                 $exceptionHandler->report($e, ['container_id' => $id]);
             }
 
+            // Logging mit Fallback
+            try {
+                $this->logger?->error('Container resolution error', [
+                    'id' => $id,
+                    'error' => $e->getMessage()
+                ]);
+            } catch (Throwable $loggerError) {
+                error_log('Logger-Fehler während Container-Auflösung: ' . $loggerError->getMessage());
+            }
+
             throw new ContainerException(
                 "Fehler bei der Auflösung von '$id': " . $e->getMessage(),
                 previous: $e
@@ -177,7 +237,9 @@ class Container implements ContainerInterface
      */
     public function has(string $id): bool
     {
-        return isset($this->bindings[$id]) || isset($this->instances[$id]) || isset($this->factories[$id]);
+        return isset($this->bindings[$id]) ||
+            isset($this->instances[$id]) ||
+            isset($this->factories[$id]);
     }
 
     /**
@@ -201,15 +263,25 @@ class Container implements ContainerInterface
      */
     protected function resolve(string $abstract, array $parameters = []): mixed
     {
-        // Füge Logging hinzu
-        $this->logger->debug('Resolving dependency', ['abstract' => $abstract]);
+        // Logging-Versuch mit Fallback
+        try {
+            $this->logger?->debug('Resolving dependency', ['abstract' => $abstract]);
+        } catch (Throwable $loggerError) {
+            error_log('Logger-Fehler bei Dependency Resolution: ' . $loggerError->getMessage());
+        }
 
         // Prüfe auf zirkuläre Abhängigkeit
         if (in_array($abstract, $this->resolutionStack)) {
-            $this->logger->error('Circular dependency detected', [
-                'stack' => $this->resolutionStack,
-                'current' => $abstract
-            ]);
+            // Logging mit Fallback
+            try {
+                $this->logger?->error('Circular dependency detected', [
+                    'stack' => $this->resolutionStack,
+                    'current' => $abstract
+                ]);
+            } catch (Throwable $loggerError) {
+                error_log('Circular dependency: ' . implode(' -> ', $this->resolutionStack) . " -> $abstract");
+            }
+
             throw new BindingResolutionException(
                 "Zirkuläre Abhängigkeit erkannt: " .
                 implode(' -> ', $this->resolutionStack) . " -> $abstract"
@@ -288,6 +360,14 @@ class Container implements ContainerInterface
 
             // Typ aus dem Stack entfernen vor Rückgabe
             array_pop($this->resolutionStack);
+
+            // Logging-Versuch mit Fallback
+            try {
+                $this->logger?->debug('Resolved dependency', ['abstract' => $abstract]);
+            } catch (Throwable $loggerError) {
+                error_log('Logger-Fehler nach Dependency Resolution: ' . $loggerError->getMessage());
+            }
+
             return $instance;
         } catch (Throwable $e) {
             // Bei Fehlern den Stack zurücksetzen

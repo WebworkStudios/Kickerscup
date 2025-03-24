@@ -9,6 +9,7 @@ use App\Infrastructure\Container\Exceptions\ContainerException;
 use App\Infrastructure\Container\Exceptions\NotFoundException;
 use App\Infrastructure\Container\ServiceProvider;
 use App\Infrastructure\Http\Contracts\ResponseFactoryInterface;
+use App\Infrastructure\Http\Factory\ResponseFactory;
 use App\Infrastructure\Routing\Contracts\RouterInterface;
 use App\Infrastructure\Routing\Contracts\RouteScannerInterface;
 use App\Infrastructure\Routing\Contracts\UrlGeneratorInterface;
@@ -33,35 +34,32 @@ class RoutingServiceProvider extends ServiceProvider
         $container->bind(UrlGeneratorInterface::class, UrlGenerator::class);
         $container->bind(RouteScannerInterface::class, RouteScanner::class);
 
+        // Bind ResponseFactoryInterface to ResponseFactory
+        $container->bind(ResponseFactoryInterface::class, ResponseFactory::class);
+
         // Registriere Singleton-Instanzen
         $container->singleton(Router::class);
         $container->singleton(UrlGenerator::class);
+        $container->singleton(ResponseFactory::class);
 
-        // Standardfehlerbehandlung konfigurieren, falls gewünscht
-        // dies ist optional und kann auch nach der Registrierung direkt im Router erfolgen
+        // Router abrufen und optional Konfigurationen vornehmen
         $router = $container->get(RouterInterface::class);
 
-        // Standardmäßig den Router mit Fehlerseiten-Handlers konfigurieren
-        $this->setupErrorHandlers($router, $container);
+        // Beispielhafte Konfiguration von Standard-Fehler-Handlern
+        $this->configureDefaultErrorHandlers($router, $container);
     }
 
     /**
-     * Richtet die Standard-Fehlerbehandlung ein
+     * Konfiguriert Standard-Fehler-Handler für den Router
      *
      * @param RouterInterface $router
      * @param ContainerInterface $container
-     * @return void
      */
-    protected function setupErrorHandlers(RouterInterface $router, ContainerInterface $container): void
+    protected function configureDefaultErrorHandlers(RouterInterface $router, ContainerInterface $container): void
     {
-        // Beispiel für die Registrierung von Standardfehlern
-        // in einer vollständigen Implementation würde hier auf Konfigurationen zugegriffen
-        // oder Controller registriert
-
         // 404 Not Found Handler
         $router->registerErrorHandler(404, function ($request) use ($container) {
-            // Einfacher Standard-handler für 404-Fehler
-            // in der Praxis würde hier ein vollständiger Controller verwendet
+            $responseFactory = $container->get(ResponseFactoryInterface::class);
             $content = '<!DOCTYPE html>
                 <html lang="de">
                 <head>
@@ -81,12 +79,12 @@ class RoutingServiceProvider extends ServiceProvider
                 </body>
                 </html>';
 
-            return $container->get(ResponseFactoryInterface::class)->createHtml($content, 404);
+            return $responseFactory->createHtml($content, 404);
         });
 
         // 405 Method Not Allowed Handler
         $router->registerErrorHandler(405, function ($request, $exception) use ($container) {
-            // In der Praxis würde hier ein Controller verwendet
+            $responseFactory = $container->get(ResponseFactoryInterface::class);
             $allowedMethods = $exception->getAllowedMethods();
 
             $content = '<!DOCTYPE html>
@@ -108,7 +106,7 @@ class RoutingServiceProvider extends ServiceProvider
                 </body>
                 </html>';
 
-            $response = $container->get(ResponseFactoryInterface::class)->createHtml($content, 405);
+            $response = $responseFactory->createHtml($content, 405);
             $response->setHeader('Allow', implode(', ', $allowedMethods));
 
             return $response;

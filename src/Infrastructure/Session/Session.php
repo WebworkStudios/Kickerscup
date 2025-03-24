@@ -6,6 +6,7 @@ namespace App\Infrastructure\Session;
 
 use App\Infrastructure\Container\Attributes\Injectable;
 use App\Infrastructure\Container\Attributes\Singleton;
+use App\Infrastructure\Logging\Contracts\LoggerInterface;
 use App\Infrastructure\Session\Contracts\SessionInterface;
 use App\Infrastructure\Session\Contracts\SessionStoreInterface;
 use App\Infrastructure\Session\Contracts\UserSessionStoreInterface;
@@ -32,7 +33,8 @@ class Session implements SessionInterface
     public function __construct(
         protected FlashMessageProvider  $flashProvider,
         protected SessionConfiguration  $config,
-        protected SessionStoreInterface $store
+        protected SessionStoreInterface $store,
+        protected LoggerInterface       $logger
     )
     {
         // Wenn ein benutzerdefinierter Store verwendet wird, registriere
@@ -502,7 +504,7 @@ class Session implements SessionInterface
 
         return $_SERVER['HTTP_USER_AGENT'] ?? null;
     }
-    
+
     /**
      * @return bool
      */

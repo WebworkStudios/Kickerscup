@@ -13,6 +13,7 @@ use App\Infrastructure\Container\Exceptions\NotFoundException;
 use App\Infrastructure\Http\Contracts\RequestFactoryInterface;
 use App\Infrastructure\Http\Contracts\ResponseInterface;
 use App\Infrastructure\Http\Request;
+use App\Infrastructure\Logging\Contracts\LoggerInterface;
 use App\Infrastructure\Routing\Contracts\RouterInterface;
 use App\Infrastructure\Session\Contracts\SessionInterface;
 use Throwable;
@@ -28,7 +29,8 @@ class Application
         protected ContainerInterface      $container,
         protected RequestFactoryInterface $requestFactory,
         protected RouterInterface         $router,
-        protected SessionInterface        $session
+        protected SessionInterface        $session,
+        protected LoggerInterface         $logger
     )
     {
     }
