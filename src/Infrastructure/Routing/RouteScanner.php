@@ -1,12 +1,13 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Infrastructure\Routing;
 
 use App\Infrastructure\Container\Attributes\Injectable;
 use App\Infrastructure\Container\Attributes\Scoped;
+use App\Infrastructure\Container\Contracts\ContainerInterface;
+use App\Infrastructure\Logging\Contracts\LoggerInterface;
 use App\Infrastructure\Routing\Attributes\Cors;
 use App\Infrastructure\Routing\Attributes\Redirect;
 use App\Infrastructure\Routing\Attributes\Route;
@@ -35,10 +36,14 @@ class RouteScanner implements RouteScannerInterface
      *
      * @param RouterInterface $router Der Router
      * @param UrlGeneratorInterface $urlGenerator Der URL-Generator
+     * @param LoggerInterface $logger Der Logger
+     * @param ContainerInterface $container Der Container
      */
     public function __construct(
         protected RouterInterface       $router,
-        protected UrlGeneratorInterface $urlGenerator
+        protected UrlGeneratorInterface $urlGenerator,
+        protected LoggerInterface       $logger,
+        protected ContainerInterface    $container
     )
     {
     }
@@ -48,9 +53,16 @@ class RouteScanner implements RouteScannerInterface
      */
     public function scan(array $directories, string $namespace = ''): void
     {
+        $this->logger->info('RouteScanner: Starting scan', [
+            'directories' => $directories,
+            'namespace' => $namespace
+        ]);
+
         foreach ($directories as $directory) {
             $this->scanDirectory($directory, $namespace);
         }
+
+        $this->logger->info('RouteScanner: Scan completed');
     }
 
     /**
@@ -63,22 +75,43 @@ class RouteScanner implements RouteScannerInterface
     protected function scanDirectory(string $directory, string $namespace): void
     {
         if (!is_dir($directory)) {
+            $this->logger->warning('RouteScanner: Directory not found', ['directory' => $directory]);
             return;
         }
 
+        $this->logger->debug('RouteScanner: Scanning directory', ['directory' => $directory]);
+
         $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($directory)
+            new RecursiveDirectoryIterator($directory, RecursiveDirectoryIterator::SKIP_DOTS)
         );
+
+        $scannedFiles = 0;
+        $foundRoutes = 0;
 
         foreach ($iterator as $file) {
             if ($file->isFile() && $file->getExtension() === 'php') {
+                $scannedFiles++;
                 $className = $this->getClassNameFromFile($file->getPathname(), $namespace);
 
                 if ($className) {
-                    $this->registerClassRoutes($className);
+                    $routeCount = $this->registerClassRoutes($className);
+                    $foundRoutes += $routeCount;
+
+                    if ($routeCount > 0) {
+                        $this->logger->debug('RouteScanner: Found routes in class', [
+                            'class' => $className,
+                            'count' => $routeCount
+                        ]);
+                    }
                 }
             }
         }
+
+        $this->logger->info('RouteScanner: Directory scan completed', [
+            'directory' => $directory,
+            'scanned_files' => $scannedFiles,
+            'found_routes' => $foundRoutes
+        ]);
     }
 
     /**
@@ -90,20 +123,73 @@ class RouteScanner implements RouteScannerInterface
      */
     protected function getClassNameFromFile(string $filePath, string $namespace): ?string
     {
-        // Extrahiere den relativen Pfad
-        $relativePath = str_replace(
-            [dirname($filePath) . DIRECTORY_SEPARATOR, '.php'],
-            '',
-            $filePath
-        );
+        // Normalisiere Pfadtrenner für Betriebssystem-Unabhängigkeit
+        $directory = dirname($filePath);
+        $filename = basename($filePath, '.php');
 
-        // Konstruiere den Klassennamen basierend auf Namespace und Dateipfad
-        $className = $namespace . '\\' . str_replace('/', '\\', $relativePath);
+        // Logger für Debug-Zwecke
+        $this->logger->debug('RouteScanner: Processing file', [
+            'file' => $filePath,
+            'base_namespace' => $namespace
+        ]);
 
-        // Prüfe, ob die Klasse existiert
-        if (class_exists($className)) {
-            return $className;
+        // Spezielle Behandlung für den Namespace
+        if ($namespace === 'App\\Presentation' && (
+                str_contains($filePath, '/Presentation/Actions') ||
+                str_contains($filePath, '\\Presentation\\Actions')
+            )) {
+            // Direkter Ansatz: Setze den Namespace basierend auf bekannten Pfadfragmenten
+            if (str_contains($filePath, '/Actions/Users/') || str_contains($filePath, '\\Actions\\Users\\')) {
+                $fullClassName = 'App\\Presentation\\Actions\\Users\\' . $filename;
+            } else {
+                $fullClassName = 'App\\Presentation\\Actions\\' . $filename;
+            }
+
+            $this->logger->debug('RouteScanner: Using direct namespace mapping', [
+                'file' => $filePath,
+                'attempted_class' => $fullClassName
+            ]);
+
+            // Überprüfe ob die Klasse existiert
+            if (class_exists($fullClassName)) {
+                $this->logger->debug('RouteScanner: Class found', ['class' => $fullClassName]);
+                return $fullClassName;
+            }
         }
+
+        // Versuche alternativen Ansatz mit PSR-4-Konventionen
+        // Extrahiere Teile nach "src/"
+        $srcPos = stripos($filePath, 'src');
+        if ($srcPos !== false) {
+            $pathAfterSrc = substr($filePath, $srcPos + 4); // +4 für 'src/'
+            $pathAfterSrc = str_replace(['\\', '/'], '\\', $pathAfterSrc);
+            $pathParts = explode('\\', trim($pathAfterSrc, '\\'));
+
+            // Entferne die PHP-Erweiterung vom letzten Teil
+            $lastIndex = count($pathParts) - 1;
+            $pathParts[$lastIndex] = basename($pathParts[$lastIndex], '.php');
+
+            // PSR-4 Namespace
+            $psr4Namespace = 'App\\' . implode('\\', $pathParts);
+
+            $this->logger->debug('RouteScanner: Trying PSR-4 namespace', ['class' => $psr4Namespace]);
+
+            if (class_exists($psr4Namespace)) {
+                $this->logger->debug('RouteScanner: PSR-4 class found', ['class' => $psr4Namespace]);
+                return $psr4Namespace;
+            }
+        }
+
+        // Versuche es als letzten Ausweg mit dem ursprünglichen Namespace
+        $classToTry = $namespace . '\\' . $filename;
+        if (class_exists($classToTry)) {
+            $this->logger->debug('RouteScanner: Found with original namespace', ['class' => $classToTry]);
+            return $classToTry;
+        }
+
+        $this->logger->debug('RouteScanner: Class not found in any namespace', [
+            'file' => $filePath
+        ]);
 
         return null;
     }
@@ -112,10 +198,12 @@ class RouteScanner implements RouteScannerInterface
      * Registriert Routen für eine Klasse
      *
      * @param string $className Der Klassenname
-     * @return void
+     * @return int Anzahl der registrierten Routen
      */
-    protected function registerClassRoutes(string $className): void
+    protected function registerClassRoutes(string $className): int
     {
+        $routeCount = 0;
+
         try {
             $reflector = new ReflectionClass($className);
 
@@ -142,6 +230,7 @@ class RouteScanner implements RouteScannerInterface
                     $redirectAttr->statusCode,
                     $redirectAttr->preserveQueryString
                 );
+                $routeCount++;
             }
 
             // Wenn die Klasse __invoke hat und Route-Attribute besitzt
@@ -158,9 +247,19 @@ class RouteScanner implements RouteScannerInterface
 
                     // Registriere die Route mit der Klasse als Handler und Domain
                     $this->router->addRoute($methods, $path, $className, $name, $domain);
+                    $routeCount++;
+
+                    $this->logger->debug('RouteScanner: Registered class route', [
+                        'class' => $className,
+                        'path' => $path,
+                        'methods' => is_array($methods) ? implode(',', $methods) : $methods,
+                        'name' => $name
+                    ]);
 
                     // Registriere CORS-Konfiguration, wenn vorhanden
-                    $this->addCorsConfigurationIfExists($path, $corsConfig);
+                    if ($corsConfig) {
+                        $this->router->addCorsConfiguration($path, $corsConfig);
+                    }
 
                     $csrfAttributes = $invokeMethod->getAttributes(CsrfProtection::class);
                     if (!empty($csrfAttributes)) {
@@ -181,6 +280,9 @@ class RouteScanner implements RouteScannerInterface
                 }
 
                 $methodRouteAttributes = $method->getAttributes(Route::class, ReflectionAttribute::IS_INSTANCEOF);
+                if (empty($methodRouteAttributes)) {
+                    continue;
+                }
 
                 // Überprüfe CORS-Attribute der Methode (überschreiben die Klassenattribute)
                 $methodCorsAttributes = $method->getAttributes(Cors::class);
@@ -200,6 +302,7 @@ class RouteScanner implements RouteScannerInterface
                         $redirectAttr->statusCode,
                         $redirectAttr->preserveQueryString
                     );
+                    $routeCount++;
                 }
 
                 foreach ($methodRouteAttributes as $attribute) {
@@ -212,8 +315,19 @@ class RouteScanner implements RouteScannerInterface
 
                     // Registriere die Route mit der Klasse und Methode als Handler und Domain
                     $this->router->addRoute($methods, $path, [$className, $method->getName()], $name, $domain);
+                    $routeCount++;
 
-                    $this->addCorsConfigurationIfExists($path, $methodCorsConfig);
+                    $this->logger->debug('RouteScanner: Registered method route', [
+                        'class' => $className,
+                        'method' => $method->getName(),
+                        'path' => $path,
+                        'methods' => is_array($methods) ? implode(',', $methods) : $methods,
+                        'name' => $name
+                    ]);
+
+                    if ($methodCorsConfig) {
+                        $this->router->addCorsConfiguration($path, $methodCorsConfig);
+                    }
 
                     // Sammle CSRF-Attribute der Methode
                     $csrfAttributes = $method->getAttributes(CsrfProtection::class);
@@ -227,33 +341,19 @@ class RouteScanner implements RouteScannerInterface
                 }
             }
         } catch (ReflectionException $e) {
-            // Hier ExceptionHandler einsetzen statt nur ignorieren
-            if (isset($this->container) && $this->container->has(ExceptionHandlerInterface::class)) {
-                try {
-                    $exceptionHandler = $this->container->get(ExceptionHandlerInterface::class);
-                    $exceptionHandler->report($e, [
-                        'class' => $className,
-                        'context' => 'route_scanning'
-                    ]);
-                } catch (Throwable) {
-                    // Ignorieren, wenn der ExceptionHandler nicht verfügbar ist
-                }
-            }
+            $this->logger->error('RouteScanner: Reflection error', [
+                'class' => $className,
+                'error' => $e->getMessage()
+            ]);
+        } catch (Throwable $e) {
+            $this->logger->error('RouteScanner: Unexpected error', [
+                'class' => $className,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
         }
-    }
 
-    /**
-     * Fügt eine CORS-Konfiguration für einen Pfad hinzu, wenn vorhanden
-     *
-     * @param string $path Der Pfad der Route
-     * @param Cors|null $corsConfig Die CORS-Konfiguration
-     * @return void
-     */
-    private function addCorsConfigurationIfExists(string $path, ?Cors $corsConfig): void
-    {
-        if ($corsConfig !== null) {
-            $this->router->addCorsConfiguration($path, $corsConfig);
-        }
+        return $routeCount;
     }
 
     /**

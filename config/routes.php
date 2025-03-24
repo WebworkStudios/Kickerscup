@@ -12,6 +12,8 @@ declare(strict_types=1);
 
 use App\Infrastructure\Routing\Contracts\RouterInterface;
 
+//use App\Presentation\Actions\HelloWorldAction;
+
 /** @var RouterInterface $router */
 $router = $container->get(RouterInterface::class);
 
@@ -21,10 +23,5 @@ $router->addRoute('GET', '/', function () use ($container) {
     return $responseFactory->createHtml('<h1>Welcome to your PHP Framework</h1>');
 }, 'home');
 
-// Example route with controller
-// $router->addRoute('GET', '/users', [App\Presentation\Controllers\UserController::class, 'index'], 'users.index');
+//$router->addRoute('GET', '/hello', HelloWorldAction::class, 'hello.world');
 
-// Example route group for API
-// $router->group('/api', function(RouterInterface $router) {
-//     $router->addRoute('GET', '/users', [App\Presentation\Controllers\Api\UserController::class, 'index'], 'api.users.index');
-// });
