@@ -48,7 +48,7 @@ return [
     | This URL is used by the framework when generating URLs.
     |
     */
-    'url' => 'http://localhost/kickerscup/public',
+    'url' => 'http://localhost',
 
     /*
     |--------------------------------------------------------------------------
