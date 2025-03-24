@@ -10,6 +10,7 @@ use App\Infrastructure\Container\Attributes\Singleton;
 use App\Infrastructure\Container\Contracts\ContainerInterface;
 use App\Infrastructure\Container\Exceptions\ContainerException;
 use App\Infrastructure\Container\Exceptions\NotFoundException;
+use App\Infrastructure\ErrorHandling\Contracts\ExceptionHandlerInterface;
 use App\Infrastructure\Http\Contracts\RequestFactoryInterface;
 use App\Infrastructure\Http\Contracts\ResponseInterface;
 use App\Infrastructure\Http\Request;
@@ -50,6 +51,12 @@ class Application
 
         // Request erstellen
         $request = $this->requestFactory->createFromGlobals();
+
+        // Wichtig: Registriere den aktuellen Request im Container
+        $this->container->bind(RequestInterface::class, $request);
+        // Binde auch die konkrete Implementierung
+        $this->container->bind(Request::class, $request);
+
         $this->logger->debug('Request created', [
             'method' => $request->getMethod(),
             'path' => $request->getPath(),
@@ -90,6 +97,10 @@ class Application
     {
         // Session am Anfang des Requests starten und validieren
         $this->session->start();
+
+        // Binde den aktuellen Request im Container
+        $this->container->bind(RequestInterface::class, $request);
+        $this->container->bind(Request::class, $request);
 
         try {
             // Router ausführen
@@ -170,7 +181,7 @@ class Application
     protected function getSafeExceptionMessage(Throwable $e): string
     {
         // In der Produktionsumgebung nur generische Fehlermeldungen anzeigen
-        $isProduction = ($_ENV['APP_ENV'] ?? 'production') === 'production';
+        $isProduction = $this->container->get('config')->get('app.env') === 'production';
 
         if ($isProduction) {
             return 'Ein unerwarteter Fehler ist aufgetreten.';

@@ -101,10 +101,13 @@ class Session implements SessionInterface
                 $this->saveFingerprint();
             }
 
-            // Bestehender Code für Aktivitätsprüfung und Flash-Messages …
+            // Bestehender Code für Aktivitätsprüfung und Flash-Messages
             $this->checkActivity();
             $this->rotateId();
 
+            // Hier gibt es keinen return, daher führt die Ausführung fort und loggt den Fehler
+            // auch wenn die Session erfolgreich gestartet wurde
+        } else {
             $this->logger->error('Failed to start session');
         }
 

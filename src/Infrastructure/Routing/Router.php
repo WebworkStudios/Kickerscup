@@ -714,9 +714,8 @@ class Router implements RouterInterface
             $paramName = $param->getName();
             $paramType = $param->getType();
 
-            // Wenn der Parameter den Typ RequestInterface hat, injiziere den Request
-            if ($paramType !== null && !$paramType->isBuiltin() &&
-                is_a($paramType->getName(), RequestInterface::class, true)) {
+            // Spezialfall für Parameter namens "request"
+            if ($paramName === 'request') {
                 $resolvedParameters[] = $request;
                 continue;
             }

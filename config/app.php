@@ -14,7 +14,7 @@ return [
     | This value is the name of your application.
     |
     */
-    'name' => $_ENV['APP_NAME'] ?? 'PHP Application',
+    'name' => 'PHP Application',
 
     /*
     |--------------------------------------------------------------------------
@@ -26,7 +26,7 @@ return [
     | services the application utilizes.
     |
     */
-    'env' => $_ENV['APP_ENV'] ?? 'production',
+    'env' => 'development',
 
     /*
     |--------------------------------------------------------------------------
@@ -38,7 +38,7 @@ return [
     | application. If disabled, a simple generic error page is shown.
     |
     */
-    'debug' => (bool)($_ENV['APP_DEBUG'] ?? false),
+    'debug' => true,
 
     /*
     |--------------------------------------------------------------------------
@@ -48,7 +48,7 @@ return [
     | This URL is used by the framework when generating URLs.
     |
     */
-    'url' => $_ENV['APP_URL'] ?? 'http://localhost/kickerscup',
+    'url' => 'http://localhost/kickerscup/public',
 
     /*
     |--------------------------------------------------------------------------
