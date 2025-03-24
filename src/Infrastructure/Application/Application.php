@@ -100,11 +100,65 @@ class Application
      */
     protected function handleException(Throwable $e, Request $request): ResponseInterface
     {
-        // Log error details including request information
-        error_log("Error handling request to {$request->getPath()}: {$e->getMessage()}");
+        // Rufe den zentralen Exception-Handler auf, falls verfügbar
+        try {
+            $exceptionHandler = $this->container->get(ExceptionHandlerInterface::class);
+            $exceptionHandler->handle($e, ['request' => $request]);
+        } catch (Throwable $handlerException) {
+            // Fallback, wenn der Exception-Handler nicht verfügbar ist
+            error_log("Error handling request to {$request->getPath()}: {$e->getMessage()}");
+            error_log("Exception handler error: {$handlerException->getMessage()}");
+        }
 
-        // Oder den Request an einen spezifischeren Error-Handler übergeben
-        return $this->container->get('App\Infrastructure\Http\Contracts\ResponseFactoryInterface')
-            ->createServerError('Ein Fehler ist aufgetreten: ' . $e->getMessage());
+        // Erstelle eine Response basierend auf der Exception
+        return $this->createExceptionResponse($e, $request);
+    }
+
+    /**
+     * Erstellt eine passende Response für eine Exception
+     *
+     * @param Throwable $e Die aufgetretene Ausnahme
+     * @param Request $request Der aktuelle Request
+     * @return ResponseInterface
+     * @throws ContainerException
+     * @throws NotFoundException
+     */
+    protected function createExceptionResponse(Throwable $e, Request $request): ResponseInterface
+    {
+        $factory = $this->container->get('App\Infrastructure\Http\Contracts\ResponseFactoryInterface');
+
+        // Je nach Exception-Typ eine passende Response erstellen
+        return match(true) {
+            $e instanceof \App\Infrastructure\Routing\Exceptions\RouteNotFoundException =>
+            $factory->createNotFound('Die angeforderte Seite wurde nicht gefunden.'),
+
+            $e instanceof \App\Infrastructure\Routing\Exceptions\MethodNotAllowedException =>
+            $factory->createMethodNotAllowed('Die HTTP-Methode ist für diese Route nicht erlaubt.'),
+
+            $e instanceof \App\Infrastructure\Container\Exceptions\NotFoundException,
+                $e instanceof \App\Infrastructure\Container\Exceptions\BindingResolutionException =>
+            $factory->createServerError('Ein interner Serverfehler ist aufgetreten.'),
+
+            default => $factory->createServerError('Ein Fehler ist aufgetreten: ' . $this->getSafeExceptionMessage($e))
+        };
+    }
+
+    /**
+     * Liefert eine sichere Fehlermeldung basierend auf der Umgebung
+     *
+     * @param Throwable $e Die Exception
+     * @return string Die sichere Fehlermeldung
+     */
+    protected function getSafeExceptionMessage(Throwable $e): string
+    {
+        // In der Produktionsumgebung nur generische Fehlermeldungen anzeigen
+        $isProduction = ($_ENV['APP_ENV'] ?? 'production') === 'production';
+
+        if ($isProduction) {
+            return 'Ein unerwarteter Fehler ist aufgetreten.';
+        }
+
+        // In anderen Umgebungen die tatsächliche Fehlermeldung zurückgeben
+        return $e->getMessage();
     }
 }
