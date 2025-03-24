@@ -1,0 +1,610 @@
+<?php
+
+
+declare(strict_types=1);
+
+namespace App\Infrastructure\Database\QueryBuilder;
+
+use App\Infrastructure\Database\Exceptions\QueryException;
+use PDO;
+
+class SelectQueryBuilder extends QueryBuilder
+{
+    /**
+     * Zu selektierende Spalten
+     *
+     * @var array<string>
+     */
+    protected array $columns = ['*'];
+
+    /**
+     * JOIN-Klauseln
+     *
+     * @var array<array{type: string, table: string, condition: string}>
+     */
+    protected array $joins = [];
+
+    /**
+     * WHERE-Bedingungen
+     *
+     * @var array<string>
+     */
+    protected array $wheres = [];
+
+    /**
+     * GROUP BY-Klauseln
+     *
+     * @var array<string>
+     */
+    protected array $groups = [];
+
+    /**
+     * HAVING-Bedingungen
+     *
+     * @var array<string>
+     */
+    protected array $havings = [];
+
+    /**
+     * ORDER BY-Klauseln
+     *
+     * @var array<string>
+     */
+    protected array $orders = [];
+
+    /**
+     * LIMIT-Klausel
+     */
+    protected ?int $limit = null;
+
+    /**
+     * OFFSET-Klausel
+     */
+    protected ?int $offset = null;
+
+    /**
+     * Setzt die zu selektierenden Spalten
+     *
+     * @param string|array $columns Spalten für die Abfrage
+     * @return $this
+     */
+    public function select(string|array $columns = ['*']): self
+    {
+        $this->columns = is_array($columns) ? $columns : func_get_args();
+        return $this;
+    }
+
+    /**
+     * Fügt einen INNER JOIN hinzu
+     *
+     * @param string $table Tabelle für den Join
+     * @param string $condition Join-Bedingung
+     * @return $this
+     */
+    public function join(string $table, string $condition): self
+    {
+        return $this->addJoin('INNER', $table, $condition);
+    }
+
+    /**
+     * Fügt einen LEFT JOIN hinzu
+     *
+     * @param string $table Tabelle für den Join
+     * @param string $condition Join-Bedingung
+     * @return $this
+     */
+    public function leftJoin(string $table, string $condition): self
+    {
+        return $this->addJoin('LEFT', $table, $condition);
+    }
+
+    /**
+     * Fügt einen RIGHT JOIN hinzu
+     *
+     * @param string $table Tabelle für den Join
+     * @param string $condition Join-Bedingung
+     * @return $this
+     */
+    public function rightJoin(string $table, string $condition): self
+    {
+        return $this->addJoin('RIGHT', $table, $condition);
+    }
+
+    /**
+     * Fügt einen Join hinzu
+     *
+     * @param string $type Join-Typ (INNER, LEFT, RIGHT)
+     * @param string $table Tabelle für den Join
+     * @param string $condition Join-Bedingung
+     * @return $this
+     */
+    protected function addJoin(string $type, string $table, string $condition): self
+    {
+        $this->joins[] = [
+            'type' => $type,
+            'table' => $table,
+            'condition' => $condition
+        ];
+
+        return $this;
+    }
+
+    /**
+     * Fügt eine WHERE-Bedingung hinzu
+     *
+     * @param string $column Spalte
+     * @param mixed $operator Operator oder Wert
+     * @param mixed $value Wert (optional)
+     * @return $this
+     */
+    public function where(string $column, mixed $operator, mixed $value = null): self
+    {
+        // Wenn nur zwei Parameter angegeben wurden, verwende = als Operator
+        if ($value === null) {
+            $value = $operator;
+            $operator = '=';
+        }
+
+        $paramName = $this->createParameterName('where');
+        $this->parameters[$paramName] = $value;
+
+        $this->wheres[] = "{$column} {$operator} :{$paramName}";
+
+        return $this;
+    }
+
+    /**
+     * Fügt eine WHERE IN-Bedingung hinzu
+     *
+     * @param string $column Spalte
+     * @param array $values Werte
+     * @return $this
+     */
+    public function whereIn(string $column, array $values): self
+    {
+        if (empty($values)) {
+            $this->wheres[] = '0 = 1'; // Immer false, wenn keine Werte angegeben
+            return $this;
+        }
+
+        $placeholders = [];
+
+        foreach ($values as $value) {
+            $paramName = $this->createParameterName('wherein');
+            $this->parameters[$paramName] = $value;
+            $placeholders[] = ":{$paramName}";
+        }
+
+        $this->wheres[] = "{$column} IN (" . implode(', ', $placeholders) . ")";
+
+        return $this;
+    }
+
+    /**
+     * Fügt eine WHERE NOT IN-Bedingung hinzu
+     *
+     * @param string $column Spalte
+     * @param array $values Werte
+     * @return $this
+     */
+    public function whereNotIn(string $column, array $values): self
+    {
+        if (empty($values)) {
+            return $this; // Keine Einschränkung, wenn keine Werte angegeben
+        }
+
+        $placeholders = [];
+
+        foreach ($values as $value) {
+            $paramName = $this->createParameterName('wherenotin');
+            $this->parameters[$paramName] = $value;
+            $placeholders[] = ":{$paramName}";
+        }
+
+        $this->wheres[] = "{$column} NOT IN (" . implode(', ', $placeholders) . ")";
+
+        return $this;
+    }
+
+    /**
+     * Fügt eine WHERE NULL-Bedingung hinzu
+     *
+     * @param string $column Spalte
+     * @return $this
+     */
+    public function whereNull(string $column): self
+    {
+        $this->wheres[] = "{$column} IS NULL";
+        return $this;
+    }
+
+    /**
+     * Fügt eine WHERE NOT NULL-Bedingung hinzu
+     *
+     * @param string $column Spalte
+     * @return $this
+     */
+    public function whereNotNull(string $column): self
+    {
+        $this->wheres[] = "{$column} IS NOT NULL";
+        return $this;
+    }
+
+    /**
+     * Fügt eine WHERE BETWEEN-Bedingung hinzu
+     *
+     * @param string $column Spalte
+     * @param mixed $min Minimalwert
+     * @param mixed $max Maximalwert
+     * @return $this
+     */
+    public function whereBetween(string $column, mixed $min, mixed $max): self
+    {
+        $minParam = $this->createParameterName('min');
+        $maxParam = $this->createParameterName('max');
+
+        $this->parameters[$minParam] = $min;
+        $this->parameters[$maxParam] = $max;
+
+        $this->wheres[] = "{$column} BETWEEN :{$minParam} AND :{$maxParam}";
+
+        return $this;
+    }
+
+    /**
+     * Fügt eine GROUP BY-Klausel hinzu
+     *
+     * @param string|array $columns Spalten für GROUP BY
+     * @return $this
+     */
+    public function groupBy(string|array $columns): self
+    {
+        $this->groups = array_merge(
+            $this->groups,
+            is_array($columns) ? $columns : [$columns]
+        );
+
+        return $this;
+    }
+
+    /**
+     * Fügt eine HAVING-Bedingung hinzu
+     *
+     * @param string $column Spalte
+     * @param mixed $operator Operator oder Wert
+     * @param mixed $value Wert (optional)
+     * @return $this
+     */
+    public function having(string $column, mixed $operator, mixed $value = null): self
+    {
+        if ($value === null) {
+            $value = $operator;
+            $operator = '=';
+        }
+
+        $paramName = $this->createParameterName('having');
+        $this->parameters[$paramName] = $value;
+
+        $this->havings[] = "{$column} {$operator} :{$paramName}";
+
+        return $this;
+    }
+
+    /**
+     * Fügt eine ORDER BY-Klausel hinzu
+     *
+     * @param string $column Spalte
+     * @param string $direction Sortierrichtung (ASC, DESC)
+     * @return $this
+     */
+    public function orderBy(string $column, string $direction = 'ASC'): self
+    {
+        $direction = strtoupper($direction);
+
+        if (!in_array($direction, ['ASC', 'DESC'])) {
+            $direction = 'ASC';
+        }
+
+        $this->orders[] = "{$column} {$direction}";
+
+        return $this;
+    }
+
+    /**
+     * Fügt eine LIMIT-Klausel hinzu
+     *
+     * @param int $limit Limit
+     * @return $this
+     */
+    public function limit(int $limit): self
+    {
+        $this->limit = max(0, $limit);
+        return $this;
+    }
+
+    /**
+     * Fügt eine OFFSET-Klausel hinzu
+     *
+     * @param int $offset Offset
+     * @return $this
+     */
+    public function offset(int $offset): self
+    {
+        $this->offset = max(0, $offset);
+        return $this;
+    }
+
+    /**
+     * Setzt LIMIT und OFFSET für Paginierung
+     *
+     * @param int $page Seitennummer (beginnt bei 1)
+     * @param int $perPage Einträge pro Seite
+     * @return $this
+     */
+    public function paginate(int $page, int $perPage): self
+    {
+        $page = max(1, $page);
+        $perPage = max(1, $perPage);
+
+        $this->limit($perPage);
+        $this->offset(($page - 1) * $perPage);
+
+        return $this;
+    }
+
+    /**
+     * Führt die Abfrage aus und gibt das erste Ergebnis zurück
+     *
+     * @return array|null Die erste Zeile oder null
+     */
+    public function first(): ?array
+    {
+        $this->limit(1);
+        return $this->getConnection()->queryFirst($this->toSql(), $this->parameters);
+    }
+
+    /**
+     * Führt die Abfrage aus und gibt alle Ergebnisse zurück
+     *
+     * @return array Die Ergebniszeilen
+     */
+    public function get(): array
+    {
+        return $this->getConnection()->queryAll($this->toSql(), $this->parameters);
+    }
+
+    /**
+     * Zählt die Anzahl der Ergebnisse
+     *
+     * @param string $column Spalte für die Zählung (Standard: *)
+     * @return int Die Anzahl der Ergebnisse
+     */
+    public function count(string $column = '*'): int
+    {
+        $original = $this->columns;
+
+        $this->columns = ["COUNT({$column}) as aggregate"];
+
+        $result = $this->first();
+
+        $this->columns = $original;
+
+        return (int)($result['aggregate'] ?? 0);
+    }
+
+    /**
+     * Berechnet die Summe einer Spalte
+     *
+     * @param string $column Spalte für die Summe
+     * @return float|int Die Summe der Spalte
+     */
+    public function sum(string $column): float|int
+    {
+        $original = $this->columns;
+
+        $this->columns = ["SUM({$column}) as aggregate"];
+
+        $result = $this->first();
+
+        $this->columns = $original;
+
+        return $result['aggregate'] ?? 0;
+    }
+
+    /**
+     * Berechnet den Durchschnitt einer Spalte
+     *
+     * @param string $column Spalte für den Durchschnitt
+     * @return float|int Der Durchschnitt der Spalte
+     */
+    public function avg(string $column): float|int
+    {
+        $original = $this->columns;
+
+        $this->columns = ["AVG({$column}) as aggregate"];
+
+        $result = $this->first();
+
+        $this->columns = $original;
+
+        return $result['aggregate'] ?? 0;
+    }
+
+    /**
+     * Ermittelt den Minimalwert einer Spalte
+     *
+     * @param string $column Spalte für den Minimalwert
+     * @return mixed Der Minimalwert der Spalte
+     */
+    public function min(string $column): mixed
+    {
+        $original = $this->columns;
+
+        $this->columns = ["MIN({$column}) as aggregate"];
+
+        $result = $this->first();
+
+        $this->columns = $original;
+
+        return $result['aggregate'] ?? null;
+    }
+
+    /**
+     * Ermittelt den Maximalwert einer Spalte
+     *
+     * @param string $column Spalte für den Maximalwert
+     * @return mixed Der Maximalwert der Spalte
+     */
+    public function max(string $column): mixed
+    {
+        $original = $this->columns;
+
+        $this->columns = ["MAX({$column}) as aggregate"];
+
+        $result = $this->first();
+
+        $this->columns = $original;
+
+        return $result['aggregate'] ?? null;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function toSql(): string
+    {
+        return $this->compileSelect()
+            . $this->compileFrom()
+            . $this->compileJoins()
+            . $this->compileWheres()
+            . $this->compileGroups()
+            . $this->compileHavings()
+            . $this->compileOrders()
+            . $this->compileLimit()
+            . $this->compileOffset();
+    }
+
+    /**
+     * Kompiliert den SELECT-Teil der Abfrage
+     *
+     * @return string
+     */
+    protected function compileSelect(): string
+    {
+        return 'SELECT ' . implode(', ', $this->columns);
+    }
+
+    /**
+     * Kompiliert den FROM-Teil der Abfrage
+     *
+     * @return string
+     */
+    protected function compileFrom(): string
+    {
+        return ' FROM ' . $this->table;
+    }
+
+    /**
+     * Kompiliert die JOIN-Teile der Abfrage
+     *
+     * @return string
+     */
+    protected function compileJoins(): string
+    {
+        if (empty($this->joins)) {
+            return '';
+        }
+
+        $sql = '';
+
+        foreach ($this->joins as $join) {
+            $sql .= ' ' . $join['type'] . ' JOIN ' . $join['table'] . ' ON ' . $join['condition'];
+        }
+
+        return $sql;
+    }
+
+    /**
+     * Kompiliert den WHERE-Teil der Abfrage
+     *
+     * @return string
+     */
+    protected function compileWheres(): string
+    {
+        if (empty($this->wheres)) {
+            return '';
+        }
+
+        return ' WHERE ' . implode(' AND ', $this->wheres);
+    }
+
+    /**
+     * Kompiliert den GROUP BY-Teil der Abfrage
+     *
+     * @return string
+     */
+    protected function compileGroups(): string
+    {
+        if (empty($this->groups)) {
+            return '';
+        }
+
+        return ' GROUP BY ' . implode(', ', $this->groups);
+    }
+
+    /**
+     * Kompiliert den HAVING-Teil der Abfrage
+     *
+     * @return string
+     */
+    protected function compileHavings(): string
+    {
+        if (empty($this->havings)) {
+            return '';
+        }
+
+        return ' HAVING ' . implode(' AND ', $this->havings);
+    }
+
+    /**
+     * Kompiliert den ORDER BY-Teil der Abfrage
+     *
+     * @return string
+     */
+    protected function compileOrders(): string
+    {
+        if (empty($this->orders)) {
+            return '';
+        }
+
+        return ' ORDER BY ' . implode(', ', $this->orders);
+    }
+
+    /**
+     * Kompiliert den LIMIT-Teil der Abfrage
+     *
+     * @return string
+     */
+    protected function compileLimit(): string
+    {
+        if ($this->limit === null) {
+            return '';
+        }
+
+        return ' LIMIT ' . $this->limit;
+    }
+
+    /**
+     * Kompiliert den OFFSET-Teil der Abfrage
+     *
+     * @return string
+     */
+    protected function compileOffset(): string
+    {
+        if ($this->offset === null) {
+            return '';
+        }
+
+        return ' OFFSET ' . $this->offset;
+    }
+}
