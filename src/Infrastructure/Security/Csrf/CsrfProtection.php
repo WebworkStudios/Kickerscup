@@ -11,7 +11,7 @@ use App\Infrastructure\Http\Contracts\RequestInterface;
 use App\Infrastructure\Security\Csrf\Contracts\CsrfProtectionInterface;
 use App\Infrastructure\Session\Contracts\SessionInterface;
 use Exception;
-use Random\RandomException;
+use Random\Randomizer;
 
 #[Injectable]
 #[Singleton]
@@ -47,13 +47,11 @@ class CsrfProtection implements CsrfProtectionInterface
         $lifetime = $lifetime ?? $this->config->defaultTokenLifetime ?? self::DEFAULT_TOKEN_LIFETIME;
 
         try {
-            // Generiere ein zufälliges Token
-            $token = bin2hex(random_bytes(32));
-        } catch (RandomException) {
-            // Fallback für den Fall, dass random_bytes() fehlschlägt
-            $token = bin2hex(openssl_random_pseudo_bytes(32));
+            // Verwende den neuen Randomizer von PHP 8.4
+            $randomizer = new Randomizer();
+            $token = bin2hex($randomizer->getBytes(32));
         } catch (Exception) {
-            // Absoluter Fallback
+            // Fallback
             $token = md5(uniqid((string)mt_rand(), true));
         }
 
@@ -147,6 +145,7 @@ class CsrfProtection implements CsrfProtectionInterface
             $allowedOrigins = array_merge($allowedOrigins, $this->config->trustedOrigins);
         }
 
+        // Verwende array_any aus PHP 8.4 anstelle einer eigenen Implementierung
         return array_any($allowedOrigins, fn($allowed) => str_starts_with($referer, $allowed));
     }
 
@@ -163,7 +162,7 @@ class CsrfProtection implements CsrfProtectionInterface
         // Prüfe, ob der aktuelle Pfad von der Konfiguration ausgeschlossen ist
         $path = $this->request->getPath();
 
+        // Verwende array_any aus PHP 8.4
         return !array_any($this->config->excludedPaths, fn($excludedPath) => str_starts_with($path, $excludedPath));
-
     }
 }

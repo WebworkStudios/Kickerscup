@@ -372,16 +372,20 @@ class Router implements RouterInterface
      */
     protected function matchPath(string $path, array $routes): array|false
     {
-        foreach ($routes as $routeInfo) {
-            if (preg_match($routeInfo['pattern'], $path, $matches)) {
-                // Extrahiere die Parameter-Werte aus den Matches
-                $parameters = $this->extractParameterValues($matches, $routeInfo['parameters']);
+        // Finde eine passende Route mit array_find
+        $match = array_find($routes, function ($routeInfo) use ($path) {
+            return preg_match($routeInfo['pattern'], $path);
+        });
 
-                return [
-                    'route' => $routeInfo,
-                    'parameters' => $parameters
-                ];
-            }
+        if ($match !== null) {
+            $matches = [];
+            preg_match($match['pattern'], $path, $matches);
+            $parameters = $this->extractParameterValues($matches, $match['parameters']);
+
+            return [
+                'route' => $match,
+                'parameters' => $parameters
+            ];
         }
 
         return false;
