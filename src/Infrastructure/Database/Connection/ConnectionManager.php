@@ -82,6 +82,33 @@ class ConnectionManager
     }
 
     /**
+     * Findet eine Datenbankverbindung anhand des Host-Namens
+     *
+     * Diese Methode durchsucht alle konfigurierten Verbindungen und gibt
+     * die erste Verbindung zurück, die dem angegebenen Host entspricht.
+     * Nutzt PHP 8.4's array_find_key für effiziente Suche.
+     *
+     * @param string $host Der zu suchende Host-Name
+     * @return ConnectionInterface|null Die gefundene Verbindung oder null, wenn keine gefunden wurde
+     */
+    public function findConnectionByHost(string $host): ?ConnectionInterface
+    {
+        // Finde den Konfigurationsnamen, der dem gesuchten Host entspricht
+        $connectionName = array_find_key(
+            $this->configurations,
+            fn($config) => $config->host === $host
+        );
+
+        // Wenn ein passender Name gefunden wurde, hole die zugehörige Verbindung
+        if ($connectionName !== null) {
+            return $this->getConnection($connectionName);
+        }
+
+        // Wenn nichts gefunden wurde, gib null zurück
+        return null;
+    }
+
+    /**
      * Holt eine Datenbankverbindung
      *
      * @param string|null $name Name der Verbindung (oder null für die Standardverbindung)

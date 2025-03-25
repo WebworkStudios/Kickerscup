@@ -62,6 +62,15 @@ class SelectQueryBuilder extends QueryBuilder
      */
     protected ?int $offset = null;
 
+    protected function createParameterName(string $prefix = 'param'): string
+    {
+        static $counters = [];
+        if (!isset($counters[$prefix])) {
+            $counters[$prefix] = 0;
+        }
+        return $prefix . '_' . ($counters[$prefix]++);
+    }
+
     /**
      * Setzt die zu selektierenden Spalten
      *
@@ -160,6 +169,13 @@ class SelectQueryBuilder extends QueryBuilder
      * @param array $values Werte
      * @return $this
      */
+    /**
+     * Fügt eine WHERE IN-Bedingung hinzu
+     *
+     * @param string $column Spalte
+     * @param array $values Werte
+     * @return $this
+     */
     public function whereIn(string $column, array $values): self
     {
         if (empty($values)) {
@@ -167,8 +183,20 @@ class SelectQueryBuilder extends QueryBuilder
             return $this;
         }
 
-        $placeholders = [];
+        // Für kleinere Arrays können OR-Bedingungen performanter sein als IN-Klauseln
+        if (count($values) <= 3) {
+            $conditions = [];
+            foreach ($values as $value) {
+                $paramName = $this->createParameterName('wherein');
+                $this->parameters[$paramName] = $value;
+                $conditions[] = "{$column} = :{$paramName}";
+            }
+            $this->wheres[] = "(" . implode(' OR ', $conditions) . ")";
+            return $this;
+        }
 
+        // Standard IN-Klausel für größere Arrays
+        $placeholders = [];
         foreach ($values as $value) {
             $paramName = $this->createParameterName('wherein');
             $this->parameters[$paramName] = $value;
@@ -176,9 +204,9 @@ class SelectQueryBuilder extends QueryBuilder
         }
 
         $this->wheres[] = "{$column} IN (" . implode(', ', $placeholders) . ")";
-
         return $this;
     }
+
 
     /**
      * Fügt eine WHERE NOT IN-Bedingung hinzu
@@ -193,8 +221,20 @@ class SelectQueryBuilder extends QueryBuilder
             return $this; // Keine Einschränkung, wenn keine Werte angegeben
         }
 
-        $placeholders = [];
+        // Für kleinere Arrays können AND-Bedingungen performanter sein als NOT IN-Klauseln
+        if (count($values) <= 3) {
+            $conditions = [];
+            foreach ($values as $value) {
+                $paramName = $this->createParameterName('wherenotin');
+                $this->parameters[$paramName] = $value;
+                $conditions[] = "{$column} != :{$paramName}";
+            }
+            $this->wheres[] = "(" . implode(' AND ', $conditions) . ")";
+            return $this;
+        }
 
+        // Standard NOT IN-Klausel für größere Arrays
+        $placeholders = [];
         foreach ($values as $value) {
             $paramName = $this->createParameterName('wherenotin');
             $this->parameters[$paramName] = $value;
@@ -202,7 +242,6 @@ class SelectQueryBuilder extends QueryBuilder
         }
 
         $this->wheres[] = "{$column} NOT IN (" . implode(', ', $placeholders) . ")";
-
         return $this;
     }
 
@@ -264,6 +303,37 @@ class SelectQueryBuilder extends QueryBuilder
             is_array($columns) ? $columns : [$columns]
         );
 
+        return $this;
+    }
+
+    /**
+     * Fügt mehrere Spalten zur GROUP BY-Klausel hinzu und optimiert die Verarbeitung
+     * für Anwendungsfälle mit mehreren Gruppierungskriterien.
+     *
+     * Diese Methode ist speziell für den Fall konzipiert, dass mehrere Spalten auf einmal
+     * gruppiert werden sollen. Sie validiert die Eingabe und stellt sicher, dass keine
+     * leeren Spaltennamen verwendet werden.
+     *
+     * @param array<string> $columns Ein Array von Spaltennamen für die Gruppierung
+     * @return $this Für Method-Chaining
+     * @throws QueryException Wenn leere Spaltennamen im Array enthalten sind
+     *
+     * @example
+     * // Gruppiere nach mehreren Spalten
+     * $query->groupByMultiple(['department', 'position', 'hire_year']);
+     *
+     * // Entspricht, ist aber lesbarer als:
+     * $query->groupBy('department')->groupBy('position')->groupBy('hire_year');
+     * // oder
+     * $query->groupBy(['department', 'position', 'hire_year']);
+     */
+    public function groupByMultiple(array $columns): self
+    {
+        if (array_any($columns, fn($col) => empty($col))) {
+            throw new QueryException("Empty column name in groupBy");
+        }
+
+        $this->groups = array_merge($this->groups, $columns);
         return $this;
     }
 

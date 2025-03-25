@@ -153,6 +153,54 @@ class UpdateQueryBuilder extends QueryBuilder
         return $this;
     }
 
+    public function bulkUpdate(array $records, string $keyColumn): int
+    {
+        if (empty($records)) {
+            return 0;
+        }
+
+        // Extrahiere alle eindeutigen Schlüsselwerte
+        $keyValues = array_map(fn($record) => $record[$keyColumn] ?? null, $records);
+
+        // Gruppiere Records nach Schlüssel für effizientere Updates
+        $recordsByKey = [];
+        foreach ($records as $record) {
+            if (!isset($record[$keyColumn])) continue;
+            $recordsByKey[$record[$keyColumn]] = $record;
+        }
+
+        // Führe eine Transaktion für alle Updates durch
+        $connection = $this->getConnection();
+        $connection->beginTransaction();
+
+        $updated = 0;
+        try {
+            foreach ($recordsByKey as $keyValue => $record) {
+                // Entferne den Schlüssel aus den zu aktualisierenden Daten
+                $updateData = array_filter($record, fn($k) => $k !== $keyColumn, ARRAY_FILTER_USE_KEY);
+
+                // Setze die Werte und die WHERE-Bedingung
+                $this->values($updateData)
+                    ->where($keyColumn, $keyValue);
+
+                // Führe das Update aus
+                $result = parent::execute();
+                $updated += $result->rowCount();
+
+                // Setze für das nächste Update zurück
+                $this->values = [];
+                $this->wheres = [];
+                $this->parameters = [];
+            }
+
+            $connection->commit();
+            return $updated;
+        } catch (\Exception $e) {
+            $connection->rollback();
+            throw $e;
+        }
+    }
+
     /**
      * {@inheritdoc}
      */
