@@ -68,6 +68,13 @@ class SelectQueryBuilder extends QueryBuilder
      */
     protected array $ctes = [];
 
+    /**
+     * Kombinierte Abfragen (UNION, INTERSECT, EXCEPT)
+     *
+     * @var array<array{type: string, query: SelectQueryBuilder}>
+     */
+    protected array $combines = [];
+
 
     protected function createParameterName(string $prefix = 'param'): string
     {
@@ -609,6 +616,9 @@ class SelectQueryBuilder extends QueryBuilder
     /**
      * {@inheritdoc}
      */
+    /**
+     * {@inheritdoc}
+     */
     public function toSql(): string
     {
         $withClause = $this->compileWith();
@@ -623,7 +633,41 @@ class SelectQueryBuilder extends QueryBuilder
             . $this->compileLimit()
             . $this->compileOffset();
 
-        return $withClause ? $withClause . ' ' . $mainQuery : $mainQuery;
+        // Wenn keine kombinierten Abfragen vorhanden sind, gib die normale Abfrage zurück
+        if (empty($this->combines)) {
+            return $withClause ? $withClause . ' ' . $mainQuery : $mainQuery;
+        }
+
+        // Erstelle einen Wrapper für die Hauptabfrage, wenn ORDER, LIMIT oder OFFSET vorhanden sind
+        // Diese müssen auf die Gesamtabfrage angewendet werden, nicht auf einzelne Teile
+        $needsWrapping = !empty($this->orders) || $this->limit !== null || $this->offset !== null;
+
+        $sql = $needsWrapping ? '(' . $mainQuery . ')' : $mainQuery;
+
+        // Füge die kombinierten Abfragen hinzu
+        foreach ($this->combines as $combine) {
+            $combineQuery = $combine['query']->toSql();
+            $sql .= ' ' . $combine['type'] . ' ' . $combineQuery;
+        }
+
+        // Wenn Wrapping nötig war, füge ORDER, LIMIT und OFFSET außerhalb des Wrappers hinzu
+        if ($needsWrapping) {
+            $sql = 'SELECT * FROM ' . $sql;
+
+            if (!empty($this->orders)) {
+                $sql .= ' ' . $this->compileOrders();
+            }
+
+            if ($this->limit !== null) {
+                $sql .= ' ' . $this->compileLimit();
+            }
+
+            if ($this->offset !== null) {
+                $sql .= ' ' . $this->compileOffset();
+            }
+        }
+
+        return $withClause ? $withClause . ' ' . $sql : $sql;
     }
 
     /**
@@ -684,6 +728,64 @@ class SelectQueryBuilder extends QueryBuilder
         $this->parameters = array_merge($this->parameters, $query->getParameters());
 
         $this->wheres[] = "NOT EXISTS (" . $query->toSql() . ")";
+
+        return $this;
+    }
+
+    /**
+     * Führt eine UNION-Operation mit einer anderen Abfrage durch
+     *
+     * @param SelectQueryBuilder $query Die zu kombinierende Abfrage
+     * @param bool $all Wenn true, werden Duplikate beibehalten (UNION ALL)
+     * @return $this
+     */
+    public function union(SelectQueryBuilder $query, bool $all = false): self
+    {
+        $this->combines[] = [
+            'type' => $all ? 'UNION ALL' : 'UNION',
+            'query' => $query
+        ];
+
+        // Parameter aus der kombinierten Abfrage übernehmen
+        $this->parameters = array_merge($this->parameters, $query->getParameters());
+
+        return $this;
+    }
+
+    /**
+     * Führt eine INTERSECT-Operation mit einer anderen Abfrage durch
+     *
+     * @param SelectQueryBuilder $query Die zu schneidende Abfrage
+     * @return $this
+     */
+    public function intersect(SelectQueryBuilder $query): self
+    {
+        $this->combines[] = [
+            'type' => 'INTERSECT',
+            'query' => $query
+        ];
+
+        // Parameter aus der kombinierten Abfrage übernehmen
+        $this->parameters = array_merge($this->parameters, $query->getParameters());
+
+        return $this;
+    }
+
+    /**
+     * Führt eine EXCEPT-Operation mit einer anderen Abfrage durch
+     *
+     * @param SelectQueryBuilder $query Die zu subtrahierende Abfrage
+     * @return $this
+     */
+    public function except(SelectQueryBuilder $query): self
+    {
+        $this->combines[] = [
+            'type' => 'EXCEPT',
+            'query' => $query
+        ];
+
+        // Parameter aus der kombinierten Abfrage übernehmen
+        $this->parameters = array_merge($this->parameters, $query->getParameters());
 
         return $this;
     }
