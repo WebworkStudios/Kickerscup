@@ -761,3 +761,228 @@
 [2025-03-24 22:30:13] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Http\\Contracts\\ResponseFactoryInterface"}
 [2025-03-24 22:30:13] [INFO] Request processed successfully {"status":404}
 [2025-03-24 22:30:13] [DEBUG] Request finished 
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouterInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouterInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Router"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Router"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Container\\Contracts\\ContainerInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Container\\Contracts\\ContainerInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\UrlGeneratorInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\UrlGeneratorInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\UrlGenerator"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\UrlGenerator"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Routing\\UrlGenerator"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Routing\\UrlGenerator"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\UrlGeneratorInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\UrlGeneratorInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Http\\Contracts\\ResponseFactoryInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Http\\Contracts\\ResponseFactoryInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Http\\Factory\\ResponseFactory"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Http\\Factory\\ResponseFactory"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Http\\Factory\\ResponseFactory"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Http\\Factory\\ResponseFactory"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Http\\Contracts\\ResponseFactoryInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Http\\Contracts\\ResponseFactoryInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Logging\\Contracts\\LoggerInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Logging\\Contracts\\LoggerInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Routing\\Router"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Routing\\Router"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouterInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouterInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouteScannerInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouteScannerInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\RouteScanner"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\RouteScanner"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouterInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouterInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Router"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Router"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouterInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouterInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\UrlGeneratorInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\UrlGeneratorInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\UrlGenerator"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\UrlGenerator"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\UrlGeneratorInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\UrlGeneratorInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Logging\\Contracts\\LoggerInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Logging\\Contracts\\LoggerInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Container\\Contracts\\ContainerInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Container\\Contracts\\ContainerInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouteScannerInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouteScannerInterface"}
+[2025-03-25 09:21:09] [INFO] RouteScanner: Starting scan {"directories":["E:\\xampp\\htdocs\\kickerscup/src/Presentation/Controllers","E:\\xampp\\htdocs\\kickerscup/src/Presentation/Actions"],"namespace":"App\\Presentation"}
+[2025-03-25 09:21:09] [INFO] RouteScanner: Starting scan {"directories":["E:\\xampp\\htdocs\\kickerscup/src/Presentation/Controllers","E:\\xampp\\htdocs\\kickerscup/src/Presentation/Actions"],"namespace":"App\\Presentation"}
+[2025-03-25 09:21:09] [WARNING] RouteScanner: Directory not found {"directory":"E:\\xampp\\htdocs\\kickerscup/src/Presentation/Controllers"}
+[2025-03-25 09:21:09] [WARNING] RouteScanner: Directory not found {"directory":"E:\\xampp\\htdocs\\kickerscup/src/Presentation/Controllers"}
+[2025-03-25 09:21:09] [DEBUG] RouteScanner: Scanning directory {"directory":"E:\\xampp\\htdocs\\kickerscup/src/Presentation/Actions"}
+[2025-03-25 09:21:09] [DEBUG] RouteScanner: Scanning directory {"directory":"E:\\xampp\\htdocs\\kickerscup/src/Presentation/Actions"}
+[2025-03-25 09:21:09] [DEBUG] RouteScanner: Processing file {"file":"E:\\xampp\\htdocs\\kickerscup/src/Presentation/Actions\\HelloWorldAction.php","base_namespace":"App\\Presentation"}
+[2025-03-25 09:21:09] [DEBUG] RouteScanner: Processing file {"file":"E:\\xampp\\htdocs\\kickerscup/src/Presentation/Actions\\HelloWorldAction.php","base_namespace":"App\\Presentation"}
+[2025-03-25 09:21:09] [DEBUG] RouteScanner: Using direct namespace mapping {"file":"E:\\xampp\\htdocs\\kickerscup/src/Presentation/Actions\\HelloWorldAction.php","attempted_class":"App\\Presentation\\Actions\\HelloWorldAction"}
+[2025-03-25 09:21:09] [DEBUG] RouteScanner: Using direct namespace mapping {"file":"E:\\xampp\\htdocs\\kickerscup/src/Presentation/Actions\\HelloWorldAction.php","attempted_class":"App\\Presentation\\Actions\\HelloWorldAction"}
+[2025-03-25 09:21:09] [DEBUG] RouteScanner: Class found {"class":"App\\Presentation\\Actions\\HelloWorldAction"}
+[2025-03-25 09:21:09] [DEBUG] RouteScanner: Class found {"class":"App\\Presentation\\Actions\\HelloWorldAction"}
+[2025-03-25 09:21:09] [DEBUG] RouteScanner: Registered class route {"class":"App\\Presentation\\Actions\\HelloWorldAction","path":"/hello","methods":"GET","name":"hello.world"}
+[2025-03-25 09:21:09] [DEBUG] RouteScanner: Registered class route {"class":"App\\Presentation\\Actions\\HelloWorldAction","path":"/hello","methods":"GET","name":"hello.world"}
+[2025-03-25 09:21:09] [DEBUG] RouteScanner: Found routes in class {"class":"App\\Presentation\\Actions\\HelloWorldAction","count":1}
+[2025-03-25 09:21:09] [DEBUG] RouteScanner: Found routes in class {"class":"App\\Presentation\\Actions\\HelloWorldAction","count":1}
+[2025-03-25 09:21:09] [DEBUG] RouteScanner: Processing file {"file":"E:\\xampp\\htdocs\\kickerscup/src/Presentation/Actions\\Users\\UserShowAction.php","base_namespace":"App\\Presentation"}
+[2025-03-25 09:21:09] [DEBUG] RouteScanner: Processing file {"file":"E:\\xampp\\htdocs\\kickerscup/src/Presentation/Actions\\Users\\UserShowAction.php","base_namespace":"App\\Presentation"}
+[2025-03-25 09:21:09] [DEBUG] RouteScanner: Using direct namespace mapping {"file":"E:\\xampp\\htdocs\\kickerscup/src/Presentation/Actions\\Users\\UserShowAction.php","attempted_class":"App\\Presentation\\Actions\\UserShowAction"}
+[2025-03-25 09:21:09] [DEBUG] RouteScanner: Using direct namespace mapping {"file":"E:\\xampp\\htdocs\\kickerscup/src/Presentation/Actions\\Users\\UserShowAction.php","attempted_class":"App\\Presentation\\Actions\\UserShowAction"}
+[2025-03-25 09:21:09] [DEBUG] RouteScanner: Trying PSR-4 namespace {"class":"App\\Presentation\\Actions\\Users\\UserShowAction"}
+[2025-03-25 09:21:09] [DEBUG] RouteScanner: Trying PSR-4 namespace {"class":"App\\Presentation\\Actions\\Users\\UserShowAction"}
+[2025-03-25 09:21:09] [DEBUG] RouteScanner: PSR-4 class found {"class":"App\\Presentation\\Actions\\Users\\UserShowAction"}
+[2025-03-25 09:21:09] [DEBUG] RouteScanner: PSR-4 class found {"class":"App\\Presentation\\Actions\\Users\\UserShowAction"}
+[2025-03-25 09:21:09] [DEBUG] RouteScanner: Registered class route {"class":"App\\Presentation\\Actions\\Users\\UserShowAction","path":"/users/{id}","methods":"GET","name":"users.show"}
+[2025-03-25 09:21:09] [DEBUG] RouteScanner: Registered class route {"class":"App\\Presentation\\Actions\\Users\\UserShowAction","path":"/users/{id}","methods":"GET","name":"users.show"}
+[2025-03-25 09:21:09] [DEBUG] RouteScanner: Found routes in class {"class":"App\\Presentation\\Actions\\Users\\UserShowAction","count":1}
+[2025-03-25 09:21:09] [DEBUG] RouteScanner: Found routes in class {"class":"App\\Presentation\\Actions\\Users\\UserShowAction","count":1}
+[2025-03-25 09:21:09] [INFO] RouteScanner: Directory scan completed {"directory":"E:\\xampp\\htdocs\\kickerscup/src/Presentation/Actions","scanned_files":2,"found_routes":2}
+[2025-03-25 09:21:09] [INFO] RouteScanner: Directory scan completed {"directory":"E:\\xampp\\htdocs\\kickerscup/src/Presentation/Actions","scanned_files":2,"found_routes":2}
+[2025-03-25 09:21:09] [INFO] RouteScanner: Scan completed 
+[2025-03-25 09:21:09] [INFO] RouteScanner: Scan completed 
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouterInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouterInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Router"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Router"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouterInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouterInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Application\\Application"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Application\\Application"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Container\\Contracts\\ContainerInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Container\\Contracts\\ContainerInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Http\\Contracts\\RequestFactoryInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Http\\Contracts\\RequestFactoryInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Http\\Factory\\RequestFactory"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Http\\Factory\\RequestFactory"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Http\\Contracts\\RequestFactoryInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Http\\Contracts\\RequestFactoryInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouterInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouterInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Router"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Router"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouterInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouterInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Session\\Contracts\\SessionInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Session\\Contracts\\SessionInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Session\\Session"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Session\\Session"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Session\\FlashMessageProvider"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Session\\FlashMessageProvider"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Container\\Contracts\\ContainerInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Container\\Contracts\\ContainerInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Session\\FlashMessageProvider"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Session\\FlashMessageProvider"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Session\\SessionConfiguration"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Session\\SessionConfiguration"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Session\\SessionConfiguration"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Session\\SessionConfiguration"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Session\\Contracts\\SessionStoreInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Session\\Contracts\\SessionStoreInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Session\\SessionConfiguration"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Session\\SessionConfiguration"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Session\\Contracts\\SessionStoreInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Session\\Contracts\\SessionStoreInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Logging\\Contracts\\LoggerInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Logging\\Contracts\\LoggerInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Session\\Session"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Session\\Session"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Session\\Contracts\\SessionInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Session\\Contracts\\SessionInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Logging\\Contracts\\LoggerInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Logging\\Contracts\\LoggerInterface"}
+[2025-03-25 09:21:09] [INFO] Application starting 
+[2025-03-25 09:21:09] [INFO] Application starting 
+[2025-03-25 09:21:09] [DEBUG] Session started {"id":"8k1cfh051knkjgrrfojhbsm2eh"}
+[2025-03-25 09:21:09] [DEBUG] Session started {"id":"kf9ssd3tcdjjqbo17087n4muk9"}
+[2025-03-25 09:21:09] [WARNING] Invalid session detected {"id":"8k1cfh051knkjgrrfojhbsm2eh","ip":"2003:e6:173f:5200:9a9b:cbff:febd:4248"}
+[2025-03-25 09:21:09] [WARNING] Invalid session detected {"id":"kf9ssd3tcdjjqbo17087n4muk9","ip":"192.168.178.1"}
+[2025-03-25 09:21:09] [DEBUG] Request created {"method":"GET","path":"/","ip":"2003:e6:173f:5200:9a9b:cbff:febd:4248"}
+[2025-03-25 09:21:09] [DEBUG] Request created {"method":"GET","path":"/","ip":"192.168.178.1"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Http\\Contracts\\ResponseFactoryInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Http\\Contracts\\ResponseFactoryInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Http\\Factory\\ResponseFactory"}
+[2025-03-25 09:21:09] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Http\\Factory\\ResponseFactory"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Http\\Contracts\\ResponseFactoryInterface"}
+[2025-03-25 09:21:09] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Http\\Contracts\\ResponseFactoryInterface"}
+[2025-03-25 09:21:09] [INFO] Request processed successfully {"status":200}
+[2025-03-25 09:21:09] [INFO] Request processed successfully {"status":200}
+[2025-03-25 09:21:09] [DEBUG] Request finished 
+[2025-03-25 09:21:09] [DEBUG] Request finished 
+[2025-03-25 09:54:16] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouterInterface"}
+[2025-03-25 09:54:16] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Router"}
+[2025-03-25 09:54:16] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Container\\Contracts\\ContainerInterface"}
+[2025-03-25 09:54:16] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\UrlGeneratorInterface"}
+[2025-03-25 09:54:16] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\UrlGenerator"}
+[2025-03-25 09:54:16] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Routing\\UrlGenerator"}
+[2025-03-25 09:54:16] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\UrlGeneratorInterface"}
+[2025-03-25 09:54:16] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Http\\Contracts\\ResponseFactoryInterface"}
+[2025-03-25 09:54:16] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Http\\Factory\\ResponseFactory"}
+[2025-03-25 09:54:16] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Http\\Factory\\ResponseFactory"}
+[2025-03-25 09:54:16] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Http\\Contracts\\ResponseFactoryInterface"}
+[2025-03-25 09:54:16] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Logging\\Contracts\\LoggerInterface"}
+[2025-03-25 09:54:16] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Routing\\Router"}
+[2025-03-25 09:54:16] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouterInterface"}
+[2025-03-25 09:54:16] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouteScannerInterface"}
+[2025-03-25 09:54:16] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\RouteScanner"}
+[2025-03-25 09:54:16] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouterInterface"}
+[2025-03-25 09:54:16] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Router"}
+[2025-03-25 09:54:16] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouterInterface"}
+[2025-03-25 09:54:16] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\UrlGeneratorInterface"}
+[2025-03-25 09:54:16] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\UrlGenerator"}
+[2025-03-25 09:54:17] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\UrlGeneratorInterface"}
+[2025-03-25 09:54:17] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Logging\\Contracts\\LoggerInterface"}
+[2025-03-25 09:54:17] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Container\\Contracts\\ContainerInterface"}
+[2025-03-25 09:54:17] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouteScannerInterface"}
+[2025-03-25 09:54:17] [INFO] RouteScanner: Starting scan {"directories":["E:\\xampp\\htdocs\\kickerscup/src/Presentation/Controllers","E:\\xampp\\htdocs\\kickerscup/src/Presentation/Actions"],"namespace":"App\\Presentation"}
+[2025-03-25 09:54:17] [WARNING] RouteScanner: Directory not found {"directory":"E:\\xampp\\htdocs\\kickerscup/src/Presentation/Controllers"}
+[2025-03-25 09:54:17] [DEBUG] RouteScanner: Scanning directory {"directory":"E:\\xampp\\htdocs\\kickerscup/src/Presentation/Actions"}
+[2025-03-25 09:54:17] [DEBUG] RouteScanner: Processing file {"file":"E:\\xampp\\htdocs\\kickerscup/src/Presentation/Actions\\HelloWorldAction.php","base_namespace":"App\\Presentation"}
+[2025-03-25 09:54:17] [DEBUG] RouteScanner: Using direct namespace mapping {"file":"E:\\xampp\\htdocs\\kickerscup/src/Presentation/Actions\\HelloWorldAction.php","attempted_class":"App\\Presentation\\Actions\\HelloWorldAction"}
+[2025-03-25 09:54:17] [DEBUG] RouteScanner: Class found {"class":"App\\Presentation\\Actions\\HelloWorldAction"}
+[2025-03-25 09:54:17] [DEBUG] RouteScanner: Registered class route {"class":"App\\Presentation\\Actions\\HelloWorldAction","path":"/hello","methods":"GET","name":"hello.world"}
+[2025-03-25 09:54:17] [DEBUG] RouteScanner: Found routes in class {"class":"App\\Presentation\\Actions\\HelloWorldAction","count":1}
+[2025-03-25 09:54:17] [DEBUG] RouteScanner: Processing file {"file":"E:\\xampp\\htdocs\\kickerscup/src/Presentation/Actions\\Users\\UserShowAction.php","base_namespace":"App\\Presentation"}
+[2025-03-25 09:54:17] [DEBUG] RouteScanner: Using direct namespace mapping {"file":"E:\\xampp\\htdocs\\kickerscup/src/Presentation/Actions\\Users\\UserShowAction.php","attempted_class":"App\\Presentation\\Actions\\UserShowAction"}
+[2025-03-25 09:54:17] [DEBUG] RouteScanner: Trying PSR-4 namespace {"class":"App\\Presentation\\Actions\\Users\\UserShowAction"}
+[2025-03-25 09:54:17] [DEBUG] RouteScanner: PSR-4 class found {"class":"App\\Presentation\\Actions\\Users\\UserShowAction"}
+[2025-03-25 09:54:17] [DEBUG] RouteScanner: Registered class route {"class":"App\\Presentation\\Actions\\Users\\UserShowAction","path":"/users/{id}","methods":"GET","name":"users.show"}
+[2025-03-25 09:54:17] [DEBUG] RouteScanner: Found routes in class {"class":"App\\Presentation\\Actions\\Users\\UserShowAction","count":1}
+[2025-03-25 09:54:17] [INFO] RouteScanner: Directory scan completed {"directory":"E:\\xampp\\htdocs\\kickerscup/src/Presentation/Actions","scanned_files":2,"found_routes":2}
+[2025-03-25 09:54:17] [INFO] RouteScanner: Scan completed 
+[2025-03-25 09:54:17] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouterInterface"}
+[2025-03-25 09:54:17] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Router"}
+[2025-03-25 09:54:17] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouterInterface"}
+[2025-03-25 09:54:17] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Application\\Application"}
+[2025-03-25 09:54:17] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Container\\Contracts\\ContainerInterface"}
+[2025-03-25 09:54:17] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Http\\Contracts\\RequestFactoryInterface"}
+[2025-03-25 09:54:17] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Http\\Factory\\RequestFactory"}
+[2025-03-25 09:54:17] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Http\\Contracts\\RequestFactoryInterface"}
+[2025-03-25 09:54:17] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouterInterface"}
+[2025-03-25 09:54:17] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Routing\\Router"}
+[2025-03-25 09:54:17] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Routing\\Contracts\\RouterInterface"}
+[2025-03-25 09:54:17] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Session\\Contracts\\SessionInterface"}
+[2025-03-25 09:54:17] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Session\\Session"}
+[2025-03-25 09:54:17] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Session\\FlashMessageProvider"}
+[2025-03-25 09:54:17] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Container\\Contracts\\ContainerInterface"}
+[2025-03-25 09:54:17] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Session\\FlashMessageProvider"}
+[2025-03-25 09:54:17] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Session\\SessionConfiguration"}
+[2025-03-25 09:54:17] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Session\\SessionConfiguration"}
+[2025-03-25 09:54:17] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Session\\Contracts\\SessionStoreInterface"}
+[2025-03-25 09:54:17] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Session\\SessionConfiguration"}
+[2025-03-25 09:54:17] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Session\\Contracts\\SessionStoreInterface"}
+[2025-03-25 09:54:17] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Logging\\Contracts\\LoggerInterface"}
+[2025-03-25 09:54:17] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Session\\Session"}
+[2025-03-25 09:54:17] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Session\\Contracts\\SessionInterface"}
+[2025-03-25 09:54:17] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Logging\\Contracts\\LoggerInterface"}
+[2025-03-25 09:54:17] [INFO] Application starting 
+[2025-03-25 09:54:17] [DEBUG] Session started {"id":"nfksbutu4bdr6uhcd3levkq6qk"}
+[2025-03-25 09:54:17] [WARNING] Invalid session detected {"id":"nfksbutu4bdr6uhcd3levkq6qk","ip":"192.168.178.1"}
+[2025-03-25 09:54:17] [DEBUG] Request created {"method":"GET","path":"/","ip":"192.168.178.1"}
+[2025-03-25 09:54:17] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Http\\Contracts\\ResponseFactoryInterface"}
+[2025-03-25 09:54:17] [DEBUG] Resolving dependency {"abstract":"App\\Infrastructure\\Http\\Factory\\ResponseFactory"}
+[2025-03-25 09:54:17] [DEBUG] Resolved dependency {"abstract":"App\\Infrastructure\\Http\\Contracts\\ResponseFactoryInterface"}
+[2025-03-25 09:54:17] [INFO] Request processed successfully {"status":200}
+[2025-03-25 09:54:17] [DEBUG] Request finished 

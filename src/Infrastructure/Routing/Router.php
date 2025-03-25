@@ -896,7 +896,7 @@ class Router implements RouterInterface
         foreach ($this->corsConfigurations as $routePath => $config) {
             // Pfad endet mit * (Wildcard)
             if (str_ends_with($routePath, '*')) {
-                $prefix = rtrim(substr($routePath, 0, -1), '/');
+                $prefix = rtrim(string: substr($routePath, 0, -1), characters: '/');
                 if (str_starts_with($path, $prefix)) {
                     return $config;
                 }

@@ -211,7 +211,7 @@ class FileLogger implements LoggerInterface
 
         $directory = dirname($logFile);
         if (!is_dir($directory)) {
-            mkdir($directory, 0755, true);
+            mkdir($directory, permissions: 0755, recursive: true);
         }
 
         $result = file_put_contents(

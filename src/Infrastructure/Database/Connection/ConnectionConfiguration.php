@@ -7,7 +7,7 @@ namespace App\Infrastructure\Database\Connection;
 use App\Infrastructure\Container\Attributes\Injectable;
 
 #[Injectable]
-class ConnectionConfiguration
+readonly class ConnectionConfiguration
 {
     /**
      * @param string $driver Datenbanktyp (mysql, pgsql, sqlite)
@@ -20,14 +20,14 @@ class ConnectionConfiguration
      * @param array $options Zusätzliche PDO-Optionen
      */
     public function __construct(
-        public readonly string  $driver = 'mysql',
-        public readonly string  $host = 'localhost',
-        public readonly string  $database = '',
-        public readonly string  $username = '',
-        public readonly string  $password = '',
-        public readonly ?int    $port = null,
-        public readonly ?string $charset = 'utf8mb4',
-        public readonly array   $options = []
+        public string  $driver = 'mysql',
+        public string  $host = 'localhost',
+        public string  $database = '',
+        public string  $username = '',
+        public string  $password = '',
+        public ?int    $port = null,
+        public ?string $charset = 'utf8mb4',
+        public array   $options = []
     )
     {
     }
