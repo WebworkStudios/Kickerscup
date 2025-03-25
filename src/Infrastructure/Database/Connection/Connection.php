@@ -38,7 +38,18 @@ class Connection implements ConnectionInterface
     public function query(string $query, array $params = []): PDOStatement
     {
         try {
+            $startTime = microtime(true);
             $statement = $this->prepareAndExecute($query, $params);
+            $endTime = microtime(true);
+
+            // Log query if debugging is enabled
+            if ($this->container->has(QueryDebugger::class)) {
+                $debugger = $this->container->get(QueryDebugger::class);
+                if ($debugger->isEnabled()) {
+                    $debugger->logQuery($query, $params, $endTime - $startTime);
+                }
+            }
+
             $this->reconnectAttempts = 0; // Reset reconnect counter on success
             return $statement;
         } catch (PDOException $e) {
@@ -208,9 +219,37 @@ class Connection implements ConnectionInterface
 
     private function prepareAndExecute(string $query, array $params): PDOStatement
     {
-        $statement = $this->getPdo()->prepare($query);
+        $cacheKey = null;
+        $statement = null;
+
+        // Try to get from cache if available
+        if ($this->container->has(StatementCache::class)) {
+            $cache = $this->container->get(StatementCache::class);
+            $cacheKey = $this->generateStatementCacheKey($query);
+            $statement = $cache->get($cacheKey);
+        }
+
+        // If not in cache or cache not available, prepare statement
+        if ($statement === null) {
+            $statement = $this->getPdo()->prepare($query);
+
+            // Store in cache if available
+            if ($cacheKey !== null && isset($cache)) {
+                $cache->put($cacheKey, $statement);
+            }
+        }
+
+        // Execute with parameters
         $statement->execute($params);
+
         return $statement;
+    }
+
+    private function generateStatementCacheKey(string $query): string
+    {
+        // Generate a unique key for the query
+        // Include connection info to avoid conflicts between different connections
+        return md5($this->config->driver . $this->config->host . $this->config->database . $query);
     }
 
     private function isConnectionLossError(PDOException $e): bool
