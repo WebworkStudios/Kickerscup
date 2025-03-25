@@ -6,7 +6,6 @@ declare(strict_types=1);
 namespace App\Infrastructure\Database\QueryBuilder;
 
 use App\Infrastructure\Database\Exceptions\QueryException;
-use PDO;
 
 class InsertQueryBuilder extends QueryBuilder
 {
@@ -57,6 +56,7 @@ class InsertQueryBuilder extends QueryBuilder
 
         // Zurückgeben der ID für das zuletzt eingefügte Element
         $lastId = $pdoInstance->lastInsertId();
+        $this->invalidateStatementCache();
 
         // Konvertiere in Integer, wenn möglich
         return is_numeric($lastId) ? (int)$lastId : $lastId;

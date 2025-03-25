@@ -5,9 +5,12 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Database\QueryBuilder;
 
+use App\Infrastructure\Container\Contracts\ContainerInterface;
+use App\Infrastructure\Database\Cache\StatementCache;
 use App\Infrastructure\Database\Connection\ConnectionManager;
 use App\Infrastructure\Database\Contracts\ConnectionInterface;
 use App\Infrastructure\Database\Contracts\QueryBuilderInterface;
+use App\Infrastructure\Database\Debug\QueryDebugger;
 use App\Infrastructure\Database\Exceptions\QueryException;
 use PDOStatement;
 
@@ -31,9 +34,11 @@ abstract class QueryBuilder implements QueryBuilderInterface
     protected ?ConnectionInterface $connection = null;
 
     public function __construct(
-        protected readonly ConnectionManager $connectionManager
+        protected readonly ConnectionManager $connectionManager,
+        ?ContainerInterface                  $container = null
     )
     {
+        $this->container = $container;
     }
 
     /**
@@ -146,5 +151,49 @@ abstract class QueryBuilder implements QueryBuilderInterface
     protected function createParameterName(string $prefix = 'param'): string
     {
         return $prefix . '_' . count($this->parameters);
+    }
+
+    /**
+     * Aktiviert Debugging für diese Abfrage
+     *
+     * @param bool $withBacktrace Ob ein Backtrace für die Abfrage erstellt werden soll
+     * @return static
+     */
+    public function debug(bool $withBacktrace = false): static
+    {
+        if ($this->container && $this->container->has(QueryDebugger::class)) {
+            $debugger = $this->container->get(QueryDebugger::class);
+            $debugger->enable($withBacktrace);
+        }
+
+        return $this;
+    }
+
+    /**
+     * Gibt die ausformatierte SQL-Abfrage zurück (mit eingefügten Parameterwerten)
+     *
+     * @return string
+     */
+    public function toFormattedSql(): string
+    {
+        if ($this->container && $this->container->has(QueryDebugger::class)) {
+            $debugger = $this->container->get(QueryDebugger::class);
+            return $debugger->formatQuery($this->toSql(), $this->parameters);
+        }
+
+        return $this->toSql();
+    }
+
+    /**
+     * Invalidiert den Statement-Cache für Abfragen dieser Tabelle
+     *
+     * @return void
+     */
+    protected function invalidateStatementCache(): void
+    {
+        if ($this->container && $this->container->has(StatementCache::class)) {
+            $cache = $this->container->get(StatementCache::class);
+            $cache->invalidateByPrefix($this->table);
+        }
     }
 }

@@ -6,7 +6,6 @@ declare(strict_types=1);
 namespace App\Infrastructure\Database\QueryBuilder;
 
 use App\Infrastructure\Database\Exceptions\QueryException;
-use PDO;
 
 class SelectQueryBuilder extends QueryBuilder
 {
@@ -61,6 +60,14 @@ class SelectQueryBuilder extends QueryBuilder
      * OFFSET-Klausel
      */
     protected ?int $offset = null;
+
+    /**
+     * CTEs (Common Table Expressions) für WITH-Klauseln
+     *
+     * @var array<string, Subquery|SelectQueryBuilder>
+     */
+    protected array $ctes = [];
+
 
     protected function createParameterName(string $prefix = 'param'): string
     {
@@ -136,6 +143,67 @@ class SelectQueryBuilder extends QueryBuilder
         ];
 
         return $this;
+    }
+
+    /**
+     * Fügt eine CTE (Common Table Expression) für WITH-Klausel hinzu
+     *
+     * @param string $name Name der CTE
+     * @param SelectQueryBuilder|Closure $query Die Subquery oder eine Funktion, die einen SelectQueryBuilder erhält
+     * @param array<string>|null $columns Optional columns for the CTE
+     * @return $this
+     */
+    public function with(string $name, SelectQueryBuilder|\Closure $query, ?array $columns = null): self
+    {
+        if ($query instanceof \Closure) {
+            $builder = new SelectQueryBuilder($this->connectionManager);
+            $query($builder);
+            $query = $builder;
+        }
+
+        // Create a Subquery instance
+        $subquery = new Subquery($query, $name);
+
+        // If columns are provided, store them with the CTE
+        if ($columns !== null) {
+            $subquery->withColumns($columns);
+        }
+
+        $this->ctes[$name] = $subquery;
+
+        // Merge parameters from CTE to parent query
+        $this->parameters = array_merge($this->parameters, $query->getParameters());
+
+        return $this;
+    }
+
+    /**
+     * Kompiliert den WITH-Teil der Abfrage für CTEs
+     *
+     * @return string
+     */
+    protected function compileWith(): string
+    {
+        if (empty($this->ctes)) {
+            return '';
+        }
+
+        $expressions = [];
+
+        foreach ($this->ctes as $name => $cte) {
+            $columns = '';
+            if (method_exists($cte, 'getColumns') && !empty($cte->getColumns())) {
+                $columns = '(' . implode(', ', $cte->getColumns()) . ')';
+            }
+
+            if ($cte instanceof Subquery) {
+                $expressions[] = $name . $columns . ' AS (' . $cte->getBuilder()->toSql() . ')';
+            } else {
+                $expressions[] = $name . $columns . ' AS (' . $cte->toSql() . ')';
+            }
+        }
+
+        return 'WITH ' . implode(', ', $expressions);
     }
 
     /**
@@ -543,7 +611,9 @@ class SelectQueryBuilder extends QueryBuilder
      */
     public function toSql(): string
     {
-        return $this->compileSelect()
+        $withClause = $this->compileWith();
+
+        $mainQuery = $this->compileSelect()
             . $this->compileFrom()
             . $this->compileJoins()
             . $this->compileWheres()
@@ -552,6 +622,70 @@ class SelectQueryBuilder extends QueryBuilder
             . $this->compileOrders()
             . $this->compileLimit()
             . $this->compileOffset();
+
+        return $withClause ? $withClause . ' ' . $mainQuery : $mainQuery;
+    }
+
+    /**
+     * Erstellt eine Subquery
+     *
+     * @param \Closure $callback Eine Funktion, die einen SelectQueryBuilder erhält
+     * @param string $alias Alias für die Subquery
+     * @return Subquery Die erstellte Subquery
+     */
+    public function subquery(\Closure $callback, string $alias): Subquery
+    {
+        $builder = new SelectQueryBuilder($this->connectionManager);
+        $callback($builder);
+
+        // Merge parameters from subquery to parent query
+        $this->parameters = array_merge($this->parameters, $builder->getParameters());
+
+        return new Subquery($builder, $alias);
+    }
+
+    /**
+     * Fügt eine EXISTS-Bedingung hinzu
+     *
+     * @param SelectQueryBuilder|Closure $query Die Subquery oder eine Funktion, die einen SelectQueryBuilder erhält
+     * @return $this
+     */
+    public function whereExists(SelectQueryBuilder|\Closure $query): self
+    {
+        if ($query instanceof \Closure) {
+            $builder = new SelectQueryBuilder($this->connectionManager);
+            $query($builder);
+            $query = $builder;
+        }
+
+        // Merge parameters from subquery to parent query
+        $this->parameters = array_merge($this->parameters, $query->getParameters());
+
+        $this->wheres[] = "EXISTS (" . $query->toSql() . ")";
+
+        return $this;
+    }
+
+    /**
+     * Fügt eine NOT EXISTS-Bedingung hinzu
+     *
+     * @param SelectQueryBuilder|Closure $query Die Subquery oder eine Funktion, die einen SelectQueryBuilder erhält
+     * @return $this
+     */
+    public function whereNotExists(SelectQueryBuilder|\Closure $query): self
+    {
+        if ($query instanceof \Closure) {
+            $builder = new SelectQueryBuilder($this->connectionManager);
+            $query($builder);
+            $query = $builder;
+        }
+
+        // Merge parameters from subquery to parent query
+        $this->parameters = array_merge($this->parameters, $query->getParameters());
+
+        $this->wheres[] = "NOT EXISTS (" . $query->toSql() . ")";
+
+        return $this;
     }
 
     /**

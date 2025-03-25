@@ -102,8 +102,11 @@ class DeleteQueryBuilder extends QueryBuilder
         }
 
         $sql = $this->toSql();
+        $statement = $this->getConnection()->query($sql, $this->parameters);
 
-        return $this->getConnection()->query($sql, $this->parameters);
+        $this->invalidateStatementCache();
+
+        return $statement;
     }
 
     /**

@@ -23,6 +23,19 @@ class DatabaseServiceProvider extends ServiceProvider
     {
         // Registriere den Connection Manager
         $container->singleton(ConnectionManager::class);
+        // Register the query debugger
+        $container->singleton(Debug\QueryDebugger::class);
+        // Register the statement cache
+        $container->singleton(Cache\StatementCache::class, function () {
+            // Get max size from config if available
+            $maxSize = 100; // Default
+            if ($container->has('config')) {
+                $config = $container->get('config');
+                $maxSize = $config->get('database.statement_cache.max_size', 100);
+            }
+
+            return new Cache\StatementCache($maxSize);
+        });
 
         // Registriere den Result Handler
         $container->bind(ResultHandlerInterface::class, ResultHandler::class);
