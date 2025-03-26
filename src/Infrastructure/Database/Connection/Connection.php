@@ -6,6 +6,8 @@ declare(strict_types=1);
 namespace App\Infrastructure\Database\Connection;
 
 use App\Infrastructure\Container\Contracts\ContainerInterface;
+use App\Infrastructure\Container\Exceptions\ContainerException;
+use App\Infrastructure\Container\Exceptions\NotFoundException;
 use App\Infrastructure\Database\Cache\StatementCache;
 use App\Infrastructure\Database\Contracts\ConnectionInterface;
 use App\Infrastructure\Database\Debug\QueryDebugger;
@@ -31,7 +33,7 @@ class Connection implements ConnectionInterface
     public function __construct(
         private readonly ConnectionConfiguration $config,
         private readonly LoggerInterface         $logger,
-        ?ContainerInterface $container = null
+        ?ContainerInterface                      $container = null
     )
     {
         $this->container = $container;
@@ -46,6 +48,14 @@ class Connection implements ConnectionInterface
         return $this->pdo;
     }
 
+    /**
+     * @param string $query
+     * @param array $params
+     * @return PDOStatement
+     * @throws ConnectionException
+     * @throws ContainerException
+     * @throws NotFoundException
+     */
     public function query(string $query, array $params = []): PDOStatement
     {
         try {
@@ -54,7 +64,7 @@ class Connection implements ConnectionInterface
             $endTime = microtime(true);
 
             // Log query if debugging is enabled
-            if ($this->container->has(QueryDebugger::class)) {
+            if ($this->container !== null && $this->container->has(QueryDebugger::class)) {
                 $debugger = $this->container->get(QueryDebugger::class);
                 if ($debugger->isEnabled()) {
                     $debugger->logQuery($query, $params, $endTime - $startTime);
@@ -64,6 +74,7 @@ class Connection implements ConnectionInterface
             $this->reconnectAttempts = 0; // Reset reconnect counter on success
             return $statement;
         } catch (PDOException $e) {
+
             // Verbindungsverlust erkennen (MySQL-spezifische Fehlercodes)
             if ($this->isConnectionLossError($e) && $this->reconnectAttempts < self::MAX_RECONNECT_ATTEMPTS) {
                 $this->reconnectAttempts++;
@@ -228,13 +239,20 @@ class Connection implements ConnectionInterface
         return "sqlite:{$this->config->database}";
     }
 
+    /**
+     * @param string $query
+     * @param array $params
+     * @return PDOStatement
+     * @throws ContainerException
+     * @throws NotFoundException
+     */
     private function prepareAndExecute(string $query, array $params): PDOStatement
     {
         $cacheKey = null;
         $statement = null;
 
         // Try to get from cache if available
-        if ($this->container->has(StatementCache::class)) {
+        if ($this->container !== null && $this->container->has(StatementCache::class)) {
             $cache = $this->container->get(StatementCache::class);
             $cacheKey = $this->generateStatementCacheKey($query, $params);
             $statement = $cache->get($cacheKey);

@@ -341,26 +341,18 @@ class SelectQueryBuilder extends QueryBuilder
      * @param array<string> $columns Ein Array von Spaltennamen für die Gruppierung
      * @return $this Für Method-Chaining
      * @throws QueryException Wenn leere Spaltennamen im Array enthalten sind
-     *
-     * @example
-     * // Gruppiere nach mehreren Spalten
-     * $query->groupByMultiple(['department', 'position', 'hire_year']);
-     *
-     * // Entspricht, ist aber lesbarer als:
-     * $query->groupBy('department')->groupBy('position')->groupBy('hire_year');
-     * // oder
-     * $query->groupBy(['department', 'position', 'hire_year']);
      */
     public function groupByMultiple(array $columns): self
     {
-        if (array_any($columns, fn($col) => empty($col))) {
+        $hasEmptyColumns = array_any($columns, fn($col) => empty($col));
+
+        if ($hasEmptyColumns === true) {
             throw new QueryException("Empty column name in groupBy");
         }
 
         $this->groups = array_merge($this->groups, $columns);
         return $this;
     }
-
     /**
      * Fügt eine HAVING-Bedingung hinzu
      *

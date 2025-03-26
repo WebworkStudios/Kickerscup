@@ -35,11 +35,17 @@ class ConnectionManager
      */
     private string $defaultConnection = 'default';
 
+    /**
+     * Container für Dependency Injection
+     */
+    private ?ContainerInterface $container;
+
     public function __construct(
-        private readonly LoggerInterface    $logger,
+        private readonly LoggerInterface $logger,
         ?ContainerInterface $container = null
     )
     {
+        $this->container = $container;
     }
 
     /**
@@ -132,7 +138,8 @@ class ConnectionManager
         // Erstelle eine neue Verbindung
         $connection = new Connection(
             $this->configurations[$connectionName],
-            $this->logger
+            $this->logger,
+            $this->container
         );
 
         // Speichere die Verbindung

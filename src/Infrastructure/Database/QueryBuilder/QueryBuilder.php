@@ -193,6 +193,9 @@ abstract class QueryBuilder implements QueryBuilderInterface
             $boolean === 'AND'
                 ? $this->whereGroup->where($column)
                 : $this->whereGroup->orWhere($column);
+
+            // Aktualisiere die Hauptparameter mit den Parametern aus der WhereClauseGroup
+            $this->parameters = array_merge($this->parameters, $this->whereGroup->getParameters());
             return $this;
         }
 
@@ -206,6 +209,9 @@ abstract class QueryBuilder implements QueryBuilderInterface
         $boolean === 'AND'
             ? $this->whereGroup->where($column, $operator, $value)
             : $this->whereGroup->orWhere($column, $operator, $value);
+
+        // Aktualisiere die Hauptparameter mit den Parametern aus der WhereClauseGroup
+        $this->parameters = array_merge($this->parameters, $this->whereGroup->getParameters());
 
         return $this;
     }

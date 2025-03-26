@@ -80,9 +80,18 @@ class StatementCache
         $this->lastUsed = [];
     }
 
+    /**
+     * @param string $prefix
+     * @return void
+     */
     public function invalidateByPrefix(string $prefix): void
     {
         $keys = array_find_key($this->statements, fn($_, $key) => str_starts_with($key, $prefix));
+
+        if (!is_array($keys)) {
+            // Keine übereinstimmenden Schlüssel gefunden
+            return;
+        }
 
         foreach ($keys as $key) {
             $this->remove($key);
