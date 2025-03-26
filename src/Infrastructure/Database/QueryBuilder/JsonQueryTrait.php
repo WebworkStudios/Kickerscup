@@ -35,8 +35,7 @@ trait JsonQueryTrait
         $jsonExpression = "JSON_EXTRACT({$column}, '{$path}')";
 
         return $this->where(
-            $this->raw("{$jsonExpression} {$operator} :{$paramName}"),
-            boolean: $boolean
+            $this->raw("{$jsonExpression} {$operator} :{$paramName}"),null,null,$boolean
         );
     }
 
@@ -69,7 +68,7 @@ trait JsonQueryTrait
 
         return $this->where(
             $this->raw($jsonExistsExpression),
-            boolean: $boolean
+            $boolean
         );
     }
 
@@ -104,7 +103,7 @@ trait JsonQueryTrait
 
         return $this->where(
             $this->raw($jsonArrayContainsExpression),
-            boolean: $boolean
+            $boolean
         );
     }
 
@@ -147,7 +146,7 @@ trait JsonQueryTrait
 
         return $this->where(
             $this->raw("{$jsonLengthExpression} {$operator} :{$paramName}"),
-            boolean: $boolean
+            $boolean
         );
     }
 
@@ -166,8 +165,8 @@ trait JsonQueryTrait
     }
 
     /**
-     * Fügt eine WHERE-Bedingung hinzu, die einen JSON-Wert als String vergleicht
-     * Dies ist nützlich, wenn MySQL JSON-Werte als JSON-Strings zurückgibt (mit Anführungszeichen)
+     * Fügt eine WHERE-Bedingung hinzu, die einen JSON-Wert als String vergleicht,
+     * dies ist nützlich, wenn MySQL JSON-Werte als JSON-Strings zurückgibt (mit Anführungszeichen)
      *
      * @param string $column Spalte mit JSON-Daten
      * @param string $path JSON-Pfad
@@ -192,7 +191,7 @@ trait JsonQueryTrait
 
         return $this->where(
             $this->raw("{$jsonTextExpression} {$operator} :{$paramName}"),
-            boolean: $boolean
+            $boolean
         );
     }
 
