@@ -34,9 +34,13 @@ trait JsonQueryTrait
         // MySQL-spezifischer JSON-Extraktor
         $jsonExpression = "JSON_EXTRACT({$column}, '{$path}')";
 
-        return $this->where(
-            $this->raw("{$jsonExpression} {$operator} :{$paramName}"),null,null,$boolean
-        );
+        $rawExpr = $this->raw("{$jsonExpression} {$operator} :{$paramName}");
+
+        if ($boolean === 'AND') {
+            return $this->where($rawExpr);
+        } else {
+            return $this->orWhere($rawExpr);
+        }
     }
 
     /**

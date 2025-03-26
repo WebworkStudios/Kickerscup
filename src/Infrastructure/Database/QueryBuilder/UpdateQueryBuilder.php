@@ -220,6 +220,9 @@ class UpdateQueryBuilder extends QueryBuilder
     /**
      * {@inheritdoc}
      */
+    /**
+     * {@inheritdoc}
+     */
     public function toSql(): string
     {
         if (empty($this->values)) {
@@ -249,6 +252,9 @@ class UpdateQueryBuilder extends QueryBuilder
             // Parameter aus der WhereClauseGroup übernehmen
             $this->parameters = array_merge($this->parameters, $this->whereGroup->getParameters());
             $sql .= ' WHERE ' . $this->whereGroup->toSql();
+        } else {
+            // Wenn keine WHERE-Bedingung angegeben wurde, wirf eine Exception
+            throw new QueryException('No WHERE clause specified for update query. To update all records, use whereTrue() explicitly.');
         }
 
         return $sql;

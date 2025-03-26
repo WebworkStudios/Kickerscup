@@ -23,12 +23,18 @@ class Connection implements ConnectionInterface
     private const MAX_RECONNECT_ATTEMPTS = 3;
     private ?ContainerInterface $container = null;
 
+    /**
+     * @param ConnectionConfiguration $config
+     * @param LoggerInterface $logger
+     * @param ContainerInterface|null $container
+     */
     public function __construct(
         private readonly ConnectionConfiguration $config,
         private readonly LoggerInterface         $logger,
         ?ContainerInterface $container = null
     )
     {
+        $this->container = $container;
     }
 
     public function getPdo(): PDO
