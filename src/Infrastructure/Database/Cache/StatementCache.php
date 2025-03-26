@@ -86,14 +86,20 @@ class StatementCache
      */
     public function invalidateByPrefix(string $prefix): void
     {
-        $keys = array_find_key($this->statements, fn($_, $key) => str_starts_with($key, $prefix));
-
-        if (!is_array($keys)) {
-            // Keine übereinstimmenden Schlüssel gefunden
+        if (empty($prefix)) {
             return;
         }
 
-        foreach ($keys as $key) {
+        // Sammle alle Schlüssel, die mit dem Präfix beginnen
+        $keysToRemove = [];
+        foreach (array_keys($this->statements) as $key) {
+            if (str_starts_with($key, $prefix)) {
+                $keysToRemove[] = $key;
+            }
+        }
+
+        // Entferne alle gesammelten Schlüssel
+        foreach ($keysToRemove as $key) {
             $this->remove($key);
         }
     }

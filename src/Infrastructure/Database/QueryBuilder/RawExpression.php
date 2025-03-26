@@ -1,16 +1,13 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Infrastructure\Database\QueryBuilder;
 
-use App\Infrastructure\Database\Contracts\QueryBuilderInterface;
-
 /**
  * Repräsentiert einen unbearbeiteten SQL-Ausdruck
  */
-class RawExpression implements QueryBuilderInterface
+class RawExpression
 {
     protected string $expression;
     protected array $bindings = [];
@@ -28,7 +25,10 @@ class RawExpression implements QueryBuilderInterface
     }
 
     /**
-     * {@inheritdoc}
+     * Fügt Parameter hinzu
+     *
+     * @param array $params Parameter für die Abfrage
+     * @return static
      */
     public function addParameters(array $params): static
     {
@@ -37,7 +37,9 @@ class RawExpression implements QueryBuilderInterface
     }
 
     /**
-     * {@inheritdoc}
+     * Gibt die Parameter zurück
+     *
+     * @return array
      */
     public function getParameters(): array
     {
@@ -45,19 +47,13 @@ class RawExpression implements QueryBuilderInterface
     }
 
     /**
-     * {@inheritdoc}
+     * Gibt den SQL-String zurück
+     *
+     * @return string
      */
     public function toSql(): string
     {
         return $this->expression;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function execute(): \PDOStatement
-    {
-        throw new \LogicException('RawExpression kann nicht direkt ausgeführt werden');
     }
 
     /**
