@@ -44,6 +44,18 @@ trait JsonQueryTrait
     }
 
     /**
+     * Erstellt eine neue Raw-SQL-Expression
+     *
+     * @param string $expression Die rohe SQL-Expression
+     * @param array $bindings Parameter-Bindungen für die Expression
+     * @return RawExpression
+     */
+    protected function raw(string $expression, array $bindings = []): RawExpression
+    {
+        return new RawExpression($expression, $bindings);
+    }
+
+    /**
      * Fügt eine WHERE OR-Bedingung für JSON-Pfad hinzu
      *
      * @param string $column Spalte mit JSON-Daten

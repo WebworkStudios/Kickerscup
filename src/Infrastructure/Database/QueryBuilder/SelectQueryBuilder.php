@@ -795,14 +795,16 @@ class SelectQueryBuilder extends QueryBuilder
      */
     protected function compileWheres(): string
     {
-        if ($this->whereGroup === null || empty($this->whereGroup->toSql())) {
-            return '';
+        if ($this->whereGroup !== null && !empty($this->whereGroup->toSql())) {
+            // Parameter aus der WhereClauseGroup übernehmen
+            $this->parameters = array_merge($this->parameters, $this->whereGroup->getParameters());
+            return ' WHERE ' . $this->whereGroup->toSql();
+        } else if (!empty($this->wheres)) {
+            // Fallback für alte wheres-Implementierung (für Abwärtskompatibilität)
+            return ' WHERE ' . implode(' AND ', $this->wheres);
         }
 
-        // Parameter aus der WhereClauseGroup übernehmen
-        $this->parameters = array_merge($this->parameters, $this->whereGroup->getParameters());
-
-        return ' WHERE ' . $this->whereGroup->toSql();
+        return '';
     }
 
     /**

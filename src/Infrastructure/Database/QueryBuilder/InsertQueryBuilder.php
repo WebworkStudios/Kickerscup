@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Database\QueryBuilder;
 
 use App\Infrastructure\Database\Exceptions\QueryException;
+use PDOStatement;
 
 class InsertQueryBuilder extends QueryBuilder
 {
@@ -41,7 +42,32 @@ class InsertQueryBuilder extends QueryBuilder
      *
      * @return int|string|null Die ID des eingefügten Datensatzes oder null
      */
-    public function execute(): int|string|null
+    /**
+     * Führt den Insert aus und gibt das PDOStatement zurück
+     *
+     * @return PDOStatement
+     */
+    public function execute(): PDOStatement
+    {
+        if (empty($this->values)) {
+            throw new QueryException('No values specified for insert query');
+        }
+
+        $sql = $this->toSql();
+        $connection = $this->getConnection();
+
+        $statement = $connection->query($sql, $this->parameters);
+        $this->invalidateStatementCache();
+
+        return $statement;
+    }
+
+    /**
+     * Führt den Insert aus und gibt die ID des neuen Datensatzes zurück
+     *
+     * @return int|string|null Die ID des eingefügten Datensatzes oder null
+     */
+    public function executeAndGetId(): int|string|null
     {
         if (empty($this->values)) {
             throw new QueryException('No values specified for insert query');

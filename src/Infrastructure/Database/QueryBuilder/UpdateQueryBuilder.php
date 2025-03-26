@@ -157,18 +157,6 @@ class UpdateQueryBuilder extends QueryBuilder
 
         return $statement;
     }
-
-    /**
-     * Explizit alle Datensätze aktualisieren (gefährlich!)
-     *
-     * @return $this
-     */
-    public function whereTrue(): self
-    {
-        $this->wheres[] = '1 = 1';
-        return $this;
-    }
-
     public function bulkUpdate(array $records, string $keyColumn): int
     {
         if (empty($records)) {
@@ -220,9 +208,6 @@ class UpdateQueryBuilder extends QueryBuilder
     /**
      * {@inheritdoc}
      */
-    /**
-     * {@inheritdoc}
-     */
     public function toSql(): string
     {
         if (empty($this->values)) {
@@ -247,17 +232,35 @@ class UpdateQueryBuilder extends QueryBuilder
 
         $sql .= implode(', ', $sets);
 
-        // Verwende die WhereClauseGroup statt der alten wheres-Array
+        // Verwende die WhereClauseGroup für konsistente Bedingungsverarbeitung
         if ($this->whereGroup !== null && !empty($this->whereGroup->toSql())) {
             // Parameter aus der WhereClauseGroup übernehmen
             $this->parameters = array_merge($this->parameters, $this->whereGroup->getParameters());
             $sql .= ' WHERE ' . $this->whereGroup->toSql();
+        } else if (!empty($this->wheres)) {
+            // Fallback für alte wheres-Implementierung (für Abwärtskompatibilität)
+            $sql .= ' WHERE ' . implode(' AND ', $this->wheres);
         } else {
             // Wenn keine WHERE-Bedingung angegeben wurde, wirf eine Exception
             throw new QueryException('No WHERE clause specified for update query. To update all records, use whereTrue() explicitly.');
         }
 
         return $sql;
+    }
+
+    /**
+     * Explizit alle Datensätze aktualisieren (gefährlich!)
+     *
+     * @return $this
+     */
+    public function whereTrue(): self
+    {
+        if ($this->whereGroup === null) {
+            $this->whereGroup = new WhereClauseGroup();
+        }
+
+        $this->whereGroup->where(new RawExpression('1 = 1'));
+        return $this;
     }
 
 }

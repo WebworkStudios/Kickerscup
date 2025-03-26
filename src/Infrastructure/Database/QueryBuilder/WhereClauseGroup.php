@@ -39,6 +39,15 @@ class WhereClauseGroup
      * @param string $boolean Boolean Operator für die Verknüpfung (AND oder OR)
      * @return $this
      */
+    /**
+     * Fügt eine einfache Bedingung zu dieser Gruppe hinzu
+     *
+     * @param string|RawExpression $column Spalte oder Raw-Expression
+     * @param mixed $operator Operator oder Wert
+     * @param mixed $value Wert (optional)
+     * @param string $boolean Boolean Operator für die Verknüpfung (AND oder OR)
+     * @return $this
+     */
     public function where(string|RawExpression $column, mixed $operator = null, mixed $value = null, string $boolean = 'AND'): self
     {
         // Wenn column eine RawExpression ist, verwende sie direkt

@@ -131,28 +131,20 @@ class DeleteQueryBuilder extends QueryBuilder
     }
 
     /**
-     * Explizit alle Datensätze löschen (gefährlich!)
-     *
-     * @return $this
-     */
-    public function whereTrue(): self
-    {
-        $this->whereTrue = true;
-        return $this;
-    }
-
-    /**
      * {@inheritdoc}
      */
     public function toSql(): string
     {
         $sql = "DELETE FROM {$this->table}";
 
-        // Verwende die WhereClauseGroup statt der alten wheres-Array
+        // Verwende die WhereClauseGroup für konsistente Bedingungsverarbeitung
         if ($this->whereGroup !== null && !empty($this->whereGroup->toSql())) {
             // Parameter aus der WhereClauseGroup übernehmen
             $this->parameters = array_merge($this->parameters, $this->whereGroup->getParameters());
             $sql .= ' WHERE ' . $this->whereGroup->toSql();
+        } else if (!empty($this->wheres)) {
+            // Fallback für alte wheres-Implementierung (für Abwärtskompatibilität)
+            $sql .= ' WHERE ' . implode(' AND ', $this->wheres);
         } else if (!empty($this->whereTrue)) {
             $sql .= ' WHERE 1 = 1';
         } else {
@@ -160,6 +152,24 @@ class DeleteQueryBuilder extends QueryBuilder
         }
 
         return $sql;
+    }
+
+    /**
+     * Explizit alle Datensätze löschen (gefährlich!)
+     *
+     * @return $this
+     */
+    public function whereTrue(): self
+    {
+        $this->whereTrue = true;
+
+        // Auch in der WhereClauseGroup setzen für Konsistenz
+        if ($this->whereGroup === null) {
+            $this->whereGroup = new WhereClauseGroup();
+        }
+
+        $this->whereGroup->where(new RawExpression('1 = 1'));
+        return $this;
     }
 
 }
