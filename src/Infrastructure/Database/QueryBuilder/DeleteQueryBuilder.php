@@ -11,6 +11,7 @@ use PDOStatement;
 
 class DeleteQueryBuilder extends QueryBuilder
 {
+    use JsonQueryTrait;
     /**
      * WHERE-Bedingungen
      *

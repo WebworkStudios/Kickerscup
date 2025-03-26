@@ -9,6 +9,7 @@ use Closure;
 
 class SelectQueryBuilder extends QueryBuilder
 {
+    use JsonQueryTrait;
     /**
      * Zu selektierende Spalten
      *

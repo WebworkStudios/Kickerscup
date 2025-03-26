@@ -11,6 +11,7 @@ use PDOStatement;
 
 class UpdateQueryBuilder extends QueryBuilder
 {
+    use JsonQueryTrait;
     /**
      * Zu aktualisierende Daten
      *
