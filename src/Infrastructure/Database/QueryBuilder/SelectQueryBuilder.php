@@ -61,6 +61,8 @@ class SelectQueryBuilder extends QueryBuilder
      */
     protected ?int $offset = null;
 
+    protected ?WhereClauseGroup $whereGroup = null;
+
     /**
      * CTEs (Common Table Expressions) für WITH-Klauseln
      *
@@ -256,11 +258,16 @@ class SelectQueryBuilder extends QueryBuilder
      */
     public function where(string|RawExpression $column, mixed $operator = null, mixed $value = null): self
     {
+        // Initialisiere die WhereClauseGroup falls noch nicht vorhanden
+        if ($this->whereGroup === null) {
+            $this->whereGroup = new WhereClauseGroup();
+        }
+
         // Wenn column eine RawExpression ist, verwende sie direkt
         if ($column instanceof RawExpression) {
             // Füge alle Bindungen der Raw-Expression hinzu
             $this->parameters = array_merge($this->parameters, $column->getParameters());
-            $this->wheres[] = $column->toSql();
+            $this->whereGroup->where($column);
             return $this;
         }
 
@@ -270,10 +277,49 @@ class SelectQueryBuilder extends QueryBuilder
             $operator = '=';
         }
 
-        $paramName = $this->createParameterName('where');
-        $this->parameters[$paramName] = $value;
+        // Delegiere an die WhereClauseGroup
+        $this->whereGroup->where($column, $operator, $value);
 
-        $this->wheres[] = "{$column} {$operator} :{$paramName}";
+        return $this;
+    }
+
+    public function orWhere(string|RawExpression $column, mixed $operator = null, mixed $value = null): self
+    {
+        if ($this->whereGroup === null) {
+            $this->whereGroup = new WhereClauseGroup();
+        }
+
+        $this->whereGroup->orWhere($column, $operator, $value);
+
+        return $this;
+    }
+
+    /**
+     * @param \Closure $callback
+     * @return $this
+     */
+    public function whereGroup(\Closure $callback): self
+    {
+        if ($this->whereGroup === null) {
+            $this->whereGroup = new WhereClauseGroup();
+        }
+
+        $this->whereGroup->whereGroup($callback);
+
+        return $this;
+    }
+
+    /**
+     * @param \Closure $callback
+     * @return $this
+     */
+    public function orWhereGroup(\Closure $callback): self
+    {
+        if ($this->whereGroup === null) {
+            $this->whereGroup = new WhereClauseGroup();
+        }
+
+        $this->whereGroup->orWhereGroup($callback);
 
         return $this;
     }
@@ -883,11 +929,14 @@ class SelectQueryBuilder extends QueryBuilder
      */
     protected function compileWheres(): string
     {
-        if (empty($this->wheres)) {
+        if ($this->whereGroup === null || empty($this->whereGroup->toSql())) {
             return '';
         }
 
-        return ' WHERE ' . implode(' AND ', $this->wheres);
+        // Parameter aus der WhereClauseGroup übernehmen
+        $this->parameters = array_merge($this->parameters, $this->whereGroup->getParameters());
+
+        return ' WHERE ' . $this->whereGroup->toSql();
     }
 
     /**

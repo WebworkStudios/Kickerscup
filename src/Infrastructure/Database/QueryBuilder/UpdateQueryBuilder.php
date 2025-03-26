@@ -24,6 +24,8 @@ class UpdateQueryBuilder extends QueryBuilder
      */
     protected array $wheres = [];
 
+    protected ?WhereClauseGroup $whereGroup = null;
+
     /**
      * Fügt zu aktualisierende Daten hinzu
      *
@@ -52,26 +54,91 @@ class UpdateQueryBuilder extends QueryBuilder
     /**
      * Fügt eine WHERE-Bedingung hinzu
      *
-     * @param string $column Spalte
+     * @param string|RawExpression $column Spalte oder Raw-Expression
      * @param mixed $operator Operator oder Wert
      * @param mixed $value Wert (optional)
      * @return $this
      */
-    public function where(string $column, mixed $operator, mixed $value = null): self
+    public function where(string|RawExpression $column, mixed $operator = null, mixed $value = null): self
     {
+        // Initialisiere die WhereClauseGroup falls noch nicht vorhanden
+        if ($this->whereGroup === null) {
+            $this->whereGroup = new WhereClauseGroup;
+        }
+
+        // Wenn column eine RawExpression ist, verwende sie direkt
+        if ($column instanceof RawExpression) {
+            // Füge alle Bindungen der Raw-Expression hinzu
+            $this->parameters = array_merge($this->parameters, $column->getParameters());
+            $this->whereGroup->where($column);
+            return $this;
+        }
+
         // Wenn nur zwei Parameter angegeben wurden, verwende = als Operator
-        if ($value === null) {
+        if ($value === null && $operator !== null) {
             $value = $operator;
             $operator = '=';
         }
 
-        $paramName = $this->createParameterName('where');
-        $this->parameters[$paramName] = $value;
-
-        $this->wheres[] = "{$column} {$operator} :{$paramName}";
+        // Delegiere an die WhereClauseGroup
+        $this->whereGroup->where($column, $operator, $value);
 
         return $this;
     }
+
+    /**
+     * Fügt eine WHERE OR-Bedingung hinzu
+     *
+     * @param string|RawExpression $column Spalte oder Raw-Expression
+     * @param mixed $operator Operator oder Wert
+     * @param mixed $value Wert (optional)
+     * @return $this
+     */
+    public function orWhere(string|RawExpression $column, mixed $operator = null, mixed $value = null): self
+    {
+        if ($this->whereGroup === null) {
+            $this->whereGroup = new WhereClauseGroup();
+        }
+
+        $this->whereGroup->orWhere($column, $operator, $value);
+
+        return $this;
+    }
+
+    /**
+     * Erstellt eine neue verschachtelte Bedingungsgruppe mit AND-Verknüpfung
+     *
+     * @param \Closure $callback Callback-Funktion, die die neue Gruppe konfiguriert
+     * @return $this
+     */
+    public function whereGroup(\Closure $callback): self
+    {
+        if ($this->whereGroup === null) {
+            $this->whereGroup = new WhereClauseGroup();
+        }
+
+        $this->whereGroup->whereGroup($callback);
+
+        return $this;
+    }
+
+    /**
+     * Erstellt eine neue verschachtelte Bedingungsgruppe mit OR-Verknüpfung
+     *
+     * @param \Closure $callback Callback-Funktion, die die neue Gruppe konfiguriert
+     * @return $this
+     */
+    public function orWhereGroup(\Closure $callback): self
+    {
+        if ($this->whereGroup === null) {
+            $this->whereGroup = new WhereClauseGroup();
+        }
+
+        $this->whereGroup->orWhereGroup($callback);
+
+        return $this;
+    }
+
 
     /**
      * Fügt eine WHERE IN-Bedingung hinzu
@@ -229,8 +296,11 @@ class UpdateQueryBuilder extends QueryBuilder
 
         $sql .= implode(', ', $sets);
 
-        if (!empty($this->wheres)) {
-            $sql .= ' WHERE ' . implode(' AND ', $this->wheres);
+        // Verwende die WhereClauseGroup statt der alten wheres-Array
+        if ($this->whereGroup !== null && !empty($this->whereGroup->toSql())) {
+            // Parameter aus der WhereClauseGroup übernehmen
+            $this->parameters = array_merge($this->parameters, $this->whereGroup->getParameters());
+            $sql .= ' WHERE ' . $this->whereGroup->toSql();
         }
 
         return $sql;
