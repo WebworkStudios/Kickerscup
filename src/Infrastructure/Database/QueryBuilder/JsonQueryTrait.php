@@ -1,6 +1,5 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Infrastructure\Database\QueryBuilder;
@@ -29,12 +28,11 @@ trait JsonQueryTrait
         }
 
         $paramName = $this->createParameterName('json');
-        $this->parameters[$paramName] = $value;
+        $params = [$paramName => $value];
 
         // MySQL-spezifischer JSON-Extraktor
         $jsonExpression = "JSON_EXTRACT({$column}, '{$path}')";
-
-        $rawExpr = $this->raw("{$jsonExpression} {$operator} :{$paramName}");
+        $rawExpr = new RawExpression("{$jsonExpression} {$operator} :{$paramName}", $params);
 
         if ($boolean === 'AND') {
             return $this->where($rawExpr);
@@ -81,11 +79,13 @@ trait JsonQueryTrait
     {
         // MySQL-spezifischer JSON-Path-Existenz-Prüfer
         $jsonExistsExpression = "JSON_CONTAINS_PATH({$column}, 'one', '{$path}')";
+        $rawExpr = new RawExpression($jsonExistsExpression);
 
-        return $this->where(
-            $this->raw($jsonExistsExpression),
-            $boolean
-        );
+        if ($boolean === 'AND') {
+            return $this->where($rawExpr);
+        } else {
+            return $this->orWhere($rawExpr);
+        }
     }
 
     /**
@@ -112,15 +112,17 @@ trait JsonQueryTrait
     public function whereJsonArrayContains(string $column, string $path, mixed $value, string $boolean = 'AND'): static
     {
         $paramName = $this->createParameterName('jsonarr');
-        $this->parameters[$paramName] = $value;
+        $params = [$paramName => $value];
 
         // MySQL-spezifischer JSON-Array-Contains-Operator
         $jsonArrayContainsExpression = "JSON_CONTAINS({$column}, CAST(:{$paramName} AS JSON), '{$path}')";
+        $rawExpr = new RawExpression($jsonArrayContainsExpression, $params);
 
-        return $this->where(
-            $this->raw($jsonArrayContainsExpression),
-            $boolean
-        );
+        if ($boolean === 'AND') {
+            return $this->where($rawExpr);
+        } else {
+            return $this->orWhere($rawExpr);
+        }
     }
 
     /**
@@ -155,15 +157,17 @@ trait JsonQueryTrait
         }
 
         $paramName = $this->createParameterName('jsonlen');
-        $this->parameters[$paramName] = $value;
+        $params = [$paramName => $value];
 
         // MySQL-spezifischer JSON-Length-Operator
         $jsonLengthExpression = "JSON_LENGTH({$column}, '{$path}')";
+        $rawExpr = new RawExpression("{$jsonLengthExpression} {$operator} :{$paramName}", $params);
 
-        return $this->where(
-            $this->raw("{$jsonLengthExpression} {$operator} :{$paramName}"),
-            $boolean
-        );
+        if ($boolean === 'AND') {
+            return $this->where($rawExpr);
+        } else {
+            return $this->orWhere($rawExpr);
+        }
     }
 
     /**
@@ -200,15 +204,17 @@ trait JsonQueryTrait
         }
 
         $paramName = $this->createParameterName('jsontext');
-        $this->parameters[$paramName] = $value;
+        $params = [$paramName => $value];
 
         // MySQL-spezifischer JSON_UNQUOTE für String-Vergleiche
         $jsonTextExpression = "JSON_UNQUOTE(JSON_EXTRACT({$column}, '{$path}'))";
+        $rawExpr = new RawExpression("{$jsonTextExpression} {$operator} :{$paramName}", $params);
 
-        return $this->where(
-            $this->raw("{$jsonTextExpression} {$operator} :{$paramName}"),
-            $boolean
-        );
+        if ($boolean === 'AND') {
+            return $this->where($rawExpr);
+        } else {
+            return $this->orWhere($rawExpr);
+        }
     }
 
     /**
