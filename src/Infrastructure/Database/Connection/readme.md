@@ -6,30 +6,33 @@
 - [Der ConnectionManager](#der-connectionmanager)
 - [Konfiguration von Verbindungen](#konfiguration-von-verbindungen)
 - [Verwendung verschiedener Verbindungen](#verwendung-verschiedener-verbindungen)
-  - [Standardverbindung festlegen](#standardverbindung-festlegen)
-  - [Spezifische Verbindungen verwenden](#spezifische-verbindungen-verwenden)
-  - [Verbindung nach Host finden](#verbindung-nach-host-finden)
+    - [Standardverbindung festlegen](#standardverbindung-festlegen)
+    - [Spezifische Verbindungen verwenden](#spezifische-verbindungen-verwenden)
+    - [Verbindung nach Host finden](#verbindung-nach-host-finden)
 - [Transaktionen mit mehreren Datenbanken](#transaktionen-mit-mehreren-datenbanken)
 - [Verbindungen schließen](#verbindungen-schließen)
 - [Beispiele](#beispiele)
-  - [Multi-Tenant-Anwendungen](#multi-tenant-anwendungen)
-  - [Lese-/Schreibtrennung](#lese-schreibtrennung)
-  - [Datenbankübergreifende Operationen](#datenbankübergreifende-operationen)
+    - [Multi-Tenant-Anwendungen](#multi-tenant-anwendungen)
+    - [Lese-/Schreibtrennung](#lese-schreibtrennung)
+    - [Datenbankübergreifende Operationen](#datenbankübergreifende-operationen)
 
 ## Einführung
 
-In komplexen Anwendungen ist es oft erforderlich, mit mehreren Datenbanken zu arbeiten. Dies kann verschiedene Gründe haben:
+In komplexen Anwendungen ist es oft erforderlich, mit mehreren Datenbanken zu arbeiten. Dies kann verschiedene Gründe
+haben:
 
 - **Multi-Tenant-Architektur**: Jeder Kunde hat seine eigene Datenbank
 - **Leistungsoptimierung**: Trennung von Lese- und Schreiboperationen auf verschiedene Server
 - **Datenbanksharding**: Verteilung der Daten auf mehrere Datenbanken für horizontale Skalierung
 - **Legacy-Integration**: Zugriff auf bestehende Systeme mit eigenen Datenbanken
 
-Das Datenbank-Subsystem bietet einen flexiblen Mechanismus, um mehrere Verbindungen zu verwalten und nahtlos zwischen ihnen zu wechseln.
+Das Datenbank-Subsystem bietet einen flexiblen Mechanismus, um mehrere Verbindungen zu verwalten und nahtlos zwischen
+ihnen zu wechseln.
 
 ## Der ConnectionManager
 
-Der `ConnectionManager` ist die zentrale Komponente für die Verwaltung mehrerer Datenbankverbindungen. Er bietet folgende Hauptfunktionen:
+Der `ConnectionManager` ist die zentrale Komponente für die Verwaltung mehrerer Datenbankverbindungen. Er bietet
+folgende Hauptfunktionen:
 
 - Konfiguration und Initialisierung von Datenbankverbindungen
 - Bereitstellung von Verbindungen an andere Komponenten
@@ -179,7 +182,9 @@ $connectionManager->closeConnection();
 
 ### Game- und Forum-Datenbanken
 
-Ein typisches Beispiel für die Verwendung mehrerer Datenbanken ist die Kombination einer Spiele-Plattform mit einem zugehörigen Forum. Hier sind die Spieledaten (Benutzer, Spielstände, Inventar) in einer Datenbank gespeichert, während die Forumdaten (Beiträge, Threads, Likes) in einer separaten Datenbank liegen:
+Ein typisches Beispiel für die Verwendung mehrerer Datenbanken ist die Kombination einer Spiele-Plattform mit einem
+zugehörigen Forum. Hier sind die Spieledaten (Benutzer, Spielstände, Inventar) in einer Datenbank gespeichert, während
+die Forumdaten (Beiträge, Threads, Likes) in einer separaten Datenbank liegen:
 
 ```php
 // Einrichtung der Verbindungen

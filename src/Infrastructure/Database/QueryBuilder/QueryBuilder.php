@@ -108,14 +108,6 @@ abstract class QueryBuilder implements QueryBuilderInterface
     /**
      * {@inheritdoc}
      */
-    public function getParameters(): array
-    {
-        return $this->parameters;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
     public function execute(): PDOStatement
     {
         $sql = $this->toSql();
@@ -125,161 +117,6 @@ abstract class QueryBuilder implements QueryBuilderInterface
         }
 
         return $this->getConnection()->query($sql, $this->parameters);
-    }
-
-    /**
-     * Prüft, ob ein Wert eine rohe SQL-Expression ist
-     *
-     * @param mixed $value Der zu prüfende Wert
-     * @return bool
-     */
-    protected function isRawExpression(mixed $value): bool
-    {
-        return $value instanceof RawExpression;
-    }
-
-    /**
-     * Parst einen Wert für die SQL-Abfrage
-     *
-     * @param mixed $value Der zu parsende Wert
-     * @return string
-     */
-    protected function parseValue(mixed $value): string
-    {
-        if ($this->isRawExpression($value)) {
-            // Füge die Parameter aus der RawExpression hinzu
-            $this->parameters = array_merge($this->parameters, $value->getParameters());
-            return $value->toSql();
-        }
-
-        return '?';
-    }
-
-    /**
-     * Erstellt einen eindeutigen Parameternamen
-     *
-     * @param string $prefix Präfix für den Parameternamen
-     * @return string Der generierte Parametername
-     */
-    protected function createParameterName(string $prefix = 'param'): string
-    {
-        static $counters = [];
-        if (!isset($counters[$prefix])) {
-            $counters[$prefix] = 0;
-        }
-        return $prefix . '_' . ($counters[$prefix]++);
-    }
-
-    /**
-     * Fügt eine WHERE-Bedingung hinzu
-     *
-     * @param string|RawExpression $column Spalte oder Raw-Expression
-     * @param mixed $operator Operator oder Wert
-     * @param mixed $value Wert (optional)
-     * @param string $boolean
-     * @return static
-     */
-    /**
-     * Fügt eine WHERE-Bedingung hinzu
-     *
-     * @param string|RawExpression $column Spalte oder Raw-Expression
-     * @param mixed $operator Operator oder Wert
-     * @param mixed $value Wert (optional)
-     * @param string $boolean AND oder OR
-     * @return static
-     */
-    /**
-     * Fügt eine WHERE-Bedingung hinzu
-     *
-     * @param string|RawExpression $column Spalte oder Raw-Expression
-     * @param mixed $operator Operator oder Wert
-     * @param mixed $value Wert (optional)
-     * @param string $boolean AND oder OR
-     * @return static
-     */
-    protected function addWhereCondition(string|RawExpression $column, mixed $operator = null, mixed $value = null, string $boolean = 'AND'): static
-    {
-        // Initialisiere die WhereClauseGroup falls noch nicht vorhanden
-        if ($this->whereGroup === null) {
-            $this->whereGroup = new WhereClauseGroup();
-        }
-
-        // Generiere einem eindeutigen Präfix für diese Bedingung, um Parameter-Kollisionen zu vermeiden
-        $paramPrefix = 'where_' . uniqid();
-
-        // Bei RawExpressions: Sicherstellen, dass die Parameter-Namen eindeutig sind
-        if ($column instanceof RawExpression) {
-            $originalParams = $column->getParameters();
-            $newParams = [];
-
-            // Parameter umschreiben mit eindeutigen Namen
-            foreach ($originalParams as $key => $val) {
-                $newKey = "{$paramPrefix}_{$key}";
-                $newParams[$newKey] = $val;
-            }
-
-            // Neue RawExpression mit umbenannten Parametern erstellen
-            if (!empty($originalParams)) {
-                $expression = $column->getExpression();
-
-                // Ersetze Parameter-Platzhalter in der Expression
-                foreach ($originalParams as $key => $val) {
-                    $expression = str_replace(":{$key}", ":{$paramPrefix}_{$key}", $expression);
-                }
-
-                $column = new RawExpression($expression, $newParams);
-            }
-        }
-
-        // Delegiere direkt an die WhereClauseGroup für konsistente Behandlung
-        if ($boolean === 'AND') {
-            $this->whereGroup->where($column, $operator, $value);
-        } else {
-            $this->whereGroup->orWhere($column, $operator, $value);
-        }
-
-        // Aktualisiere die Hauptparameter mit den Parametern aus der WhereClauseGroup
-        $this->parameters = array_merge($this->parameters, $this->whereGroup->getParameters());
-
-        return $this;
-    }
-
-    /**
-     * Erstellt eine neue Raw-SQL-Expression
-     *
-     * @param string $expression Die rohe SQL-Expression
-     * @param array $bindings Parameter-Bindungen für die Expression
-     * @return RawExpression
-     */
-    protected function raw(string $expression, array $bindings = []): RawExpression
-    {
-        return new RawExpression($expression, $bindings);
-    }
-
-    /**
-     * Fügt eine WHERE-Bedingung hinzu
-     *
-     * @param string|RawExpression $column Spalte oder Raw-Expression
-     * @param mixed $operator Operator oder Wert
-     * @param mixed $value Wert (optional)
-     * @return static
-     */
-    public function where(string|RawExpression $column, mixed $operator = null, mixed $value = null): static
-    {
-        return $this->addWhereCondition($column, $operator, $value, 'AND');
-    }
-
-    /**
-     * Fügt eine WHERE OR-Bedingung hinzu
-     *
-     * @param string|RawExpression $column Spalte oder Raw-Expression
-     * @param mixed $operator Operator oder Wert
-     * @param mixed $value Wert (optional)
-     * @return static
-     */
-    public function orWhere(string|RawExpression $column, mixed $operator = null, mixed $value = null): static
-    {
-        return $this->addWhereCondition($column, $operator, $value, 'OR');
     }
 
     /**
@@ -352,6 +189,136 @@ abstract class QueryBuilder implements QueryBuilderInterface
     }
 
     /**
+     * Parst einen Wert für die SQL-Abfrage
+     *
+     * @param mixed $value Der zu parsende Wert
+     * @return string
+     */
+    protected function parseValue(mixed $value): string
+    {
+        if ($this->isRawExpression($value)) {
+            // Füge die Parameter aus der RawExpression hinzu
+            $this->parameters = array_merge($this->parameters, $value->getParameters());
+            return $value->toSql();
+        }
+
+        return '?';
+    }
+
+    /**
+     * Prüft, ob ein Wert eine rohe SQL-Expression ist
+     *
+     * @param mixed $value Der zu prüfende Wert
+     * @return bool
+     */
+    protected function isRawExpression(mixed $value): bool
+    {
+        return $value instanceof RawExpression;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getParameters(): array
+    {
+        return $this->parameters;
+    }
+
+    /**
+     * Fügt eine WHERE-Bedingung hinzu
+     *
+     * @param string|RawExpression $column Spalte oder Raw-Expression
+     * @param mixed $operator Operator oder Wert
+     * @param mixed $value Wert (optional)
+     * @param string $boolean AND oder OR
+     * @return static
+     */
+    protected function addWhereCondition(string|RawExpression $column, mixed $operator = null, mixed $value = null, string $boolean = 'AND'): static
+    {
+        // Initialisiere die WhereClauseGroup falls noch nicht vorhanden
+        if ($this->whereGroup === null) {
+            $this->whereGroup = new WhereClauseGroup();
+        }
+
+        // Generiere einem eindeutigen Präfix für diese Bedingung, um Parameter-Kollisionen zu vermeiden
+        $paramPrefix = 'where_' . uniqid();
+
+        // Bei RawExpressions: Sicherstellen, dass die Parameter-Namen eindeutig sind
+        if ($column instanceof RawExpression) {
+            $originalParams = $column->getParameters();
+            $newParams = [];
+
+            // Parameter umschreiben mit eindeutigen Namen
+            foreach ($originalParams as $key => $val) {
+                $newKey = "{$paramPrefix}_{$key}";
+                $newParams[$newKey] = $val;
+            }
+
+            // Neue RawExpression mit umbenannten Parametern erstellen
+            if (!empty($originalParams)) {
+                $expression = $column->getExpression();
+
+                // Ersetze Parameter-Platzhalter in der Expression
+                foreach ($originalParams as $key => $val) {
+                    $expression = str_replace(":{$key}", ":{$paramPrefix}_{$key}", $expression);
+                }
+
+                $column = new RawExpression($expression, $newParams);
+            }
+        }
+
+        // Delegiere direkt an die WhereClauseGroup für konsistente Behandlung
+        if ($boolean === 'AND') {
+            $this->whereGroup->where($column, $operator, $value);
+        } else {
+            $this->whereGroup->orWhere($column, $operator, $value);
+        }
+
+        // Aktualisiere die Hauptparameter mit den Parametern aus der WhereClauseGroup
+        $this->parameters = array_merge($this->parameters, $this->whereGroup->getParameters());
+
+        return $this;
+    }
+
+    /**
+     * Fügt eine WHERE-Bedingung hinzu
+     *
+     * @param string|RawExpression $column Spalte oder Raw-Expression
+     * @param mixed $operator Operator oder Wert
+     * @param mixed $value Wert (optional)
+     * @return static
+     */
+    public function where(string|RawExpression $column, mixed $operator = null, mixed $value = null): static
+    {
+        return $this->addWhereCondition($column, $operator, $value, 'AND');
+    }
+
+    /**
+     * Fügt eine WHERE OR-Bedingung hinzu
+     *
+     * @param string|RawExpression $column Spalte oder Raw-Expression
+     * @param mixed $operator Operator oder Wert
+     * @param mixed $value Wert (optional)
+     * @return static
+     */
+    public function orWhere(string|RawExpression $column, mixed $operator = null, mixed $value = null): static
+    {
+        return $this->addWhereCondition($column, $operator, $value, 'OR');
+    }
+
+    /**
+     * Erstellt eine neue Raw-SQL-Expression
+     *
+     * @param string $expression Die rohe SQL-Expression
+     * @param array $bindings Parameter-Bindungen für die Expression
+     * @return RawExpression
+     */
+    protected function raw(string $expression, array $bindings = []): RawExpression
+    {
+        return new RawExpression($expression, $bindings);
+    }
+
+    /**
      * Invalidiert den Statement-Cache für Abfragen dieser Tabelle
      *
      * @return void
@@ -403,5 +370,20 @@ abstract class QueryBuilder implements QueryBuilderInterface
 
         $operator = $not ? 'NOT IN' : 'IN';
         return "{$column} {$operator} (" . implode(', ', $placeholders) . ")";
+    }
+
+    /**
+     * Erstellt einen eindeutigen Parameternamen
+     *
+     * @param string $prefix Präfix für den Parameternamen
+     * @return string Der generierte Parametername
+     */
+    protected function createParameterName(string $prefix = 'param'): string
+    {
+        static $counters = [];
+        if (!isset($counters[$prefix])) {
+            $counters[$prefix] = 0;
+        }
+        return $prefix . '_' . ($counters[$prefix]++);
     }
 }

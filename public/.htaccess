@@ -1,0 +1,28 @@
+# Aktiviere die Rewrite-Engine
+RewriteEngine On
+
+# Einige Hosting-Anbieter benötigen RewriteBase
+# Aktiviere die Rewrite-Engine
+RewriteEngine On
+
+# Setze den RewriteBase auf das Wurzelverzeichnis der Website
+RewriteBase /
+
+# Wenn die Anfrage kein physischer Ordner ist
+RewriteCond %{REQUEST_FILENAME} !-d
+
+# Wenn die Anfrage keine physische Datei ist
+RewriteCond %{REQUEST_FILENAME} !-f
+
+# Leite alle Anfragen an index.php weiter
+RewriteRule ^ index.php [QSA,L]
+
+# Sicherheitsheader setzen
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-XSS-Protection "1; mode=block"
+    Header set X-Frame-Options "SAMEORIGIN"
+</IfModule>
+
+# Verzeichnisschutz aktivieren
+Options -Indexes

@@ -5,15 +5,15 @@
 - [Einführung](#einführung)
 - [Grundlegende Verwendung](#grundlegende-verwendung)
 - [Select Abfragen](#select-abfragen)
-  - [Spalten auswählen](#spalten-auswählen)
-  - [Where-Bedingungen](#where-bedingungen)
-  - [Joins](#joins)
-  - [Gruppierung und Sortierung](#gruppierung-und-sortierung)
-  - [Limitierung und Paginierung](#limitierung-und-paginierung)
-  - [Aggregatfunktionen](#aggregatfunktionen)
-  - [Subqueries](#subqueries)
-  - [CTE (Common Table Expressions)](#cte-common-table-expressions)
-  - [Abfrage-Kombinationen](#abfrage-kombinationen)
+    - [Spalten auswählen](#spalten-auswählen)
+    - [Where-Bedingungen](#where-bedingungen)
+    - [Joins](#joins)
+    - [Gruppierung und Sortierung](#gruppierung-und-sortierung)
+    - [Limitierung und Paginierung](#limitierung-und-paginierung)
+    - [Aggregatfunktionen](#aggregatfunktionen)
+    - [Subqueries](#subqueries)
+    - [CTE (Common Table Expressions)](#cte-common-table-expressions)
+    - [Abfrage-Kombinationen](#abfrage-kombinationen)
 - [Insert Abfragen](#insert-abfragen)
 - [Update Abfragen](#update-abfragen)
 - [Delete Abfragen](#delete-abfragen)
@@ -24,9 +24,12 @@
 
 ## Einführung
 
-Der QueryBuilder ist ein leistungsfähiges PHP-Tool, das eine objektorientierte Schnittstelle zur Datenbankkommunikation bietet. Mit seiner fluent API können SQL-Abfragen auf einfache Weise erstellt und ausgeführt werden, ohne direkt SQL-Strings schreiben zu müssen.
+Der QueryBuilder ist ein leistungsfähiges PHP-Tool, das eine objektorientierte Schnittstelle zur Datenbankkommunikation
+bietet. Mit seiner fluent API können SQL-Abfragen auf einfache Weise erstellt und ausgeführt werden, ohne direkt
+SQL-Strings schreiben zu müssen.
 
 Die Hauptvorteile des QueryBuilders sind:
+
 - Typsichere Abfragen
 - Automatischer Schutz vor SQL-Injection
 - Einfaches Chaining der Methoden für komplexe Abfragen
@@ -402,7 +405,8 @@ $query->orWhereJsonHasKey('data', 'phone');
 
 ## Raw SQL Ausdrücke
 
-Für komplexe SQL-Ausdrücke, die nicht durch die QueryBuilder-Methoden abgedeckt werden, können Raw-Expressions verwendet werden:
+Für komplexe SQL-Ausdrücke, die nicht durch die QueryBuilder-Methoden abgedeckt werden, können Raw-Expressions verwendet
+werden:
 
 ```php
 // Raw Expression erstellen
@@ -439,7 +443,8 @@ $formattedSql = $query->toFormattedSql();
 
 ## Cache
 
-Der QueryBuilder verwendet einen Statement-Cache, um die Leistung zu verbessern. Der Cache wird automatisch verwaltet, aber bei Bedarf kann er für bestimmte Tabellen invalidiert werden:
+Der QueryBuilder verwendet einen Statement-Cache, um die Leistung zu verbessern. Der Cache wird automatisch verwaltet,
+aber bei Bedarf kann er für bestimmte Tabellen invalidiert werden:
 
 ```php
 // Cache invalidieren (wird automatisch vom System bei Änderungen durchgeführt)

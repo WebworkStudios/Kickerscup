@@ -16,12 +16,10 @@ use App\Infrastructure\Security\Csrf\CsrfServiceProvider;
 use App\Infrastructure\Session\SessionServiceProvider;
 
 
-// Create the container
 $container = new Container;
 
-// Register Config
 $container->singleton('config', function () {
-    return new App\Infrastructure\Config\Config();
+    return new App\Infrastructure\Config\Config;
 });
 // Register core services
 $routingProvider = new RoutingServiceProvider;
@@ -42,18 +40,13 @@ $errorHandlingProvider->register($container);
 $databaseProvider = new DatabaseServiceProvider;
 $databaseProvider->register($container);
 
-
-// Register HTTP factories and interfaces
 $container->singleton(App\Infrastructure\Http\Contracts\RequestFactoryInterface::class, RequestFactory::class);
 $container->singleton(App\Infrastructure\Http\Contracts\ResponseFactoryInterface::class, ResponseFactory::class);
 
-// Wichtig: Registriere das RequestInterface
 $container->bind(App\Infrastructure\Http\Contracts\RequestInterface::class, Request::class);
 
-// Load configuration
 $config = require APP_ROOT . '/config/app.php';
 
-// Auto-discover services
 $serviceScanner = new ServiceScanner($container);
 $serviceScanner->scan([
     APP_ROOT . '/src/Application',
@@ -61,17 +54,14 @@ $serviceScanner->scan([
     APP_ROOT . '/src/Infrastructure',
 ]);
 
-// Set up the router
 $routeScanner = $container->get(App\Infrastructure\Routing\Contracts\RouteScannerInterface::class);
 
-// Scan directories for routes
 $routeScanner->scan([
     APP_ROOT . '/src/Presentation/Controllers',
     APP_ROOT . '/src/Presentation/Actions',
 ], 'App\\Presentation');
 
-// Load routes from configuration
-require APP_ROOT . '/config/routes.php';
+$routesCallback = require APP_ROOT . '/config/routes.php';
+$routesCallback($container);
 
-// Create and return the application
 return $container->get(Application::class);

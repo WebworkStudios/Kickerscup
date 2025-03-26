@@ -97,6 +97,215 @@ class SelectQueryBuilder extends QueryBuilder
     }
 
     /**
+     * {@inheritdoc}
+     */
+    public function toSql(): string
+    {
+        $withClause = $this->compileWith();
+
+        $mainQuery = $this->compileSelect()
+            . $this->compileFrom()
+            . $this->compileJoins()
+            . $this->compileWheres()
+            . $this->compileGroups()
+            . $this->compileHavings()
+            . $this->compileOrders()
+            . $this->compileLimit()
+            . $this->compileOffset();
+
+        // Wenn keine kombinierten Abfragen vorhanden sind, gib die normale Abfrage zurück
+        if (empty($this->combines)) {
+            return $withClause ? $withClause . ' ' . $mainQuery : $mainQuery;
+        }
+
+        // Erstelle einen Wrapper für die Hauptabfrage, wenn ORDER, LIMIT oder OFFSET vorhanden sind
+        // diese müssen auf die Gesamtabfrage angewendet werden, nicht auf einzelne Teile
+        $needsWrapping = !empty($this->orders) || $this->limit !== null || $this->offset !== null;
+
+        $sql = $needsWrapping ? '(' . $mainQuery . ')' : $mainQuery;
+
+        // Füge die kombinierten Abfragen hinzu
+        foreach ($this->combines as $combine) {
+            $combineQuery = $combine['query']->toSql();
+            $sql .= ' ' . $combine['type'] . ' ' . $combineQuery;
+        }
+
+        // Wenn Wrapping nötig war, füge ORDER, LIMIT und OFFSET außerhalb des Wrappers hinzu
+        if ($needsWrapping) {
+            $sql = 'SELECT * FROM ' . $sql;
+
+            if (!empty($this->orders)) {
+                $sql .= ' ' . $this->compileOrders();
+            }
+
+            if ($this->limit !== null) {
+                $sql .= ' ' . $this->compileLimit();
+            }
+
+            if ($this->offset !== null) {
+                $sql .= ' ' . $this->compileOffset();
+            }
+        }
+
+        return $withClause ? $withClause . ' ' . $sql : $sql;
+    }
+
+    /**
+     * Kompiliert den WITH-Teil der Abfrage für CTEs
+     *
+     * @return string
+     */
+    protected function compileWith(): string
+    {
+        if (empty($this->ctes)) {
+            return '';
+        }
+
+        $expressions = [];
+
+        foreach ($this->ctes as $name => $cte) {
+            $columns = '';
+            if ($cte instanceof Subquery && $cte->getColumns() !== null) {
+                $columns = '(' . implode(', ', $cte->getColumns()) . ')';
+            }
+
+            if ($cte instanceof Subquery) {
+                $expressions[] = $name . $columns . ' AS (' . $cte->getBuilder()->toSql() . ')';
+            } else {
+                $expressions[] = $name . $columns . ' AS (' . $cte->toSql() . ')';
+            }
+        }
+
+        return 'WITH ' . implode(', ', $expressions);
+    }
+
+    /**
+     * Kompiliert den SELECT-Teil der Abfrage
+     *
+     * @return string
+     */
+    protected function compileSelect(): string
+    {
+        return 'SELECT ' . implode(', ', $this->columns);
+    }
+
+    /**
+     * Kompiliert den FROM-Teil der Abfrage
+     *
+     * @return string
+     */
+    protected function compileFrom(): string
+    {
+        return ' FROM ' . $this->table;
+    }
+
+    /**
+     * Kompiliert die JOIN-Teile der Abfrage
+     *
+     * @return string
+     */
+    protected function compileJoins(): string
+    {
+        if (empty($this->joins)) {
+            return '';
+        }
+
+        $sql = '';
+
+        foreach ($this->joins as $join) {
+            $sql .= ' ' . $join['type'] . ' JOIN ' . $join['table'] . ' ON ' . $join['condition'];
+        }
+
+        return $sql;
+    }
+
+    /**
+     * Kompiliert den WHERE-Teil der Abfrage
+     *
+     * @return string
+     */
+    protected function compileWheres(): string
+    {
+        if ($this->whereGroup !== null && !empty($this->whereGroup->toSql())) {
+            // Parameter aus der WhereClauseGroup übernehmen
+            $this->parameters = array_merge($this->parameters, $this->whereGroup->getParameters());
+            return ' WHERE ' . $this->whereGroup->toSql();
+        }
+
+        return '';
+    }
+
+    /**
+     * Kompiliert den GROUP BY-Teil der Abfrage
+     *
+     * @return string
+     */
+    protected function compileGroups(): string
+    {
+        if (empty($this->groups)) {
+            return '';
+        }
+
+        return ' GROUP BY ' . implode(', ', $this->groups);
+    }
+
+    /**
+     * Kompiliert den HAVING-Teil der Abfrage
+     *
+     * @return string
+     */
+    protected function compileHavings(): string
+    {
+        if (empty($this->havings)) {
+            return '';
+        }
+
+        return ' HAVING ' . implode(' AND ', $this->havings);
+    }
+
+    /**
+     * Kompiliert den ORDER BY-Teil der Abfrage
+     *
+     * @return string
+     */
+    protected function compileOrders(): string
+    {
+        if (empty($this->orders)) {
+            return '';
+        }
+
+        return ' ORDER BY ' . implode(', ', $this->orders);
+    }
+
+    /**
+     * Kompiliert den LIMIT-Teil der Abfrage
+     *
+     * @return string
+     */
+    protected function compileLimit(): string
+    {
+        if ($this->limit === null) {
+            return '';
+        }
+
+        return ' LIMIT ' . $this->limit;
+    }
+
+    /**
+     * Kompiliert den OFFSET-Teil der Abfrage
+     *
+     * @return string
+     */
+    protected function compileOffset(): string
+    {
+        if ($this->offset === null) {
+            return '';
+        }
+
+        return ' OFFSET ' . $this->offset;
+    }
+
+    /**
      * Fügt eine einzelne Spalte zur SELECT-Klausel hinzu
      *
      * @param string|RawExpression $column Die Spalte
@@ -140,6 +349,25 @@ class SelectQueryBuilder extends QueryBuilder
     }
 
     /**
+     * Fügt einen Join hinzu
+     *
+     * @param string $type Join-Typ (INNER, LEFT, RIGHT)
+     * @param string $table Tabelle für den Join
+     * @param string $condition Join-Bedingung
+     * @return $this
+     */
+    protected function addJoin(string $type, string $table, string $condition): self
+    {
+        $this->joins[] = [
+            'type' => $type,
+            'table' => $table,
+            'condition' => $condition
+        ];
+
+        return $this;
+    }
+
+    /**
      * Fügt einen LEFT JOIN hinzu
      *
      * @param string $table Tabelle für den Join
@@ -161,25 +389,6 @@ class SelectQueryBuilder extends QueryBuilder
     public function rightJoin(string $table, string $condition): self
     {
         return $this->addJoin('RIGHT', $table, $condition);
-    }
-
-    /**
-     * Fügt einen Join hinzu
-     *
-     * @param string $type Join-Typ (INNER, LEFT, RIGHT)
-     * @param string $table Tabelle für den Join
-     * @param string $condition Join-Bedingung
-     * @return $this
-     */
-    protected function addJoin(string $type, string $table, string $condition): self
-    {
-        $this->joins[] = [
-            'type' => $type,
-            'table' => $table,
-            'condition' => $condition
-        ];
-
-        return $this;
     }
 
     /**
@@ -212,35 +421,6 @@ class SelectQueryBuilder extends QueryBuilder
         $this->parameters = array_merge($this->parameters, $query->getParameters());
 
         return $this;
-    }
-
-    /**
-     * Kompiliert den WITH-Teil der Abfrage für CTEs
-     *
-     * @return string
-     */
-    protected function compileWith(): string
-    {
-        if (empty($this->ctes)) {
-            return '';
-        }
-
-        $expressions = [];
-
-        foreach ($this->ctes as $name => $cte) {
-            $columns = '';
-            if ($cte instanceof Subquery && $cte->getColumns() !== null) {
-                $columns = '(' . implode(', ', $cte->getColumns()) . ')';
-            }
-
-            if ($cte instanceof Subquery) {
-                $expressions[] = $name . $columns . ' AS (' . $cte->getBuilder()->toSql() . ')';
-            } else {
-                $expressions[] = $name . $columns . ' AS (' . $cte->toSql() . ')';
-            }
-        }
-
-        return 'WITH ' . implode(', ', $expressions);
     }
 
     /**
@@ -281,7 +461,6 @@ class SelectQueryBuilder extends QueryBuilder
 
         return $this;
     }
-
 
     /**
      * Fügt eine WHERE NOT IN-Bedingung hinzu
@@ -348,7 +527,6 @@ class SelectQueryBuilder extends QueryBuilder
         $this->whereGroup->where(new RawExpression("{$column} IS NOT NULL"));
         return $this;
     }
-
 
     /**
      * Fügt eine WHERE BETWEEN-Bedingung hinzu
@@ -462,6 +640,24 @@ class SelectQueryBuilder extends QueryBuilder
     }
 
     /**
+     * Setzt LIMIT und OFFSET für Paginierung
+     *
+     * @param int $page Seitennummer (beginnt bei 1)
+     * @param int $perPage Einträge pro Seite
+     * @return $this
+     */
+    public function paginate(int $page, int $perPage): self
+    {
+        $page = max(1, $page);
+        $perPage = max(1, $perPage);
+
+        $this->limit($perPage);
+        $this->offset(($page - 1) * $perPage);
+
+        return $this;
+    }
+
+    /**
      * Fügt eine LIMIT-Klausel hinzu
      *
      * @param int $limit Limit
@@ -483,35 +679,6 @@ class SelectQueryBuilder extends QueryBuilder
     {
         $this->offset = max(0, $offset);
         return $this;
-    }
-
-    /**
-     * Setzt LIMIT und OFFSET für Paginierung
-     *
-     * @param int $page Seitennummer (beginnt bei 1)
-     * @param int $perPage Einträge pro Seite
-     * @return $this
-     */
-    public function paginate(int $page, int $perPage): self
-    {
-        $page = max(1, $page);
-        $perPage = max(1, $perPage);
-
-        $this->limit($perPage);
-        $this->offset(($page - 1) * $perPage);
-
-        return $this;
-    }
-
-    /**
-     * Führt die Abfrage aus und gibt das erste Ergebnis zurück
-     *
-     * @return array|null Die erste Zeile oder null
-     */
-    public function first(): ?array
-    {
-        $this->limit(1);
-        return $this->getConnection()->queryFirst($this->toSql(), $this->parameters);
     }
 
     /**
@@ -541,6 +708,17 @@ class SelectQueryBuilder extends QueryBuilder
         $this->columns = $original;
 
         return (int)($result['aggregate'] ?? 0);
+    }
+
+    /**
+     * Führt die Abfrage aus und gibt das erste Ergebnis zurück
+     *
+     * @return array|null Die erste Zeile oder null
+     */
+    public function first(): ?array
+    {
+        $this->limit(1);
+        return $this->getConnection()->queryFirst($this->toSql(), $this->parameters);
     }
 
     /**
@@ -617,60 +795,6 @@ class SelectQueryBuilder extends QueryBuilder
         $this->columns = $original;
 
         return $result['aggregate'] ?? null;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function toSql(): string
-    {
-        $withClause = $this->compileWith();
-
-        $mainQuery = $this->compileSelect()
-            . $this->compileFrom()
-            . $this->compileJoins()
-            . $this->compileWheres()
-            . $this->compileGroups()
-            . $this->compileHavings()
-            . $this->compileOrders()
-            . $this->compileLimit()
-            . $this->compileOffset();
-
-        // Wenn keine kombinierten Abfragen vorhanden sind, gib die normale Abfrage zurück
-        if (empty($this->combines)) {
-            return $withClause ? $withClause . ' ' . $mainQuery : $mainQuery;
-        }
-
-        // Erstelle einen Wrapper für die Hauptabfrage, wenn ORDER, LIMIT oder OFFSET vorhanden sind
-        // diese müssen auf die Gesamtabfrage angewendet werden, nicht auf einzelne Teile
-        $needsWrapping = !empty($this->orders) || $this->limit !== null || $this->offset !== null;
-
-        $sql = $needsWrapping ? '(' . $mainQuery . ')' : $mainQuery;
-
-        // Füge die kombinierten Abfragen hinzu
-        foreach ($this->combines as $combine) {
-            $combineQuery = $combine['query']->toSql();
-            $sql .= ' ' . $combine['type'] . ' ' . $combineQuery;
-        }
-
-        // Wenn Wrapping nötig war, füge ORDER, LIMIT und OFFSET außerhalb des Wrappers hinzu
-        if ($needsWrapping) {
-            $sql = 'SELECT * FROM ' . $sql;
-
-            if (!empty($this->orders)) {
-                $sql .= ' ' . $this->compileOrders();
-            }
-
-            if ($this->limit !== null) {
-                $sql .= ' ' . $this->compileLimit();
-            }
-
-            if ($this->offset !== null) {
-                $sql .= ' ' . $this->compileOffset();
-            }
-        }
-
-        return $withClause ? $withClause . ' ' . $sql : $sql;
     }
 
     /**
@@ -799,132 +923,6 @@ class SelectQueryBuilder extends QueryBuilder
         $this->parameters = array_merge($this->parameters, $query->getParameters());
 
         return $this;
-    }
-
-    /**
-     * Kompiliert den SELECT-Teil der Abfrage
-     *
-     * @return string
-     */
-    protected function compileSelect(): string
-    {
-        return 'SELECT ' . implode(', ', $this->columns);
-    }
-
-    /**
-     * Kompiliert den FROM-Teil der Abfrage
-     *
-     * @return string
-     */
-    protected function compileFrom(): string
-    {
-        return ' FROM ' . $this->table;
-    }
-
-    /**
-     * Kompiliert die JOIN-Teile der Abfrage
-     *
-     * @return string
-     */
-    protected function compileJoins(): string
-    {
-        if (empty($this->joins)) {
-            return '';
-        }
-
-        $sql = '';
-
-        foreach ($this->joins as $join) {
-            $sql .= ' ' . $join['type'] . ' JOIN ' . $join['table'] . ' ON ' . $join['condition'];
-        }
-
-        return $sql;
-    }
-
-    /**
-     * Kompiliert den WHERE-Teil der Abfrage
-     *
-     * @return string
-     */
-    protected function compileWheres(): string
-    {
-        if ($this->whereGroup !== null && !empty($this->whereGroup->toSql())) {
-            // Parameter aus der WhereClauseGroup übernehmen
-            $this->parameters = array_merge($this->parameters, $this->whereGroup->getParameters());
-            return ' WHERE ' . $this->whereGroup->toSql();
-        }
-
-        return '';
-    }
-
-    /**
-     * Kompiliert den GROUP BY-Teil der Abfrage
-     *
-     * @return string
-     */
-    protected function compileGroups(): string
-    {
-        if (empty($this->groups)) {
-            return '';
-        }
-
-        return ' GROUP BY ' . implode(', ', $this->groups);
-    }
-
-    /**
-     * Kompiliert den HAVING-Teil der Abfrage
-     *
-     * @return string
-     */
-    protected function compileHavings(): string
-    {
-        if (empty($this->havings)) {
-            return '';
-        }
-
-        return ' HAVING ' . implode(' AND ', $this->havings);
-    }
-
-    /**
-     * Kompiliert den ORDER BY-Teil der Abfrage
-     *
-     * @return string
-     */
-    protected function compileOrders(): string
-    {
-        if (empty($this->orders)) {
-            return '';
-        }
-
-        return ' ORDER BY ' . implode(', ', $this->orders);
-    }
-
-    /**
-     * Kompiliert den LIMIT-Teil der Abfrage
-     *
-     * @return string
-     */
-    protected function compileLimit(): string
-    {
-        if ($this->limit === null) {
-            return '';
-        }
-
-        return ' LIMIT ' . $this->limit;
-    }
-
-    /**
-     * Kompiliert den OFFSET-Teil der Abfrage
-     *
-     * @return string
-     */
-    protected function compileOffset(): string
-    {
-        if ($this->offset === null) {
-            return '';
-        }
-
-        return ' OFFSET ' . $this->offset;
     }
 }
 
