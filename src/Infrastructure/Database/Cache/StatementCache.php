@@ -121,11 +121,15 @@ class StatementCache
         }
 
         // Find key with oldest last used timestamp
-        $oldestKey = array_find_key(
-            $this->lastUsed,
-            fn($timestamp, $_, $min) => $timestamp < $min,
-            PHP_INT_MAX
-        );
+        $oldestTimestamp = PHP_INT_MAX;
+        $oldestKey = null;
+
+        foreach ($this->lastUsed as $key => $timestamp) {
+            if ($timestamp < $oldestTimestamp) {
+                $oldestTimestamp = $timestamp;
+                $oldestKey = $key;
+            }
+        }
 
         if ($oldestKey !== null) {
             $this->remove($oldestKey);

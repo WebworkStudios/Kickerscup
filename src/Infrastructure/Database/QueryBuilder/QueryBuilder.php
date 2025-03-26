@@ -188,11 +188,47 @@ abstract class QueryBuilder implements QueryBuilderInterface
      * @param string $boolean AND oder OR
      * @return static
      */
+    /**
+     * Fügt eine WHERE-Bedingung hinzu
+     *
+     * @param string|RawExpression $column Spalte oder Raw-Expression
+     * @param mixed $operator Operator oder Wert
+     * @param mixed $value Wert (optional)
+     * @param string $boolean AND oder OR
+     * @return static
+     */
     protected function addWhereCondition(string|RawExpression $column, mixed $operator = null, mixed $value = null, string $boolean = 'AND'): static
     {
         // Initialisiere die WhereClauseGroup falls noch nicht vorhanden
         if ($this->whereGroup === null) {
             $this->whereGroup = new WhereClauseGroup();
+        }
+
+        // Generiere einem eindeutigen Präfix für diese Bedingung, um Parameter-Kollisionen zu vermeiden
+        $paramPrefix = 'where_' . uniqid();
+
+        // Bei RawExpressions: Sicherstellen, dass die Parameter-Namen eindeutig sind
+        if ($column instanceof RawExpression) {
+            $originalParams = $column->getParameters();
+            $newParams = [];
+
+            // Parameter umschreiben mit eindeutigen Namen
+            foreach ($originalParams as $key => $val) {
+                $newKey = "{$paramPrefix}_{$key}";
+                $newParams[$newKey] = $val;
+            }
+
+            // Neue RawExpression mit umbenannten Parametern erstellen
+            if (!empty($originalParams)) {
+                $expression = $column->getExpression();
+
+                // Ersetze Parameter-Platzhalter in der Expression
+                foreach ($originalParams as $key => $val) {
+                    $expression = str_replace(":{$key}", ":{$paramPrefix}_{$key}", $expression);
+                }
+
+                $column = new RawExpression($expression, $newParams);
+            }
         }
 
         // Delegiere direkt an die WhereClauseGroup für konsistente Behandlung
