@@ -102,7 +102,7 @@ class ConnectionManager
         // Finde den Konfigurationsnamen, der dem gesuchten Host entspricht
         $connectionName = array_find_key(
             $this->configurations,
-            fn($config) => $config->host === $host
+            fn($key, $config) => $config->host === $host
         );
 
         // Wenn ein passender Name gefunden wurde, hole die zugehörige Verbindung

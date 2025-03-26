@@ -382,27 +382,24 @@ abstract class QueryBuilder implements QueryBuilderInterface
 
         // Für kleinere Arrays können Gleichheitsbedingungen performanter sein als IN-Klauseln
         if (count($values) <= 3) {
-            $conditions = [];
             $operator = $not ? '!=' : '=';
             $combiner = $not ? ' AND ' : ' OR ';
 
-            foreach ($values as $value) {
+            $conditions = array_map(function($value) use ($column, $operator, $not) {
                 $paramName = $this->createParameterName($not ? 'wherenotin' : 'wherein');
                 $this->parameters[$paramName] = $value;
-                $conditions[] = "{$column} {$operator} :{$paramName}";
-            }
+                return "{$column} {$operator} :{$paramName}";
+            }, $values);
 
             return "(" . implode($combiner, $conditions) . ")";
         }
 
         // Standard IN/NOT IN-Klausel für größere Arrays
-        $placeholders = [];
-
-        foreach ($values as $value) {
+        $placeholders = array_map(function($value) use ($not) {
             $paramName = $this->createParameterName($not ? 'wherenotin' : 'wherein');
             $this->parameters[$paramName] = $value;
-            $placeholders[] = ":{$paramName}";
-        }
+            return ":{$paramName}";
+        }, $values);
 
         $operator = $not ? 'NOT IN' : 'IN';
         return "{$column} {$operator} (" . implode(', ', $placeholders) . ")";

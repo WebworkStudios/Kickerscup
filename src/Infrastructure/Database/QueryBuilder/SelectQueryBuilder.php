@@ -409,7 +409,7 @@ class SelectQueryBuilder extends QueryBuilder
     {
         $hasEmptyColumns = array_any($columns, fn($col) => empty($col));
 
-        if ($hasEmptyColumns === true) {
+        if ($hasEmptyColumns) {
             throw new QueryException("Empty column name in groupBy");
         }
 
