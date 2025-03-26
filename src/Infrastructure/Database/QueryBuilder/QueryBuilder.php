@@ -123,8 +123,24 @@ abstract class QueryBuilder implements QueryBuilderInterface
      */
     protected function isRawExpression(mixed $value): bool
     {
-        // Hier könnte ein eigenes Expression-Objekt implementiert werden
-        return is_object($value) && method_exists($value, 'toSql');
+        return $value instanceof RawExpression;
+    }
+
+    /**
+     * Parst einen Wert für die SQL-Abfrage
+     *
+     * @param mixed $value Der zu parsende Wert
+     * @return string
+     */
+    protected function parseValue(mixed $value): string
+    {
+        if ($this->isRawExpression($value)) {
+            // Füge die Parameter aus der RawExpression hinzu
+            $this->parameters = array_merge($this->parameters, $value->getParameters());
+            return $value->toSql();
+        }
+
+        return '?';
     }
 
     /**

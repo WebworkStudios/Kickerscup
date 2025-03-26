@@ -6,6 +6,7 @@ declare(strict_types=1);
 use App\Infrastructure\Application\Application;
 use App\Infrastructure\Container\Container;
 use App\Infrastructure\Container\ServiceScanner;
+use App\Infrastructure\Database\DatabaseServiceProvider;
 use App\Infrastructure\ErrorHandling\ErrorHandlingServiceProvider;
 use App\Infrastructure\Http\Factory\RequestFactory;
 use App\Infrastructure\Http\Factory\ResponseFactory;
@@ -33,6 +34,10 @@ $loggerProvider->register($container);
 
 $errorHandlingProvider = new ErrorHandlingServiceProvider;
 $errorHandlingProvider->register($container);
+
+$databaseProvider = new DatabaseServiceProvider;
+$databaseProvider->register($container);
+
 
 // Register HTTP factories
 $container->singleton(App\Infrastructure\Http\Contracts\RequestFactoryInterface::class, RequestFactory::class);

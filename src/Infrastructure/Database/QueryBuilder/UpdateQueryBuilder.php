@@ -37,10 +37,10 @@ class UpdateQueryBuilder extends QueryBuilder
     }
 
     /**
-     * Setzt einen einzelnen Wert
+     * Setzt einen einzelnen Wert, der auch eine Raw-Expression sein kann
      *
      * @param string $column Spalte
-     * @param mixed $value Wert
+     * @param mixed $value Wert oder Raw-Expression
      * @return $this
      */
     public function set(string $column, mixed $value): self
@@ -216,9 +216,15 @@ class UpdateQueryBuilder extends QueryBuilder
         $sets = [];
 
         foreach ($this->values as $column => $value) {
-            $paramName = "update_{$column}";
-            $this->parameters[$paramName] = $value;
-            $sets[] = "{$column} = :{$paramName}";
+            if ($value instanceof RawExpression) {
+                // Füge die Parameter der Raw-Expression hinzu
+                $this->parameters = array_merge($this->parameters, $value->getParameters());
+                $sets[] = "{$column} = {$value->toSql()}";
+            } else {
+                $paramName = "update_{$column}";
+                $this->parameters[$paramName] = $value;
+                $sets[] = "{$column} = :{$paramName}";
+            }
         }
 
         $sql .= implode(', ', $sets);
@@ -229,4 +235,5 @@ class UpdateQueryBuilder extends QueryBuilder
 
         return $sql;
     }
+
 }

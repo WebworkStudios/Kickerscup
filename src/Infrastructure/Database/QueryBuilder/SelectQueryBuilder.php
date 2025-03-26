@@ -86,14 +86,47 @@ class SelectQueryBuilder extends QueryBuilder
     }
 
     /**
-     * Setzt die zu selektierenden Spalten
+     * Fügt eine Spalte zur SELECT-Klausel hinzu, die eine Raw-Expression sein kann
      *
-     * @param string|array $columns Spalten für die Abfrage
+     * @param string|RawExpression|array $columns Die Spalte(n)
      * @return $this
      */
-    public function select(string|array $columns = ['*']): self
+    public function select(string|RawExpression|array $columns = ['*']): self
     {
-        $this->columns = is_array($columns) ? $columns : func_get_args();
+        if (is_string($columns) || $columns instanceof RawExpression) {
+            $columns = [$columns];
+        }
+
+        $this->columns = [];
+
+        foreach ($columns as $column) {
+            if ($column instanceof RawExpression) {
+                $this->parameters = array_merge($this->parameters, $column->getParameters());
+                $this->columns[] = $column->toSql();
+            } else {
+                $this->columns[] = $column;
+            }
+        }
+
+        return $this;
+    }
+
+    /**
+     * Fügt eine einzelne Spalte zur SELECT-Klausel hinzu
+     *
+     * @param string|RawExpression $column Die Spalte
+     * @param string|null $alias Optionaler Alias
+     * @return $this
+     */
+    public function addSelect(string|RawExpression $column, ?string $alias = null): self
+    {
+        if ($column instanceof RawExpression) {
+            $this->parameters = array_merge($this->parameters, $column->getParameters());
+            $this->columns[] = $alias ? "({$column->toSql()}) AS {$alias}" : $column->toSql();
+        } else {
+            $this->columns[] = $alias ? "{$column} AS {$alias}" : $column;
+        }
+
         return $this;
     }
 
@@ -214,17 +247,25 @@ class SelectQueryBuilder extends QueryBuilder
     }
 
     /**
-     * Fügt eine WHERE-Bedingung hinzu
+     * Fügt eine WHERE-Bedingung mit einer Raw-Expression hinzu
      *
-     * @param string $column Spalte
+     * @param string|RawExpression $column Spalte oder Raw-Expression
      * @param mixed $operator Operator oder Wert
      * @param mixed $value Wert (optional)
      * @return $this
      */
-    public function where(string $column, mixed $operator, mixed $value = null): self
+    public function where(string|RawExpression $column, mixed $operator = null, mixed $value = null): self
     {
+        // Wenn column eine RawExpression ist, verwende sie direkt
+        if ($column instanceof RawExpression) {
+            // Füge alle Bindungen der Raw-Expression hinzu
+            $this->parameters = array_merge($this->parameters, $column->getParameters());
+            $this->wheres[] = $column->toSql();
+            return $this;
+        }
+
         // Wenn nur zwei Parameter angegeben wurden, verwende = als Operator
-        if ($value === null) {
+        if ($value === null && $operator !== null) {
             $value = $operator;
             $operator = '=';
         }
@@ -237,13 +278,6 @@ class SelectQueryBuilder extends QueryBuilder
         return $this;
     }
 
-    /**
-     * Fügt eine WHERE IN-Bedingung hinzu
-     *
-     * @param string $column Spalte
-     * @param array $values Werte
-     * @return $this
-     */
     /**
      * Fügt eine WHERE IN-Bedingung hinzu
      *
@@ -788,6 +822,18 @@ class SelectQueryBuilder extends QueryBuilder
         $this->parameters = array_merge($this->parameters, $query->getParameters());
 
         return $this;
+    }
+
+    /**
+     * Erstellt eine neue Raw-SQL-Expression
+     *
+     * @param string $expression Die rohe SQL-Expression
+     * @param array $bindings Parameter-Bindungen für die Expression
+     * @return RawExpression
+     */
+    public function raw(string $expression, array $bindings = []): RawExpression
+    {
+        return new RawExpression($expression, $bindings);
     }
 
     /**
