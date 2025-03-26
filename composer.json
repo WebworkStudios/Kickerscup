@@ -1,5 +1,5 @@
 {
-  "name": "Kickerscup",
+  "name": "kickerscup/kickerscup",
   "description": "Ein elegantes PHP 8.4 Framework mit ADR-Muster für einen Fußballmanager",
   "type": "project",
   "license": "MIT",

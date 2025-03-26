@@ -1,6 +1,5 @@
 <?php
 
-
 declare(strict_types=1);
 
 use App\Infrastructure\Application\Application;
@@ -10,6 +9,7 @@ use App\Infrastructure\Database\DatabaseServiceProvider;
 use App\Infrastructure\ErrorHandling\ErrorHandlingServiceProvider;
 use App\Infrastructure\Http\Factory\RequestFactory;
 use App\Infrastructure\Http\Factory\ResponseFactory;
+use App\Infrastructure\Http\Request;
 use App\Infrastructure\Logging\LoggerServiceProvider;
 use App\Infrastructure\Routing\RoutingServiceProvider;
 use App\Infrastructure\Security\Csrf\CsrfServiceProvider;
@@ -19,6 +19,10 @@ use App\Infrastructure\Session\SessionServiceProvider;
 // Create the container
 $container = new Container;
 
+// Register Config
+$container->singleton('config', function () {
+    return new App\Infrastructure\Config\Config();
+});
 // Register core services
 $routingProvider = new RoutingServiceProvider;
 $routingProvider->register($container);
@@ -39,9 +43,12 @@ $databaseProvider = new DatabaseServiceProvider;
 $databaseProvider->register($container);
 
 
-// Register HTTP factories
+// Register HTTP factories and interfaces
 $container->singleton(App\Infrastructure\Http\Contracts\RequestFactoryInterface::class, RequestFactory::class);
 $container->singleton(App\Infrastructure\Http\Contracts\ResponseFactoryInterface::class, ResponseFactory::class);
+
+// Wichtig: Registriere das RequestInterface
+$container->bind(App\Infrastructure\Http\Contracts\RequestInterface::class, Request::class);
 
 // Load configuration
 $config = require APP_ROOT . '/config/app.php';

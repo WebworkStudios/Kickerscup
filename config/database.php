@@ -12,7 +12,7 @@ return [
     | to use as your default connection for all database work.
     |
     */
-    'default' => env('DB_CONNECTION', 'mysql'),
+    'default' => 'mysql',
 
     /*
     |--------------------------------------------------------------------------
@@ -25,11 +25,11 @@ return [
     'connections' => [
         'mysql' => [
             'driver' => 'mysql',
-            'host' => env('DB_HOST', '127.0.0.1'),
-            'port' => env('DB_PORT', 3306),
-            'database' => env('DB_DATABASE', ''),
-            'username' => env('DB_USERNAME', ''),
-            'password' => env('DB_PASSWORD', ''),
+            'host' => '127.0.0.1',
+            'port' => 3306,
+            'database' => 'testdb',
+            'username' => 'root',
+            'password' => '',
             'charset' => 'utf8mb4',
             'collation' => 'utf8mb4_unicode_ci',
             'prefix' => '',
@@ -42,13 +42,6 @@ return [
                 PDO::ATTR_EMULATE_PREPARES => false,
             ]
         ],
-
-        'sqlite' => [
-            'driver' => 'sqlite',
-            'database' => env('DB_DATABASE', ''),
-            'prefix' => '',
-            'foreign_key_constraints' => true,
-        ]
     ],
 
     /*
@@ -72,7 +65,7 @@ return [
     |
     */
     'debug' => [
-        'enabled' => env('DB_DEBUG', false),
-        'with_backtrace' => env('DB_DEBUG_BACKTRACE', false)
+        'enabled' => true,
+        'with_backtrace' => true
     ]
 ];
