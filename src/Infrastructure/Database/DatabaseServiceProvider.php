@@ -19,6 +19,9 @@ class DatabaseServiceProvider extends ServiceProvider
     /**
      * {@inheritdoc}
      */
+    /**
+     * {@inheritdoc}
+     */
     public function register(ContainerInterface $container): void
     {
         // Registriere den Connection Manager
@@ -26,7 +29,7 @@ class DatabaseServiceProvider extends ServiceProvider
         // Register the query debugger
         $container->singleton(Debug\QueryDebugger::class);
         // Register the statement cache
-        $container->singleton(Cache\StatementCache::class, function () {
+        $container->singleton(Cache\StatementCache::class, function () use ($container) {
             // Get max size from config if available
             $maxSize = 100; // Default
             if ($container->has('config')) {

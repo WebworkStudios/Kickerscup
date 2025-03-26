@@ -36,8 +36,8 @@ class ConnectionManager
     private string $defaultConnection = 'default';
 
     public function __construct(
-        private readonly ContainerInterface $container,
-        private readonly LoggerInterface    $logger
+        private readonly LoggerInterface    $logger,
+        ?ContainerInterface $container = null
     )
     {
     }
