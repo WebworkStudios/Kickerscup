@@ -20,7 +20,6 @@ readonly class ConnectionConfiguration
      * @param array $options Zusätzliche PDO-Optionen
      */
     public function __construct(
-        public string  $driver = 'mysql',
         public string  $host = 'localhost',
         public string  $database = '',
         public string  $username = '',

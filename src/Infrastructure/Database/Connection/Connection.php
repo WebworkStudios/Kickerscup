@@ -150,7 +150,7 @@ class Connection implements ConnectionInterface
         }
 
         try {
-            $dsn = $this->buildDsn();
+            $dsn = $this->buildMysqlDsn();
 
             $this->pdo = new PDO(
                 $dsn,
@@ -195,19 +195,6 @@ class Connection implements ConnectionInterface
         $this->connected = false;
         $this->logger->debug('Database connection closed');
     }
-
-    private function buildDsn(): string
-    {
-        $driver = $this->config->driver ?? 'mysql';
-
-        return match ($driver) {
-            'mysql' => $this->buildMysqlDsn(),
-            'pgsql' => $this->buildPgsqlDsn(),
-            'sqlite' => $this->buildSqliteDsn(),
-            default => throw new ConnectionException("Unsupported database driver: {$driver}")
-        };
-    }
-
     private function buildMysqlDsn(): string
     {
         $dsn = "mysql:host={$this->config->host};dbname={$this->config->database}";
@@ -221,22 +208,6 @@ class Connection implements ConnectionInterface
         }
 
         return $dsn;
-    }
-
-    private function buildPgsqlDsn(): string
-    {
-        $dsn = "pgsql:host={$this->config->host};dbname={$this->config->database}";
-
-        if ($this->config->port) {
-            $dsn .= ";port={$this->config->port}";
-        }
-
-        return $dsn;
-    }
-
-    private function buildSqliteDsn(): string
-    {
-        return "sqlite:{$this->config->database}";
     }
 
     /**
@@ -287,7 +258,7 @@ class Connection implements ConnectionInterface
             $paramString = json_encode($params);
         }
 
-        return md5($this->config->driver . $this->config->host . $this->config->database . $query . $paramString);
+        return md5('mysql' . $this->config->host . $this->config->database . $query . $paramString);
     }
 
     /**
