@@ -69,6 +69,13 @@ class SelectQueryBuilder extends QueryBuilder
     protected array $combines = [];
 
     /**
+     * WHERE-Bedingungen für die Abfrage
+     *
+     * @var array<string>
+     */
+    protected array $wheres = [];
+
+    /**
      * Fügt eine Spalte zur SELECT-Klausel hinzu, die eine Raw-Expression sein kann
      *
      * @param string|RawExpression|array $columns Die Spalte(n)
@@ -105,9 +112,9 @@ class SelectQueryBuilder extends QueryBuilder
     {
         if ($column instanceof RawExpression) {
             $this->parameters = array_merge($this->parameters, $column->getParameters());
-            $this->columns[] = $alias ? "({$column->toSql()}) AS {$alias}" : $column->toSql();
+            $this->columns[] = $alias ? "(" . $column->toSql() . ") AS $alias" : $column->toSql();
         } else {
-            $this->columns[] = $alias ? "{$column} AS {$alias}" : $column;
+            $this->columns[] = $alias ? "$column AS $alias" : $column;
         }
 
         return $this;

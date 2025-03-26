@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Database\QueryBuilder;
 
 use App\Infrastructure\Database\Exceptions\QueryException;
+use Closure;
 use PDOStatement;
 
 class DeleteQueryBuilder extends QueryBuilder
@@ -18,6 +19,13 @@ class DeleteQueryBuilder extends QueryBuilder
     protected array $wheres = [];
 
     protected ?WhereClauseGroup $whereGroup = null;
+
+    /**
+     * Flag für das Löschen aller Datensätze
+     *
+     * @var bool
+     */
+    protected bool $whereTrue = false;
 
     /**
      * {@inheritdoc}
