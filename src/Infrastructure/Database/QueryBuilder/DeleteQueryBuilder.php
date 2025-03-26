@@ -20,39 +20,13 @@ class DeleteQueryBuilder extends QueryBuilder
     protected ?WhereClauseGroup $whereGroup = null;
 
     /**
-     * Fügt eine WHERE-Bedingung hinzu
-     *
-     * @param string|RawExpression $column Spalte oder Raw-Expression
-     * @param mixed $operator Operator oder Wert
-     * @param mixed $value Wert (optional)
-     * @return $this
+     * {@inheritdoc}
      */
-    public function where(string|RawExpression $column, mixed $operator = null, mixed $value = null): self
+    public function where(string|RawExpression $column, mixed $operator = null, mixed $value = null): static
     {
-        // Initialisiere die WhereClauseGroup falls noch nicht vorhanden
-        if ($this->whereGroup === null) {
-            $this->whereGroup = new WhereClauseGroup();
-        }
-
-        // Wenn column eine RawExpression ist, verwende sie direkt
-        if ($column instanceof RawExpression) {
-            // Füge alle Bindungen der Raw-Expression hinzu
-            $this->parameters = array_merge($this->parameters, $column->getParameters());
-            $this->whereGroup->where($column);
-            return $this;
-        }
-
-        // Wenn nur zwei Parameter angegeben wurden, verwende = als Operator
-        if ($value === null && $operator !== null) {
-            $value = $operator;
-            $operator = '=';
-        }
-
-        // Delegiere an die WhereClauseGroup
-        $this->whereGroup->where($column, $operator, $value);
-
-        return $this;
+        return parent::where($column, $operator, $value);
     }
+
 
     /**
      * Fügt eine WHERE IN-Bedingung hinzu
@@ -82,59 +56,29 @@ class DeleteQueryBuilder extends QueryBuilder
     }
 
     /**
-     * Fügt eine WHERE OR-Bedingung hinzu
-     *
-     * @param string|RawExpression $column Spalte oder Raw-Expression
-     * @param mixed $operator Operator oder Wert
-     * @param mixed $value Wert (optional)
-     * @return $this
+     * {@inheritdoc}
      */
-    public function orWhere(string|RawExpression $column, mixed $operator = null, mixed $value = null): self
+    public function orWhere(string|RawExpression $column, mixed $operator = null, mixed $value = null): static
     {
-        if ($this->whereGroup === null) {
-            $this->whereGroup = new WhereClauseGroup();
-        }
+        return parent::orWhere($column, $operator, $value);
+    }
 
-        $this->whereGroup->orWhere($column, $operator, $value);
 
-        return $this;
+    /**
+     * {@inheritdoc}
+     */
+    public function whereGroup(Closure $callback): static
+    {
+        return parent::whereGroup($callback);
     }
 
     /**
-     * Erstellt eine neue verschachtelte Bedingungsgruppe mit AND-Verknüpfung
-     *
-     * @param \Closure $callback Callback-Funktion, die die neue Gruppe konfiguriert
-     * @return $this
+     * {@inheritdoc}
      */
-    public function whereGroup(\Closure $callback): self
+    public function orWhereGroup(Closure $callback): static
     {
-        if ($this->whereGroup === null) {
-            $this->whereGroup = new WhereClauseGroup();
-        }
-
-        $this->whereGroup->whereGroup($callback);
-
-        return $this;
+        return parent::orWhereGroup($callback);
     }
-
-    /**
-     * Erstellt eine neue verschachtelte Bedingungsgruppe mit OR-Verknüpfung
-     *
-     * @param \Closure $callback Callback-Funktion, die die neue Gruppe konfiguriert
-     * @return $this
-     */
-    public function orWhereGroup(\Closure $callback): self
-    {
-        if ($this->whereGroup === null) {
-            $this->whereGroup = new WhereClauseGroup();
-        }
-
-        $this->whereGroup->orWhereGroup($callback);
-
-        return $this;
-    }
-
-
 
     /**
      * Fügt eine WHERE NULL-Bedingung hinzu

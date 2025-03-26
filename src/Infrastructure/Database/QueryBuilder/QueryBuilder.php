@@ -1,17 +1,19 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Infrastructure\Database\QueryBuilder;
 
 use App\Infrastructure\Container\Contracts\ContainerInterface;
+use App\Infrastructure\Container\Exceptions\ContainerException;
+use App\Infrastructure\Container\Exceptions\NotFoundException;
 use App\Infrastructure\Database\Cache\StatementCache;
 use App\Infrastructure\Database\Connection\ConnectionManager;
 use App\Infrastructure\Database\Contracts\ConnectionInterface;
 use App\Infrastructure\Database\Contracts\QueryBuilderInterface;
 use App\Infrastructure\Database\Debug\QueryDebugger;
 use App\Infrastructure\Database\Exceptions\QueryException;
+use Closure;
 use PDOStatement;
 
 abstract class QueryBuilder implements QueryBuilderInterface
@@ -32,6 +34,16 @@ abstract class QueryBuilder implements QueryBuilderInterface
      * Die zu verwendende Datenbankverbindung
      */
     protected ?ConnectionInterface $connection = null;
+
+    /**
+     * Container für Dependency Injection
+     */
+    protected ?ContainerInterface $container = null;
+
+    /**
+     * WHERE-Klauselgruppe für die Abfrage
+     */
+    protected ?WhereClauseGroup $whereGroup = null;
 
     public function __construct(
         protected readonly ConnectionManager $connectionManager,
@@ -142,6 +154,7 @@ abstract class QueryBuilder implements QueryBuilderInterface
 
         return '?';
     }
+
     /**
      * Erstellt einen eindeutigen Parameternamen
      *
@@ -150,7 +163,111 @@ abstract class QueryBuilder implements QueryBuilderInterface
      */
     protected function createParameterName(string $prefix = 'param'): string
     {
-        return $prefix . '_' . count($this->parameters);
+        static $counters = [];
+        if (!isset($counters[$prefix])) {
+            $counters[$prefix] = 0;
+        }
+        return $prefix . '_' . ($counters[$prefix]++);
+    }
+
+    /**
+     * Fügt eine WHERE-Bedingung hinzu
+     *
+     * @param string|RawExpression $column Spalte oder Raw-Expression
+     * @param mixed $operator Operator oder Wert
+     * @param mixed $value Wert (optional)
+     * @param string $boolean
+     * @return static
+     */
+    protected function addWhereCondition(string|RawExpression $column, mixed $operator = null, mixed $value = null, string $boolean = 'AND'): static
+    {
+        // Initialisiere die WhereClauseGroup falls noch nicht vorhanden
+        if ($this->whereGroup === null) {
+            $this->whereGroup = new WhereClauseGroup();
+        }
+
+        // Wenn column eine RawExpression ist, verwende sie direkt
+        if ($column instanceof RawExpression) {
+            // Füge alle Bindungen der Raw-Expression hinzu
+            $this->parameters = array_merge($this->parameters, $column->getParameters());
+            $boolean === 'AND'
+                ? $this->whereGroup->where($column)
+                : $this->whereGroup->orWhere($column);
+            return $this;
+        }
+
+        // Wenn nur zwei Parameter angegeben wurden, verwende = als Operator
+        if ($value === null && $operator !== null) {
+            $value = $operator;
+            $operator = '=';
+        }
+
+        // Delegiere an die WhereClauseGroup
+        $boolean === 'AND'
+            ? $this->whereGroup->where($column, $operator, $value)
+            : $this->whereGroup->orWhere($column, $operator, $value);
+
+        return $this;
+    }
+
+    /**
+     * Fügt eine WHERE-Bedingung hinzu
+     *
+     * @param string|RawExpression $column Spalte oder Raw-Expression
+     * @param mixed $operator Operator oder Wert
+     * @param mixed $value Wert (optional)
+     * @return static
+     */
+    public function where(string|RawExpression $column, mixed $operator = null, mixed $value = null): static
+    {
+        return $this->addWhereCondition($column, $operator, $value, 'AND');
+    }
+
+    /**
+     * Fügt eine WHERE OR-Bedingung hinzu
+     *
+     * @param string|RawExpression $column Spalte oder Raw-Expression
+     * @param mixed $operator Operator oder Wert
+     * @param mixed $value Wert (optional)
+     * @return static
+     */
+    public function orWhere(string|RawExpression $column, mixed $operator = null, mixed $value = null): static
+    {
+        return $this->addWhereCondition($column, $operator, $value, 'OR');
+    }
+
+    /**
+     * Erstellt eine neue verschachtelte Bedingungsgruppe mit AND-Verknüpfung
+     *
+     * @param Closure $callback Callback-Funktion, die die neue Gruppe konfiguriert
+     * @return static
+     */
+    public function whereGroup(Closure $callback): static
+    {
+        if ($this->whereGroup === null) {
+            $this->whereGroup = new WhereClauseGroup();
+        }
+
+        $this->whereGroup->whereGroup($callback);
+
+        return $this;
+    }
+
+    /**
+     * Erstellt eine neue verschachtelte Bedingungsgruppe mit OR-Verknüpfung
+     *
+     * @param Closure $callback Callback-Funktion, die die neue Gruppe konfiguriert
+     * @return static
+     */
+    public function orWhereGroup(Closure $callback): static
+    {
+        if ($this->whereGroup === null) {
+            $this->whereGroup = new WhereClauseGroup();
+        }
+
+        $this->whereGroup->orWhereGroup($callback);
+
+        return $this;
     }
 
     /**
@@ -158,6 +275,8 @@ abstract class QueryBuilder implements QueryBuilderInterface
      *
      * @param bool $withBacktrace Ob ein Backtrace für die Abfrage erstellt werden soll
      * @return static
+     * @throws ContainerException
+     * @throws NotFoundException
      */
     public function debug(bool $withBacktrace = false): static
     {
@@ -173,6 +292,8 @@ abstract class QueryBuilder implements QueryBuilderInterface
      * Gibt die ausformatierte SQL-Abfrage zurück (mit eingefügten Parameterwerten)
      *
      * @return string
+     * @throws ContainerException
+     * @throws NotFoundException
      */
     public function toFormattedSql(): string
     {
@@ -188,6 +309,8 @@ abstract class QueryBuilder implements QueryBuilderInterface
      * Invalidiert den Statement-Cache für Abfragen dieser Tabelle
      *
      * @return void
+     * @throws ContainerException
+     * @throws NotFoundException
      */
     protected function invalidateStatementCache(): void
     {
@@ -195,5 +318,47 @@ abstract class QueryBuilder implements QueryBuilderInterface
             $cache = $this->container->get(StatementCache::class);
             $cache->invalidateByPrefix($this->table);
         }
+    }
+
+    /**
+     * Bereitet eine WHERE IN oder WHERE NOT IN Bedingung vor
+     *
+     * @param string $column Spalte
+     * @param array $values Werte
+     * @param bool $not Ob es sich um NOT IN handelt
+     * @return string Die generierte SQL-Bedingung oder eine leere Zeichenkette
+     */
+    protected function prepareWhereInCondition(string $column, array $values, bool $not = false): string
+    {
+        if (empty($values)) {
+            return $not ? '' : '0 = 1'; // Immer false bei leeren Werten für IN, keine Einschränkung für NOT IN
+        }
+
+        // Für kleinere Arrays können Gleichheitsbedingungen performanter sein als IN-Klauseln
+        if (count($values) <= 3) {
+            $conditions = [];
+            $operator = $not ? '!=' : '=';
+            $combiner = $not ? ' AND ' : ' OR ';
+
+            foreach ($values as $value) {
+                $paramName = $this->createParameterName($not ? 'wherenotin' : 'wherein');
+                $this->parameters[$paramName] = $value;
+                $conditions[] = "{$column} {$operator} :{$paramName}";
+            }
+
+            return "(" . implode($combiner, $conditions) . ")";
+        }
+
+        // Standard IN/NOT IN-Klausel für größere Arrays
+        $placeholders = [];
+
+        foreach ($values as $value) {
+            $paramName = $this->createParameterName($not ? 'wherenotin' : 'wherein');
+            $this->parameters[$paramName] = $value;
+            $placeholders[] = ":{$paramName}";
+        }
+
+        $operator = $not ? 'NOT IN' : 'IN';
+        return "{$column} {$operator} (" . implode(', ', $placeholders) . ")";
     }
 }

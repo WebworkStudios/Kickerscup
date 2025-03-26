@@ -1,6 +1,5 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Infrastructure\Database\QueryBuilder;
@@ -23,13 +22,6 @@ class SelectQueryBuilder extends QueryBuilder
      * @var array<array{type: string, table: string, condition: string}>
      */
     protected array $joins = [];
-
-    /**
-     * WHERE-Bedingungen
-     *
-     * @var array<string>
-     */
-    protected array $wheres = [];
 
     /**
      * GROUP BY-Klauseln
@@ -62,8 +54,6 @@ class SelectQueryBuilder extends QueryBuilder
      */
     protected ?int $offset = null;
 
-    protected ?WhereClauseGroup $whereGroup = null;
-
     /**
      * CTEs (Common Table Expressions) für WITH-Klauseln
      *
@@ -77,16 +67,6 @@ class SelectQueryBuilder extends QueryBuilder
      * @var array<array{type: string, query: SelectQueryBuilder}>
      */
     protected array $combines = [];
-
-
-    protected function createParameterName(string $prefix = 'param'): string
-    {
-        static $counters = [];
-        if (!isset($counters[$prefix])) {
-            $counters[$prefix] = 0;
-        }
-        return $prefix . '_' . ($counters[$prefix]++);
-    }
 
     /**
      * Fügt eine Spalte zur SELECT-Klausel hinzu, die eine Raw-Expression sein kann
@@ -250,82 +230,6 @@ class SelectQueryBuilder extends QueryBuilder
     }
 
     /**
-     * Fügt eine WHERE-Bedingung mit einer Raw-Expression hinzu
-     *
-     * @param string|RawExpression $column Spalte oder Raw-Expression
-     * @param mixed $operator Operator oder Wert
-     * @param mixed $value Wert (optional)
-     * @return $this
-     */
-    public function where(string|RawExpression $column, mixed $operator = null, mixed $value = null): self
-    {
-        // Initialisiere die WhereClauseGroup falls noch nicht vorhanden
-        if ($this->whereGroup === null) {
-            $this->whereGroup = new WhereClauseGroup();
-        }
-
-        // Wenn column eine RawExpression ist, verwende sie direkt
-        if ($column instanceof RawExpression) {
-            // Füge alle Bindungen der Raw-Expression hinzu
-            $this->parameters = array_merge($this->parameters, $column->getParameters());
-            $this->whereGroup->where($column);
-            return $this;
-        }
-
-        // Wenn nur zwei Parameter angegeben wurden, verwende = als Operator
-        if ($value === null && $operator !== null) {
-            $value = $operator;
-            $operator = '=';
-        }
-
-        // Delegiere an die WhereClauseGroup
-        $this->whereGroup->where($column, $operator, $value);
-
-        return $this;
-    }
-
-    public function orWhere(string|RawExpression $column, mixed $operator = null, mixed $value = null): self
-    {
-        if ($this->whereGroup === null) {
-            $this->whereGroup = new WhereClauseGroup();
-        }
-
-        $this->whereGroup->orWhere($column, $operator, $value);
-
-        return $this;
-    }
-
-    /**
-     * @param Closure $callback
-     * @return $this
-     */
-    public function whereGroup(Closure $callback): self
-    {
-        if ($this->whereGroup === null) {
-            $this->whereGroup = new WhereClauseGroup();
-        }
-
-        $this->whereGroup->whereGroup($callback);
-
-        return $this;
-    }
-
-    /**
-     * @param Closure $callback
-     * @return $this
-     */
-    public function orWhereGroup(Closure $callback): self
-    {
-        if ($this->whereGroup === null) {
-            $this->whereGroup = new WhereClauseGroup();
-        }
-
-        $this->whereGroup->orWhereGroup($callback);
-
-        return $this;
-    }
-
-    /**
      * Fügt eine WHERE IN-Bedingung hinzu
      *
      * @param string $column Spalte
@@ -334,35 +238,12 @@ class SelectQueryBuilder extends QueryBuilder
      */
     public function whereIn(string $column, array $values): self
     {
-        if (empty($values)) {
-            $this->wheres[] = '0 = 1'; // Immer false, wenn keine Werte angegeben
-            return $this;
+        $condition = $this->prepareWhereInCondition($column, $values);
+        if ($condition) {
+            $this->wheres[] = $condition;
         }
-
-        // Für kleinere Arrays können OR-Bedingungen performanter sein als IN-Klauseln
-        if (count($values) <= 3) {
-            $conditions = [];
-            foreach ($values as $value) {
-                $paramName = $this->createParameterName('wherein');
-                $this->parameters[$paramName] = $value;
-                $conditions[] = "{$column} = :{$paramName}";
-            }
-            $this->wheres[] = "(" . implode(' OR ', $conditions) . ")";
-            return $this;
-        }
-
-        // Standard IN-Klausel für größere Arrays
-        $placeholders = [];
-        foreach ($values as $value) {
-            $paramName = $this->createParameterName('wherein');
-            $this->parameters[$paramName] = $value;
-            $placeholders[] = ":{$paramName}";
-        }
-
-        $this->wheres[] = "{$column} IN (" . implode(', ', $placeholders) . ")";
         return $this;
     }
-
 
     /**
      * Fügt eine WHERE NOT IN-Bedingung hinzu
@@ -373,31 +254,10 @@ class SelectQueryBuilder extends QueryBuilder
      */
     public function whereNotIn(string $column, array $values): self
     {
-        if (empty($values)) {
-            return $this; // Keine Einschränkung, wenn keine Werte angegeben
+        $condition = $this->prepareWhereInCondition($column, $values, true);
+        if ($condition) {
+            $this->wheres[] = $condition;
         }
-
-        // Für kleinere Arrays können AND-Bedingungen performanter sein als NOT IN-Klauseln
-        if (count($values) <= 3) {
-            $conditions = [];
-            foreach ($values as $value) {
-                $paramName = $this->createParameterName('wherenotin');
-                $this->parameters[$paramName] = $value;
-                $conditions[] = "{$column} != :{$paramName}";
-            }
-            $this->wheres[] = "(" . implode(' AND ', $conditions) . ")";
-            return $this;
-        }
-
-        // Standard NOT IN-Klausel für größere Arrays
-        $placeholders = [];
-        foreach ($values as $value) {
-            $paramName = $this->createParameterName('wherenotin');
-            $this->parameters[$paramName] = $value;
-            $placeholders[] = ":{$paramName}";
-        }
-
-        $this->wheres[] = "{$column} NOT IN (" . implode(', ', $placeholders) . ")";
         return $this;
     }
 
@@ -1007,3 +867,5 @@ class SelectQueryBuilder extends QueryBuilder
         return ' OFFSET ' . $this->offset;
     }
 }
+
+
