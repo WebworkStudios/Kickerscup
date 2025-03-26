@@ -1,6 +1,5 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Infrastructure\Database\QueryBuilder;
@@ -11,6 +10,7 @@ class Subquery implements QueryBuilderInterface
 {
     private readonly SelectQueryBuilder $builder;
     private string $alias;
+    private ?array $columns = null;
 
     public function __construct(SelectQueryBuilder $builder, string $alias)
     {
@@ -47,5 +47,16 @@ class Subquery implements QueryBuilderInterface
     public function getAlias(): string
     {
         return $this->alias;
+    }
+
+    public function withColumns(array $columns): self
+    {
+        $this->columns = $columns;
+        return $this;
+    }
+
+    public function getColumns(): ?array
+    {
+        return $this->columns;
     }
 }

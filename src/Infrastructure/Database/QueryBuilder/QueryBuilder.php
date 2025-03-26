@@ -142,22 +142,6 @@ abstract class QueryBuilder implements QueryBuilderInterface
 
         return '?';
     }
-
-    /**
-     * Parst einen Wert für die SQL-Abfrage
-     *
-     * @param mixed $value Der zu parsende Wert
-     * @return string
-     */
-    protected function parseValue(mixed $value): string
-    {
-        if ($this->isRawExpression($value)) {
-            return $value->toSql();
-        }
-
-        return '?';
-    }
-
     /**
      * Erstellt einen eindeutigen Parameternamen
      *

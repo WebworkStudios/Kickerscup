@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Database\QueryBuilder;
 
 use App\Infrastructure\Database\Exceptions\QueryException;
+use Closure;
 
 class SelectQueryBuilder extends QueryBuilder
 {
@@ -195,9 +196,9 @@ class SelectQueryBuilder extends QueryBuilder
      * @param array<string>|null $columns Optional columns for the CTE
      * @return $this
      */
-    public function with(string $name, SelectQueryBuilder|\Closure $query, ?array $columns = null): self
+    public function with(string $name, SelectQueryBuilder|Closure $query, ?array $columns = null): self
     {
-        if ($query instanceof \Closure) {
+        if ($query instanceof Closure) {
             $builder = new SelectQueryBuilder($this->connectionManager);
             $query($builder);
             $query = $builder;
@@ -234,7 +235,7 @@ class SelectQueryBuilder extends QueryBuilder
 
         foreach ($this->ctes as $name => $cte) {
             $columns = '';
-            if (method_exists($cte, 'getColumns') && !empty($cte->getColumns())) {
+            if ($cte instanceof Subquery && $cte->getColumns() !== null) {
                 $columns = '(' . implode(', ', $cte->getColumns()) . ')';
             }
 
@@ -295,10 +296,10 @@ class SelectQueryBuilder extends QueryBuilder
     }
 
     /**
-     * @param \Closure $callback
+     * @param Closure $callback
      * @return $this
      */
-    public function whereGroup(\Closure $callback): self
+    public function whereGroup(Closure $callback): self
     {
         if ($this->whereGroup === null) {
             $this->whereGroup = new WhereClauseGroup();
@@ -310,10 +311,10 @@ class SelectQueryBuilder extends QueryBuilder
     }
 
     /**
-     * @param \Closure $callback
+     * @param Closure $callback
      * @return $this
      */
-    public function orWhereGroup(\Closure $callback): self
+    public function orWhereGroup(Closure $callback): self
     {
         if ($this->whereGroup === null) {
             $this->whereGroup = new WhereClauseGroup();
@@ -696,9 +697,6 @@ class SelectQueryBuilder extends QueryBuilder
     /**
      * {@inheritdoc}
      */
-    /**
-     * {@inheritdoc}
-     */
     public function toSql(): string
     {
         $withClause = $this->compileWith();
@@ -719,7 +717,7 @@ class SelectQueryBuilder extends QueryBuilder
         }
 
         // Erstelle einen Wrapper für die Hauptabfrage, wenn ORDER, LIMIT oder OFFSET vorhanden sind
-        // Diese müssen auf die Gesamtabfrage angewendet werden, nicht auf einzelne Teile
+        // diese müssen auf die Gesamtabfrage angewendet werden, nicht auf einzelne Teile
         $needsWrapping = !empty($this->orders) || $this->limit !== null || $this->offset !== null;
 
         $sql = $needsWrapping ? '(' . $mainQuery . ')' : $mainQuery;
@@ -753,11 +751,11 @@ class SelectQueryBuilder extends QueryBuilder
     /**
      * Erstellt eine Subquery
      *
-     * @param \Closure $callback Eine Funktion, die einen SelectQueryBuilder erhält
+     * @param Closure $callback Eine Funktion, die einen SelectQueryBuilder erhält
      * @param string $alias Alias für die Subquery
      * @return Subquery Die erstellte Subquery
      */
-    public function subquery(\Closure $callback, string $alias): Subquery
+    public function subquery(Closure $callback, string $alias): Subquery
     {
         $builder = new SelectQueryBuilder($this->connectionManager);
         $callback($builder);
@@ -774,9 +772,9 @@ class SelectQueryBuilder extends QueryBuilder
      * @param SelectQueryBuilder|Closure $query Die Subquery oder eine Funktion, die einen SelectQueryBuilder erhält
      * @return $this
      */
-    public function whereExists(SelectQueryBuilder|\Closure $query): self
+    public function whereExists(SelectQueryBuilder|Closure $query): self
     {
-        if ($query instanceof \Closure) {
+        if ($query instanceof Closure) {
             $builder = new SelectQueryBuilder($this->connectionManager);
             $query($builder);
             $query = $builder;
@@ -796,9 +794,9 @@ class SelectQueryBuilder extends QueryBuilder
      * @param SelectQueryBuilder|Closure $query Die Subquery oder eine Funktion, die einen SelectQueryBuilder erhält
      * @return $this
      */
-    public function whereNotExists(SelectQueryBuilder|\Closure $query): self
+    public function whereNotExists(SelectQueryBuilder|Closure $query): self
     {
-        if ($query instanceof \Closure) {
+        if ($query instanceof Closure) {
             $builder = new SelectQueryBuilder($this->connectionManager);
             $query($builder);
             $query = $builder;
