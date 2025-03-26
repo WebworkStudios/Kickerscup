@@ -225,7 +225,7 @@ class Connection implements ConnectionInterface
         // Try to get from cache if available
         if ($this->container->has(StatementCache::class)) {
             $cache = $this->container->get(StatementCache::class);
-            $cacheKey = $this->generateStatementCacheKey($query);
+            $cacheKey = $this->generateStatementCacheKey($query, $params);
             $statement = $cache->get($cacheKey);
         }
 
@@ -245,13 +245,26 @@ class Connection implements ConnectionInterface
         return $statement;
     }
 
-    private function generateStatementCacheKey(string $query): string
+    /**
+     * @param string $query
+     * @param array $params
+     * @return string
+     */
+    private function generateStatementCacheKey(string $query, array $params = []): string
     {
-        // Generate a unique key for the query
-        // Include connection info to avoid conflicts between different connections
-        return md5($this->config->driver . $this->config->host . $this->config->database . $query);
+        $paramString = '';
+        if (!empty($params)) {
+            ksort($params);
+            $paramString = json_encode($params);
+        }
+
+        return md5($this->config->driver . $this->config->host . $this->config->database . $query . $paramString);
     }
 
+    /**
+     * @param PDOException $e
+     * @return bool
+     */
     private function isConnectionLossError(PDOException $e): bool
     {
         // MySQL-spezifische Fehlercodes für Verbindungsverlust
