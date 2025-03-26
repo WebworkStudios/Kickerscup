@@ -70,13 +70,6 @@ class SelectQueryBuilder extends QueryBuilder
     protected array $combines = [];
 
     /**
-     * WHERE-Bedingungen für die Abfrage
-     *
-     * @var array<string>
-     */
-    protected array $wheres = [];
-
-    /**
      * Fügt eine Spalte zur SELECT-Klausel hinzu, die eine Raw-Expression sein kann
      *
      * @param string|RawExpression|array $columns Die Spalte(n)
@@ -240,18 +233,42 @@ class SelectQueryBuilder extends QueryBuilder
     /**
      * Fügt eine WHERE IN-Bedingung hinzu
      *
-     * @param string $column Spalte
+     * @param string $column Spalt
      * @param array $values Werte
      * @return $this
      */
     public function whereIn(string $column, array $values): self
     {
-        $condition = $this->prepareWhereInCondition($column, $values);
-        if ($condition) {
-            $this->wheres[] = $condition;
+        if (empty($values)) {
+            // Initialisiere WhereClauseGroup falls noch nicht vorhanden
+            if ($this->whereGroup === null) {
+                $this->whereGroup = new WhereClauseGroup();
+            }
+
+            $this->whereGroup->where(new RawExpression('0 = 1'));
+            return $this;
         }
+
+        $placeholders = [];
+        $params = [];
+
+        foreach ($values as $value) {
+            $paramName = $this->createParameterName('wherein');
+            $params[$paramName] = $value;
+            $placeholders[] = ":{$paramName}";
+        }
+
+        // Initialisiere WhereClauseGroup falls noch nicht vorhanden
+        if ($this->whereGroup === null) {
+            $this->whereGroup = new WhereClauseGroup();
+        }
+
+        $expr = new RawExpression("{$column} IN (" . implode(', ', $placeholders) . ")", $params);
+        $this->whereGroup->where($expr);
+
         return $this;
     }
+
 
     /**
      * Fügt eine WHERE NOT IN-Bedingung hinzu
@@ -262,10 +279,28 @@ class SelectQueryBuilder extends QueryBuilder
      */
     public function whereNotIn(string $column, array $values): self
     {
-        $condition = $this->prepareWhereInCondition($column, $values, true);
-        if ($condition) {
-            $this->wheres[] = $condition;
+        if (empty($values)) {
+            // Bei leeren Werten für NOT IN gibt es keine Einschränkung (immer true)
+            return $this;
         }
+
+        $placeholders = [];
+        $params = [];
+
+        foreach ($values as $value) {
+            $paramName = $this->createParameterName('wherenotin');
+            $params[$paramName] = $value;
+            $placeholders[] = ":{$paramName}";
+        }
+
+        // Initialisiere WhereClauseGroup falls noch nicht vorhanden
+        if ($this->whereGroup === null) {
+            $this->whereGroup = new WhereClauseGroup();
+        }
+
+        $expr = new RawExpression("{$column} NOT IN (" . implode(', ', $placeholders) . ")", $params);
+        $this->whereGroup->where($expr);
+
         return $this;
     }
 
@@ -277,7 +312,11 @@ class SelectQueryBuilder extends QueryBuilder
      */
     public function whereNull(string $column): self
     {
-        $this->wheres[] = "{$column} IS NULL";
+        if ($this->whereGroup === null) {
+            $this->whereGroup = new WhereClauseGroup();
+        }
+
+        $this->whereGroup->where(new RawExpression("{$column} IS NULL"));
         return $this;
     }
 
@@ -289,9 +328,14 @@ class SelectQueryBuilder extends QueryBuilder
      */
     public function whereNotNull(string $column): self
     {
-        $this->wheres[] = "{$column} IS NOT NULL";
+        if ($this->whereGroup === null) {
+            $this->whereGroup = new WhereClauseGroup();
+        }
+
+        $this->whereGroup->where(new RawExpression("{$column} IS NOT NULL"));
         return $this;
     }
+
 
     /**
      * Fügt eine WHERE BETWEEN-Bedingung hinzu
@@ -306,10 +350,17 @@ class SelectQueryBuilder extends QueryBuilder
         $minParam = $this->createParameterName('min');
         $maxParam = $this->createParameterName('max');
 
-        $this->parameters[$minParam] = $min;
-        $this->parameters[$maxParam] = $max;
+        $params = [
+            $minParam => $min,
+            $maxParam => $max
+        ];
 
-        $this->wheres[] = "{$column} BETWEEN :{$minParam} AND :{$maxParam}";
+        if ($this->whereGroup === null) {
+            $this->whereGroup = new WhereClauseGroup();
+        }
+
+        $expr = new RawExpression("{$column} BETWEEN :{$minParam} AND :{$maxParam}", $params);
+        $this->whereGroup->where($expr);
 
         return $this;
     }
@@ -643,7 +694,11 @@ class SelectQueryBuilder extends QueryBuilder
         // Merge parameters from subquery to parent query
         $this->parameters = array_merge($this->parameters, $query->getParameters());
 
-        $this->wheres[] = "EXISTS (" . $query->toSql() . ")";
+        if ($this->whereGroup === null) {
+            $this->whereGroup = new WhereClauseGroup();
+        }
+
+        $this->whereGroup->where(new RawExpression("EXISTS (" . $query->toSql() . ")"));
 
         return $this;
     }
@@ -665,7 +720,11 @@ class SelectQueryBuilder extends QueryBuilder
         // Merge parameters from subquery to parent query
         $this->parameters = array_merge($this->parameters, $query->getParameters());
 
-        $this->wheres[] = "NOT EXISTS (" . $query->toSql() . ")";
+        if ($this->whereGroup === null) {
+            $this->whereGroup = new WhereClauseGroup();
+        }
+
+        $this->whereGroup->where(new RawExpression("NOT EXISTS (" . $query->toSql() . ")"));
 
         return $this;
     }
@@ -791,9 +850,6 @@ class SelectQueryBuilder extends QueryBuilder
             // Parameter aus der WhereClauseGroup übernehmen
             $this->parameters = array_merge($this->parameters, $this->whereGroup->getParameters());
             return ' WHERE ' . $this->whereGroup->toSql();
-        } else if (!empty($this->wheres)) {
-            // Fallback für alte wheres-Implementierung (für Abwärtskompatibilität)
-            return ' WHERE ' . implode(' AND ', $this->wheres);
         }
 
         return '';

@@ -12,12 +12,6 @@ use PDOStatement;
 class DeleteQueryBuilder extends QueryBuilder
 {
     use JsonQueryTrait;
-    /**
-     * WHERE-Bedingungen
-     *
-     * @var array<string>
-     */
-    protected array $wheres = [];
 
     protected ?WhereClauseGroup $whereGroup = null;
 
@@ -47,19 +41,28 @@ class DeleteQueryBuilder extends QueryBuilder
     public function whereIn(string $column, array $values): self
     {
         if (empty($values)) {
-            $this->wheres[] = '0 = 1'; // Immer false, wenn keine Werte angegeben
+            if ($this->whereGroup === null) {
+                $this->whereGroup = new WhereClauseGroup();
+            }
+            $this->whereGroup->where(new RawExpression('0 = 1'));
             return $this;
         }
 
         $placeholders = [];
+        $params = [];
 
         foreach ($values as $value) {
             $paramName = $this->createParameterName('wherein');
-            $this->parameters[$paramName] = $value;
+            $params[$paramName] = $value;
             $placeholders[] = ":{$paramName}";
         }
 
-        $this->wheres[] = "{$column} IN (" . implode(', ', $placeholders) . ")";
+        if ($this->whereGroup === null) {
+            $this->whereGroup = new WhereClauseGroup();
+        }
+
+        $expr = new RawExpression("{$column} IN (" . implode(', ', $placeholders) . ")", $params);
+        $this->whereGroup->where($expr);
 
         return $this;
     }
@@ -97,7 +100,11 @@ class DeleteQueryBuilder extends QueryBuilder
      */
     public function whereNull(string $column): self
     {
-        $this->wheres[] = "{$column} IS NULL";
+        if ($this->whereGroup === null) {
+            $this->whereGroup = new WhereClauseGroup();
+        }
+
+        $this->whereGroup->where(new RawExpression("{$column} IS NULL"));
         return $this;
     }
 
@@ -109,7 +116,11 @@ class DeleteQueryBuilder extends QueryBuilder
      */
     public function whereNotNull(string $column): self
     {
-        $this->wheres[] = "{$column} IS NOT NULL";
+        if ($this->whereGroup === null) {
+            $this->whereGroup = new WhereClauseGroup();
+        }
+
+        $this->whereGroup->where(new RawExpression("{$column} IS NOT NULL"));
         return $this;
     }
 
@@ -118,8 +129,10 @@ class DeleteQueryBuilder extends QueryBuilder
      */
     public function execute(): PDOStatement
     {
-        if (empty($this->wheres)) {
-            throw new QueryException('No WHERE clause specified for delete query. To delete all records, use whereTrue() explicitly.');
+        if ($this->whereGroup === null || empty($this->whereGroup->toSql())) {
+            if (!$this->whereTrue) {
+                throw new QueryException('No WHERE clause specified for delete query. To delete all records, use whereTrue() explicitly.');
+            }
         }
 
         $sql = $this->toSql();
@@ -142,10 +155,7 @@ class DeleteQueryBuilder extends QueryBuilder
             // Parameter aus der WhereClauseGroup übernehmen
             $this->parameters = array_merge($this->parameters, $this->whereGroup->getParameters());
             $sql .= ' WHERE ' . $this->whereGroup->toSql();
-        } else if (!empty($this->wheres)) {
-            // Fallback für alte wheres-Implementierung (für Abwärtskompatibilität)
-            $sql .= ' WHERE ' . implode(' AND ', $this->wheres);
-        } else if (!empty($this->whereTrue)) {
+        } else if ($this->whereTrue) {
             $sql .= ' WHERE 1 = 1';
         } else {
             throw new QueryException('No WHERE clause specified for delete query. To delete all records, use whereTrue() explicitly.');
@@ -153,7 +163,6 @@ class DeleteQueryBuilder extends QueryBuilder
 
         return $sql;
     }
-
     /**
      * Explizit alle Datensätze löschen (gefährlich!)
      *

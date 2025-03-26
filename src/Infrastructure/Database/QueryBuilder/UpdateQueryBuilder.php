@@ -19,12 +19,6 @@ class UpdateQueryBuilder extends QueryBuilder
      */
     protected array $values = [];
 
-    /**
-     * WHERE-Bedingungen
-     *
-     * @var array<string>
-     */
-    protected array $wheres = [];
 
     protected ?WhereClauseGroup $whereGroup = null;
 
@@ -98,19 +92,28 @@ class UpdateQueryBuilder extends QueryBuilder
     public function whereIn(string $column, array $values): self
     {
         if (empty($values)) {
-            $this->wheres[] = '0 = 1'; // Immer false, wenn keine Werte angegeben
+            if ($this->whereGroup === null) {
+                $this->whereGroup = new WhereClauseGroup();
+            }
+            $this->whereGroup->where(new RawExpression('0 = 1'));
             return $this;
         }
 
         $placeholders = [];
+        $params = [];
 
         foreach ($values as $value) {
             $paramName = $this->createParameterName('wherein');
-            $this->parameters[$paramName] = $value;
+            $params[$paramName] = $value;
             $placeholders[] = ":{$paramName}";
         }
 
-        $this->wheres[] = "{$column} IN (" . implode(', ', $placeholders) . ")";
+        if ($this->whereGroup === null) {
+            $this->whereGroup = new WhereClauseGroup();
+        }
+
+        $expr = new RawExpression("{$column} IN (" . implode(', ', $placeholders) . ")", $params);
+        $this->whereGroup->where($expr);
 
         return $this;
     }
@@ -123,19 +126,27 @@ class UpdateQueryBuilder extends QueryBuilder
      */
     public function whereNull(string $column): self
     {
-        $this->wheres[] = "{$column} IS NULL";
+        if ($this->whereGroup === null) {
+            $this->whereGroup = new WhereClauseGroup();
+        }
+
+        $this->whereGroup->where(new RawExpression("{$column} IS NULL"));
         return $this;
     }
 
     /**
-     * Fügt eine WHERE NOT NULL-Bedingung hinzu
+     * Die whereNotNull-Methode muss auf WhereClauseGroup umgestellt werden
      *
      * @param string $column Spalte
      * @return $this
      */
     public function whereNotNull(string $column): self
     {
-        $this->wheres[] = "{$column} IS NOT NULL";
+        if ($this->whereGroup === null) {
+            $this->whereGroup = new WhereClauseGroup();
+        }
+
+        $this->whereGroup->where(new RawExpression("{$column} IS NOT NULL"));
         return $this;
     }
 
@@ -148,7 +159,7 @@ class UpdateQueryBuilder extends QueryBuilder
             throw new QueryException('No values specified for update query');
         }
 
-        if (empty($this->wheres)) {
+        if ($this->whereGroup === null || empty($this->whereGroup->toSql())) {
             throw new QueryException('No WHERE clause specified for update query. To update all records, use whereTrue() explicitly.');
         }
 
@@ -157,6 +168,13 @@ class UpdateQueryBuilder extends QueryBuilder
 
         return $statement;
     }
+
+    /**
+     * @param array $records
+     * @param string $keyColumn
+     * @return int
+     * @throws QueryException
+     */
     public function bulkUpdate(array $records, string $keyColumn): int
     {
         if (empty($records)) {
@@ -184,8 +202,19 @@ class UpdateQueryBuilder extends QueryBuilder
                 $updateData = array_filter($record, fn($k) => $k !== $keyColumn, ARRAY_FILTER_USE_KEY);
 
                 // Setze die Werte und die WHERE-Bedingung
-                $this->values($updateData)
-                    ->where($keyColumn, $keyValue);
+                $this->values($updateData);
+
+                // Statt direkt $this->wheres zu manipulieren, nutzen wir die where-Methode
+                // mit WhereClauseGroup
+                if ($this->whereGroup === null) {
+                    $this->whereGroup = new WhereClauseGroup();
+                } else {
+                    // Zurücksetzen der WhereClauseGroup für jede neue Update-Operation
+                    $this->whereGroup = new WhereClauseGroup();
+                }
+
+                // Bedingung für diesen spezifischen Update hinzufügen
+                $this->where($keyColumn, $keyValue);
 
                 // Führe das Update aus
                 $result = parent::execute();
@@ -193,7 +222,6 @@ class UpdateQueryBuilder extends QueryBuilder
 
                 // Setze für das nächste Update zurück
                 $this->values = [];
-                $this->wheres = [];
                 $this->parameters = [];
             }
 
@@ -237,9 +265,6 @@ class UpdateQueryBuilder extends QueryBuilder
             // Parameter aus der WhereClauseGroup übernehmen
             $this->parameters = array_merge($this->parameters, $this->whereGroup->getParameters());
             $sql .= ' WHERE ' . $this->whereGroup->toSql();
-        } else if (!empty($this->wheres)) {
-            // Fallback für alte wheres-Implementierung (für Abwärtskompatibilität)
-            $sql .= ' WHERE ' . implode(' AND ', $this->wheres);
         } else {
             // Wenn keine WHERE-Bedingung angegeben wurde, wirf eine Exception
             throw new QueryException('No WHERE clause specified for update query. To update all records, use whereTrue() explicitly.');
