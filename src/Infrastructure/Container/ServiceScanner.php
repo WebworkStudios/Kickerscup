@@ -84,15 +84,27 @@ class ServiceScanner
      */
     protected function getClassNameFromFile(string $filePath, string $namespace): ?string
     {
-        // Extrahiere den relativen Pfad
-        $relativePath = str_replace(
-            [dirname($filePath) . DIRECTORY_SEPARATOR, '.php'],
-            '',
-            $filePath
-        );
+        // Extrahiere den Dateinamen ohne .php-Endung
+        $filename = pathinfo($filePath, PATHINFO_FILENAME);
 
-        // Konstruiere den Klassennamen basierend auf Namespace und Dateipfad
-        $className = $namespace . '\\' . str_replace('/', '\\', $relativePath);
+        // Bestimme das Verzeichnis relativ zum Basisverzeichnis
+        $directory = dirname($filePath);
+        $baseDir = dirname($directory) . DIRECTORY_SEPARATOR;
+
+        // Extrahiere den relativen Pfad und normalisiere Pfadtrenner
+        $relativePath = str_replace($baseDir, '', $directory);
+
+        // Normalisiere alle Pfadtrenner zu PHP-Namespace-Trennern
+        $namespacePath = str_replace([DIRECTORY_SEPARATOR, '/'], '\\', $relativePath);
+
+        // Füge den Pfad zum Namespace hinzu, falls vorhanden
+        $fullNamespace = $namespace;
+        if (!empty($namespacePath)) {
+            $fullNamespace .= '\\' . $namespacePath;
+        }
+
+        // Konstruiere den vollständigen Klassennamen
+        $className = $fullNamespace . '\\' . $filename;
 
         // Prüfe, ob die Klasse existiert
         if (class_exists($className)) {

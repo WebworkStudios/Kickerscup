@@ -115,6 +115,18 @@ class SelectQueryBuilder extends QueryBuilder
     }
 
     /**
+     * Erstellt eine neue Raw-SQL-Expression
+     *
+     * @param string $expression Die rohe SQL-Expression
+     * @param array $bindings Parameter-Bindungen für die Expression
+     * @return RawExpression
+     */
+    public function raw(string $expression, array $bindings = []): RawExpression
+    {
+        return new RawExpression($expression, $bindings);
+    }
+
+    /**
      * Fügt einen INNER JOIN hinzu
      *
      * @param string $table Tabelle für den Join
@@ -785,18 +797,6 @@ class SelectQueryBuilder extends QueryBuilder
         $this->parameters = array_merge($this->parameters, $query->getParameters());
 
         return $this;
-    }
-
-    /**
-     * Erstellt eine neue Raw-SQL-Expression
-     *
-     * @param string $expression Die rohe SQL-Expression
-     * @param array $bindings Parameter-Bindungen für die Expression
-     * @return RawExpression
-     */
-    public function raw(string $expression, array $bindings = []): RawExpression
-    {
-        return new RawExpression($expression, $bindings);
     }
 
     /**

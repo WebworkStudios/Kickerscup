@@ -245,6 +245,18 @@ abstract class QueryBuilder implements QueryBuilderInterface
     }
 
     /**
+     * Erstellt eine neue Raw-SQL-Expression
+     *
+     * @param string $expression Die rohe SQL-Expression
+     * @param array $bindings Parameter-Bindungen für die Expression
+     * @return RawExpression
+     */
+    protected function raw(string $expression, array $bindings = []): RawExpression
+    {
+        return new RawExpression($expression, $bindings);
+    }
+
+    /**
      * Fügt eine WHERE-Bedingung hinzu
      *
      * @param string|RawExpression $column Spalte oder Raw-Expression
