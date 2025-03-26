@@ -5,7 +5,10 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Database\Connection;
 
+use App\Infrastructure\Container\Contracts\ContainerInterface;
+use App\Infrastructure\Database\Cache\StatementCache;
 use App\Infrastructure\Database\Contracts\ConnectionInterface;
+use App\Infrastructure\Database\Debug\QueryDebugger;
 use App\Infrastructure\Database\Exceptions\ConnectionException;
 use App\Infrastructure\Logging\Contracts\LoggerInterface;
 use PDO;
@@ -18,10 +21,12 @@ class Connection implements ConnectionInterface
     private bool $connected = false;
     private int $reconnectAttempts = 0;
     private const MAX_RECONNECT_ATTEMPTS = 3;
+    private ?ContainerInterface $container = null;
 
     public function __construct(
         private readonly ConnectionConfiguration $config,
-        private readonly LoggerInterface         $logger
+        private readonly LoggerInterface         $logger,
+        ?ContainerInterface $container = null
     )
     {
     }
