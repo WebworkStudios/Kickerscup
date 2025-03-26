@@ -179,6 +179,15 @@ abstract class QueryBuilder implements QueryBuilderInterface
      * @param string $boolean
      * @return static
      */
+    /**
+     * Fügt eine WHERE-Bedingung hinzu
+     *
+     * @param string|RawExpression $column Spalte oder Raw-Expression
+     * @param mixed $operator Operator oder Wert
+     * @param mixed $value Wert (optional)
+     * @param string $boolean AND oder OR
+     * @return static
+     */
     protected function addWhereCondition(string|RawExpression $column, mixed $operator = null, mixed $value = null, string $boolean = 'AND'): static
     {
         // Initialisiere die WhereClauseGroup falls noch nicht vorhanden
@@ -186,29 +195,12 @@ abstract class QueryBuilder implements QueryBuilderInterface
             $this->whereGroup = new WhereClauseGroup();
         }
 
-        // Wenn column eine RawExpression ist, verwende sie direkt
-        if ($column instanceof RawExpression) {
-            // Füge alle Bindungen der Raw-Expression hinzu
-            $this->parameters = array_merge($this->parameters, $column->getParameters());
-            $boolean === 'AND'
-                ? $this->whereGroup->where($column)
-                : $this->whereGroup->orWhere($column);
-
-            // Aktualisiere die Hauptparameter mit den Parametern aus der WhereClauseGroup
-            $this->parameters = array_merge($this->parameters, $this->whereGroup->getParameters());
-            return $this;
+        // Delegiere direkt an die WhereClauseGroup für konsistente Behandlung
+        if ($boolean === 'AND') {
+            $this->whereGroup->where($column, $operator, $value);
+        } else {
+            $this->whereGroup->orWhere($column, $operator, $value);
         }
-
-        // Wenn nur zwei Parameter angegeben wurden, verwende = als Operator
-        if ($value === null && $operator !== null) {
-            $value = $operator;
-            $operator = '=';
-        }
-
-        // Delegiere an die WhereClauseGroup
-        $boolean === 'AND'
-            ? $this->whereGroup->where($column, $operator, $value)
-            : $this->whereGroup->orWhere($column, $operator, $value);
 
         // Aktualisiere die Hauptparameter mit den Parametern aus der WhereClauseGroup
         $this->parameters = array_merge($this->parameters, $this->whereGroup->getParameters());
