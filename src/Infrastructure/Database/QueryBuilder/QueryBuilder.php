@@ -385,7 +385,7 @@ abstract class QueryBuilder implements QueryBuilderInterface
             $operator = $not ? '!=' : '=';
             $combiner = $not ? ' AND ' : ' OR ';
 
-            $conditions = array_map(function($value) use ($column, $operator, $not) {
+            $conditions = array_map(function ($value) use ($column, $operator, $not) {
                 $paramName = $this->createParameterName($not ? 'wherenotin' : 'wherein');
                 $this->parameters[$paramName] = $value;
                 return "{$column} {$operator} :{$paramName}";
@@ -395,7 +395,7 @@ abstract class QueryBuilder implements QueryBuilderInterface
         }
 
         // Standard IN/NOT IN-Klausel für größere Arrays
-        $placeholders = array_map(function($value) use ($not) {
+        $placeholders = array_map(function ($value) use ($not) {
             $paramName = $this->createParameterName($not ? 'wherenotin' : 'wherein');
             $this->parameters[$paramName] = $value;
             return ":{$paramName}";

@@ -163,6 +163,7 @@ class DeleteQueryBuilder extends QueryBuilder
 
         return $sql;
     }
+
     /**
      * Explizit alle Datensätze löschen (gefährlich!)
      *

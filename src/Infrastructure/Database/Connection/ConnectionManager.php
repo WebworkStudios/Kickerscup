@@ -42,7 +42,7 @@ class ConnectionManager
 
     public function __construct(
         private readonly LoggerInterface $logger,
-        ?ContainerInterface $container = null
+        ?ContainerInterface              $container = null
     )
     {
         $this->container = $container;
@@ -113,6 +113,7 @@ class ConnectionManager
         // Wenn nichts gefunden wurde, gib null zurück
         return null;
     }
+
     /**
      * Holt eine Datenbankverbindung
      *

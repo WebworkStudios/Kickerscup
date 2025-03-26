@@ -195,6 +195,7 @@ class Connection implements ConnectionInterface
         $this->connected = false;
         $this->logger->debug('Database connection closed');
     }
+
     private function buildMysqlDsn(): string
     {
         $dsn = "mysql:host={$this->config->host};dbname={$this->config->database}";

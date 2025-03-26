@@ -12,6 +12,7 @@ use PDOStatement;
 class UpdateQueryBuilder extends QueryBuilder
 {
     use JsonQueryTrait;
+
     /**
      * Zu aktualisierende Daten
      *
@@ -79,7 +80,6 @@ class UpdateQueryBuilder extends QueryBuilder
     {
         return parent::orWhereGroup($callback);
     }
-
 
 
     /**

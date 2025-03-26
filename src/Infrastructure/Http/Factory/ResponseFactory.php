@@ -99,7 +99,11 @@ class ResponseFactory implements ResponseFactoryInterface
      */
     public function createBadRequest(string $message = 'Bad Request'): Response
     {
-        return $this->create(400, $message);
+        // JSON-Antwort zurückgeben:
+        return $this->createJson([
+            'success' => false,
+            'error' => $message
+        ], 400);
     }
 
     /**

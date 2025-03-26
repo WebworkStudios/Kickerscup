@@ -10,6 +10,7 @@ use Closure;
 class SelectQueryBuilder extends QueryBuilder
 {
     use JsonQueryTrait;
+
     /**
      * Zu selektierende Spalten
      *
@@ -416,6 +417,7 @@ class SelectQueryBuilder extends QueryBuilder
         $this->groups = array_merge($this->groups, $columns);
         return $this;
     }
+
     /**
      * Fügt eine HAVING-Bedingung hinzu
      *
