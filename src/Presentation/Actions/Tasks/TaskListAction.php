@@ -11,6 +11,7 @@ use App\Infrastructure\Http\Contracts\RequestInterface;
 use App\Infrastructure\Http\Contracts\ResponseFactoryInterface;
 use App\Infrastructure\Http\Contracts\ResponseInterface;
 use App\Infrastructure\Routing\Attributes\Get;
+use Throwable;
 
 #[Injectable]
 #[Get('/tasks', 'tasks.list')]
@@ -40,7 +41,7 @@ final class TaskListAction
                     'tasks' => $tasksArray
                 ]
             ]);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return $this->responseFactory->createServerError(
                 "An error occurred while retrieving tasks: " . $e->getMessage()
             );

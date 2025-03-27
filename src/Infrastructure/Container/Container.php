@@ -21,57 +21,6 @@ use Throwable;
  */
 class Container implements ContainerInterface
 {
-    /**
-     * Die registrierten Typ-Bindungen.
-     *
-     * @var array<string, array{concrete: mixed, shared: bool, scoped: bool}>
-     */
-    protected array $bindings = [];
-
-    /**
-     * Die registrierten Factories.
-     *
-     * @var array<string, FactoryInterface>
-     */
-    protected array $factories = [];
-
-    /**
-     * Die gemerkten Singleton-Instanzen.
-     *
-     * @var array<string, mixed>
-     */
-    protected array $instances = [];
-
-    /**
-     * Die gemerkten Scoped-Instanzen.
-     *
-     * @var array<string, array<string, mixed>>
-     */
-    protected array $scopedInstances = [];
-
-    /**
-     * Die aktuelle Scope-ID.
-     */
-    protected string $currentScopeId = 'default';
-
-    /**
-     * Stack zur Erkennung von zirkulären Abhängigkeiten.
-     *
-     * @var array<string>
-     */
-    protected array $resolutionStack = [];
-
-    /**
-     * Der Reflection-Resolver.
-     */
-    protected ReflectionResolver $reflectionResolver;
-
-    /**
-     * Der integrierte Logger.
-     */
-    // Beispiel für einen Logger Service
-    private ?LoggerInterface $_logger = null;
-
     public ?LoggerInterface $logger {
         get {
             if ($this->_logger === null && $this->has(LoggerInterface::class)) {
@@ -84,6 +33,44 @@ class Container implements ContainerInterface
             $this->instances[LoggerInterface::class] = $value;
         }
     }
+    /**
+     * Die registrierten Typ-Bindungen.
+     *
+     * @var array<string, array{concrete: mixed, shared: bool, scoped: bool}>
+     */
+    protected array $bindings = [];
+    /**
+     * Die registrierten Factories.
+     *
+     * @var array<string, FactoryInterface>
+     */
+    protected array $factories = [];
+    /**
+     * Die gemerkten Singleton-Instanzen.
+     *
+     * @var array<string, mixed>
+     */
+    protected array $instances = [];
+    /**
+     * Die gemerkten Scoped-Instanzen.
+     *
+     * @var array<string, array<string, mixed>>
+     */
+    protected array $scopedInstances = [];
+    /**
+     * Die aktuelle Scope-ID.
+     */
+    protected string $currentScopeId = 'default';
+    /**
+     * Stack zur Erkennung von zirkulären Abhängigkeiten.
+     *
+     * @var array<string>
+     */
+    protected array $resolutionStack = [];
+
+    protected ReflectionResolver $reflectionResolver;
+
+    private ?LoggerInterface $_logger = null;
 
     /**
      * Container-Konstruktor.
@@ -120,6 +107,16 @@ class Container implements ContainerInterface
     }
 
     /**
+     * Gibt den aktuellen Logger zurück
+     *
+     * @return LoggerInterface|null
+     */
+    public function getLogger(): ?LoggerInterface
+    {
+        return $this->logger;
+    }
+
+    /**
      * Setzt einen benutzerdefinierten Logger
      *
      * @param LoggerInterface $logger
@@ -129,16 +126,6 @@ class Container implements ContainerInterface
     {
         $this->logger = $logger;
         $this->instances[LoggerInterface::class] = $logger;
-    }
-
-    /**
-     * Gibt den aktuellen Logger zurück
-     *
-     * @return LoggerInterface|null
-     */
-    public function getLogger(): ?LoggerInterface
-    {
-        return $this->logger;
     }
 
     /**
@@ -246,35 +233,6 @@ class Container implements ContainerInterface
         }
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function has(string $id): bool
-    {
-        return isset($this->bindings[$id]) ||
-            isset($this->instances[$id]) ||
-            isset($this->factories[$id]);
-    }
-
-    /**
-     * {@inheritdoc}
-     * @throws ContainerException
-     * @throws Throwable
-     */
-    public function makeWith(string $abstract, array $parameters = []): mixed
-    {
-        return $this->resolve($abstract, $parameters);
-    }
-
-    /**
-     * Löst einen Typ auf und gibt eine Instanz zurück.
-     *
-     * @param string $abstract
-     * @param array $parameters
-     * @return mixed
-     * @throws ContainerException
-     * @throws Throwable
-     */
     /**
      * Löst einen Typ auf und gibt eine Instanz zurück.
      *
@@ -397,5 +355,35 @@ class Container implements ContainerInterface
             $this->resolutionStack = [];
             throw $e;
         }
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function has(string $id): bool
+    {
+        return isset($this->bindings[$id]) ||
+            isset($this->instances[$id]) ||
+            isset($this->factories[$id]);
+    }
+
+    /**
+     * Löst einen Typ auf und gibt eine Instanz zurück.
+     *
+     * @param string $abstract
+     * @param array $parameters
+     * @return mixed
+     * @throws ContainerException
+     * @throws Throwable
+     */
+
+    /**
+     * {@inheritdoc}
+     * @throws ContainerException
+     * @throws Throwable
+     */
+    public function makeWith(string $abstract, array $parameters = []): mixed
+    {
+        return $this->resolve($abstract, $parameters);
     }
 }

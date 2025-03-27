@@ -16,6 +16,16 @@ class MethodNotAllowedException extends RoutingException
     private array $allowedMethods = [];
 
     /**
+     * Gibt die erlaubten Methoden zurück
+     *
+     * @return array<string> Die erlaubten HTTP-Methoden
+     */
+    public function getAllowedMethods(): array
+    {
+        return $this->allowedMethods;
+    }
+
+    /**
      * Setzt die erlaubten Methoden
      *
      * @param array<string> $methods Die erlaubten HTTP-Methoden
@@ -25,15 +35,5 @@ class MethodNotAllowedException extends RoutingException
     {
         $this->allowedMethods = $methods;
         return $this;
-    }
-
-    /**
-     * Gibt die erlaubten Methoden zurück
-     *
-     * @return array<string> Die erlaubten HTTP-Methoden
-     */
-    public function getAllowedMethods(): array
-    {
-        return $this->allowedMethods;
     }
 }

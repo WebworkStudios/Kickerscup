@@ -32,67 +32,33 @@ class FileLogger implements LoggerInterface
     }
 
     /**
+     * Stellt sicher, dass das Log-Verzeichnis existiert
+     */
+    protected function ensureLogDirectoryExists(): void
+    {
+        $logPath = $this->getBasePath();
+
+        if (!is_dir($logPath)) {
+            mkdir($logPath, 0755, true);
+        }
+    }
+
+    /**
+     * Gibt den Basispfad für Logs zurück
+     *
+     * @return string
+     */
+    protected function getBasePath(): string
+    {
+        return rtrim($this->config->logPath, '/\\');
+    }
+
+    /**
      * {@inheritdoc}
      */
     public function debug(string $message, array $context = []): void
     {
         $this->log(LogLevel::DEBUG->value, $message, $context);
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function info(string $message, array $context = []): void
-    {
-        $this->log(LogLevel::INFO->value, $message, $context);
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function notice(string $message, array $context = []): void
-    {
-        $this->log(LogLevel::NOTICE->value, $message, $context);
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function warning(string $message, array $context = []): void
-    {
-        $this->log(LogLevel::WARNING->value, $message, $context);
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function error(string $message, array $context = []): void
-    {
-        $this->log(LogLevel::ERROR->value, $message, $context);
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function critical(string $message, array $context = []): void
-    {
-        $this->log(LogLevel::CRITICAL->value, $message, $context);
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function alert(string $message, array $context = []): void
-    {
-        $this->log(LogLevel::ALERT->value, $message, $context);
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function emergency(string $message, array $context = []): void
-    {
-        $this->log(LogLevel::EMERGENCY->value, $message, $context);
     }
 
     /**
@@ -115,40 +81,25 @@ class FileLogger implements LoggerInterface
     }
 
     /**
-     * {@inheritdoc}
+     * Gibt das Mindest-Loglevel für den aktuellen Kanal zurück
+     *
+     * @return string
      */
-    public function exception(Throwable $exception, string $level = 'error', string $message = '', array $context = []): void
+    protected function getChannelMinLevel(): string
     {
-        $message = $message ?: $exception->getMessage();
-
-        $exceptionContext = [
-            'exception' => [
-                'class' => get_class($exception),
-                'message' => $exception->getMessage(),
-                'code' => $exception->getCode(),
-                'file' => $exception->getFile(),
-                'line' => $exception->getLine(),
-            ]
-        ];
-
-        if ($this->config->logStackTraces) {
-            $exceptionContext['exception']['trace'] = $exception->getTraceAsString();
-        }
-
-        $this->log($level, $message, array_merge($context, $exceptionContext));
+        return $this->config->channels[$this->currentChannel]['level'] ??
+            $this->config->channels[$this->config->defaultChannel]['level'];
     }
 
     /**
-     * Wechselt zu einem anderen Log-Kanal
+     * Gibt den Pfad für die Log-Datei des aktuellen Kanals zurück
      *
-     * @param string $channel Der zu verwendende Kanal
-     * @return self
+     * @return string
      */
-    public function channel(string $channel): self
+    protected function getChannelLogPath(): string
     {
-        $newLogger = clone $this;
-        $newLogger->currentChannel = $channel;
-        return $newLogger;
+        return $this->config->channels[$this->currentChannel]['path'] ??
+            $this->config->channels[$this->config->defaultChannel]['path'];
     }
 
     /**
@@ -229,50 +180,6 @@ class FileLogger implements LoggerInterface
     }
 
     /**
-     * Gibt den Basispfad für Logs zurück
-     *
-     * @return string
-     */
-    protected function getBasePath(): string
-    {
-        return rtrim($this->config->logPath, '/\\');
-    }
-
-    /**
-     * Stellt sicher, dass das Log-Verzeichnis existiert
-     */
-    protected function ensureLogDirectoryExists(): void
-    {
-        $logPath = $this->getBasePath();
-
-        if (!is_dir($logPath)) {
-            mkdir($logPath, 0755, true);
-        }
-    }
-
-    /**
-     * Gibt den Pfad für die Log-Datei des aktuellen Kanals zurück
-     *
-     * @return string
-     */
-    protected function getChannelLogPath(): string
-    {
-        return $this->config->channels[$this->currentChannel]['path'] ??
-            $this->config->channels[$this->config->defaultChannel]['path'];
-    }
-
-    /**
-     * Gibt das Mindest-Loglevel für den aktuellen Kanal zurück
-     *
-     * @return string
-     */
-    protected function getChannelMinLevel(): string
-    {
-        return $this->config->channels[$this->currentChannel]['level'] ??
-            $this->config->channels[$this->config->defaultChannel]['level'];
-    }
-
-    /**
      * Rotiert die Logdateien, wenn nötig
      *
      * @param string $logFile Der Pfad zur Logdatei
@@ -327,5 +234,98 @@ class FileLogger implements LoggerInterface
         }
 
         return $this->config->filePermissions;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function info(string $message, array $context = []): void
+    {
+        $this->log(LogLevel::INFO->value, $message, $context);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function notice(string $message, array $context = []): void
+    {
+        $this->log(LogLevel::NOTICE->value, $message, $context);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function warning(string $message, array $context = []): void
+    {
+        $this->log(LogLevel::WARNING->value, $message, $context);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function error(string $message, array $context = []): void
+    {
+        $this->log(LogLevel::ERROR->value, $message, $context);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function critical(string $message, array $context = []): void
+    {
+        $this->log(LogLevel::CRITICAL->value, $message, $context);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function alert(string $message, array $context = []): void
+    {
+        $this->log(LogLevel::ALERT->value, $message, $context);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function emergency(string $message, array $context = []): void
+    {
+        $this->log(LogLevel::EMERGENCY->value, $message, $context);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function exception(Throwable $exception, string $level = 'error', string $message = '', array $context = []): void
+    {
+        $message = $message ?: $exception->getMessage();
+
+        $exceptionContext = [
+            'exception' => [
+                'class' => get_class($exception),
+                'message' => $exception->getMessage(),
+                'code' => $exception->getCode(),
+                'file' => $exception->getFile(),
+                'line' => $exception->getLine(),
+            ]
+        ];
+
+        if ($this->config->logStackTraces) {
+            $exceptionContext['exception']['trace'] = $exception->getTraceAsString();
+        }
+
+        $this->log($level, $message, array_merge($context, $exceptionContext));
+    }
+
+    /**
+     * Wechselt zu einem anderen Log-Kanal
+     *
+     * @param string $channel Der zu verwendende Kanal
+     * @return self
+     */
+    public function channel(string $channel): self
+    {
+        $newLogger = clone $this;
+        $newLogger->currentChannel = $channel;
+        return $newLogger;
     }
 }

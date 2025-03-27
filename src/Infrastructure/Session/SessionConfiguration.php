@@ -8,8 +8,6 @@ use InvalidArgumentException;
 
 class SessionConfiguration
 {
-    private string $_name = 'app_session';
-
     public string $name {
         get {
             return $this->_name;
@@ -21,9 +19,6 @@ class SessionConfiguration
             $this->_name = $value;
         }
     }
-
-    private int $_lifetime = 86400;
-
     public int $lifetime {
         get {
             return $this->_lifetime;
@@ -35,6 +30,8 @@ class SessionConfiguration
             $this->_lifetime = $value;
         }
     }
+    private string $_name = 'app_session';
+    private int $_lifetime = 86400;
 
     /**
      * @param int $absoluteLifetime

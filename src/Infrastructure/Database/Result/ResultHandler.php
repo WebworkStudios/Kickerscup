@@ -7,6 +7,9 @@ namespace App\Infrastructure\Database\Result;
 
 use App\Infrastructure\Container\Contracts\ContainerInterface;
 use App\Infrastructure\Database\Contracts\ResultHandlerInterface;
+use DateTime;
+use DateTimeImmutable;
+use PDO;
 use PDOStatement;
 use ReflectionClass;
 use ReflectionException;
@@ -19,6 +22,25 @@ class ResultHandler implements ResultHandlerInterface
         private readonly ContainerInterface $container
     )
     {
+    }
+
+    /**
+     * Wandelt ein PDOStatement in eine Liste von Objekten um
+     *
+     * @template T
+     * @param PDOStatement $statement Das PDOStatement
+     * @param class-string<T> $className Die Zielklasse
+     * @return array<T> Die Liste der erstellten Objekte
+     */
+    public function hydrateObjects(PDOStatement $statement, string $className): array
+    {
+        $results = [];
+
+        while ($row = $statement->fetch(PDO::FETCH_ASSOC)) {
+            $results[] = $this->hydrateObject($row, $className);
+        }
+
+        return $results;
     }
 
     /**
@@ -74,22 +96,14 @@ class ResultHandler implements ResultHandlerInterface
     }
 
     /**
-     * Wandelt ein PDOStatement in eine Liste von Objekten um
+     * Wandelt einen Snake Case String in CamelCase um
      *
-     * @template T
-     * @param PDOStatement $statement Das PDOStatement
-     * @param class-string<T> $className Die Zielklasse
-     * @return array<T> Die Liste der erstellten Objekte
+     * @param string $input Der umzuwandelnde String
+     * @return string Der umgewandelte String
      */
-    public function hydrateObjects(PDOStatement $statement, string $className): array
+    protected function snakeCaseToCamelCase(string $input): string
     {
-        $results = [];
-
-        while ($row = $statement->fetch(\PDO::FETCH_ASSOC)) {
-            $results[] = $this->hydrateObject($row, $className);
-        }
-
-        return $results;
+        return lcfirst(str_replace('_', '', ucwords($input, '_')));
     }
 
     /**
@@ -121,20 +135,9 @@ class ResultHandler implements ResultHandlerInterface
             'bool', 'boolean' => (bool)$value,
             'string' => (string)$value,
             'array' => is_string($value) ? json_decode($value, true) : (array)$value,
-            'DateTime', '\DateTime' => is_string($value) ? new \DateTime($value) : $value,
-            'DateTimeImmutable', '\DateTimeImmutable' => is_string($value) ? new \DateTimeImmutable($value) : $value,
+            'DateTime', '\DateTime' => is_string($value) ? new DateTime($value) : $value,
+            'DateTimeImmutable', '\DateTimeImmutable' => is_string($value) ? new DateTimeImmutable($value) : $value,
             default => $value
         };
-    }
-
-    /**
-     * Wandelt einen Snake Case String in CamelCase um
-     *
-     * @param string $input Der umzuwandelnde String
-     * @return string Der umgewandelte String
-     */
-    protected function snakeCaseToCamelCase(string $input): string
-    {
-        return lcfirst(str_replace('_', '', ucwords($input, '_')));
     }
 }

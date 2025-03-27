@@ -12,17 +12,6 @@ use App\Infrastructure\Container\Attributes\Singleton;
 #[Singleton]
 class Config
 {
-    /**
-     * @var array
-     */
-    protected array $items = [];
-
-
-    // Internale Eigenschaft für app.name z.B.
-    private string $_appName;
-
-    // Property Hook
-
     public string $appName {
         get {
             if (!isset($this->_appName)) {
@@ -36,6 +25,16 @@ class Config
             $this->items['app']['name'] = $value;
         }
     }
+
+
+    // Internale Eigenschaft für app.name z.B.
+    /**
+     * @var array
+     */
+    protected array $items = [];
+
+    // Property Hook
+    private string $_appName;
 
     /**
      * Lädt die Konfigurationsdateien

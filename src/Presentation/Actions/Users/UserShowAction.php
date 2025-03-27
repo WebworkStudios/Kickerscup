@@ -12,6 +12,7 @@ use App\Infrastructure\Http\Contracts\ResponseFactoryInterface;
 use App\Infrastructure\Http\Contracts\ResponseInterface;
 use App\Infrastructure\Routing\Attributes\Get;
 use App\Infrastructure\Routing\Attributes\RouteParam;
+use Throwable;
 
 /**
  * Action to show a user by ID
@@ -59,28 +60,12 @@ final class UserShowAction
                     'user' => $this->transformUser($user)
                 ]
             ]);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             // Log the error and return error response
             return $this->responseFactory->createServerError(
                 "An error occurred while retrieving the user: " . $e->getMessage()
             );
         }
-    }
-
-    /**
-     * Transform user object to array
-     *
-     * @param object $user
-     * @return array
-     */
-    private function transformUser(object $user): array
-    {
-        return [
-            'id' => $user->id ?? 0,
-            'name' => $user->name ?? 'Unknown',
-            'email' => $user->email ?? 'unknown@example.com',
-            'created_at' => $user->created_at ?? date('Y-m-d H:i:s')
-        ];
     }
 
     /**
@@ -107,5 +92,21 @@ final class UserShowAction
         ];
 
         return $users[$id] ?? null;
+    }
+
+    /**
+     * Transform user object to array
+     *
+     * @param object $user
+     * @return array
+     */
+    private function transformUser(object $user): array
+    {
+        return [
+            'id' => $user->id ?? 0,
+            'name' => $user->name ?? 'Unknown',
+            'email' => $user->email ?? 'unknown@example.com',
+            'created_at' => $user->created_at ?? date('Y-m-d H:i:s')
+        ];
     }
 }

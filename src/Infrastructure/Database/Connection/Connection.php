@@ -19,10 +19,10 @@ use PDOStatement;
 
 class Connection implements ConnectionInterface
 {
+    private const MAX_RECONNECT_ATTEMPTS = 3;
     private ?PDO $pdo = null;
     private bool $connected = false;
     private int $reconnectAttempts = 0;
-    private const MAX_RECONNECT_ATTEMPTS = 3;
     private ?ContainerInterface $container = null;
 
     /**
@@ -39,13 +39,12 @@ class Connection implements ConnectionInterface
         $this->container = $container;
     }
 
-    public function getPdo(): PDO
+    public function queryFirst(string $query, array $params = []): ?array
     {
-        if (!$this->isConnected()) {
-            $this->connect();
-        }
+        $statement = $this->query($query, $params);
+        $result = $statement->fetch(PDO::FETCH_ASSOC);
 
-        return $this->pdo;
+        return $result !== false ? $result : null;
     }
 
     /**
@@ -104,38 +103,64 @@ class Connection implements ConnectionInterface
         }
     }
 
-    public function queryFirst(string $query, array $params = []): ?array
+    /**
+     * @param string $query
+     * @param array $params
+     * @return PDOStatement
+     * @throws ContainerException
+     * @throws NotFoundException
+     */
+    private function prepareAndExecute(string $query, array $params): PDOStatement
     {
-        $statement = $this->query($query, $params);
-        $result = $statement->fetch(PDO::FETCH_ASSOC);
+        $cacheKey = null;
+        $statement = null;
 
-        return $result !== false ? $result : null;
+        // Try to get from cache if available
+        if ($this->container !== null && $this->container->has(StatementCache::class)) {
+            $cache = $this->container->get(StatementCache::class);
+            $cacheKey = $this->generateStatementCacheKey($query, $params);
+            $statement = $cache->get($cacheKey);
+        }
+
+        // If not in cache or cache not available, prepare statement
+        if ($statement === null) {
+            $statement = $this->getPdo()->prepare($query);
+
+            // Store in cache if available
+            if ($cacheKey !== null && isset($cache)) {
+                $cache->put($cacheKey, $statement);
+            }
+        }
+
+        // Execute with parameters
+        $statement->execute($params);
+
+        return $statement;
     }
 
-    public function queryAll(string $query, array $params = []): array
+    /**
+     * @param string $query
+     * @param array $params
+     * @return string
+     */
+    private function generateStatementCacheKey(string $query, array $params = []): string
     {
-        $statement = $this->query($query, $params);
-        return $statement->fetchAll(PDO::FETCH_ASSOC);
+        $paramString = '';
+        if (!empty($params)) {
+            ksort($params);
+            $paramString = json_encode($params);
+        }
+
+        return md5('mysql' . $this->config->host . $this->config->database . $query . $paramString);
     }
 
-    public function beginTransaction(): bool
+    public function getPdo(): PDO
     {
-        return $this->getPdo()->beginTransaction();
-    }
+        if (!$this->isConnected()) {
+            $this->connect();
+        }
 
-    public function commit(): bool
-    {
-        return $this->getPdo()->commit();
-    }
-
-    public function rollback(): bool
-    {
-        return $this->getPdo()->rollBack();
-    }
-
-    public function inTransaction(): bool
-    {
-        return $this->isConnected() && $this->pdo->inTransaction();
+        return $this->pdo;
     }
 
     public function isConnected(): bool
@@ -189,13 +214,6 @@ class Connection implements ConnectionInterface
         }
     }
 
-    public function disconnect(): void
-    {
-        $this->pdo = null;
-        $this->connected = false;
-        $this->logger->debug('Database connection closed');
-    }
-
     private function buildMysqlDsn(): string
     {
         $dsn = "mysql:host={$this->config->host};dbname={$this->config->database}";
@@ -212,57 +230,6 @@ class Connection implements ConnectionInterface
     }
 
     /**
-     * @param string $query
-     * @param array $params
-     * @return PDOStatement
-     * @throws ContainerException
-     * @throws NotFoundException
-     */
-    private function prepareAndExecute(string $query, array $params): PDOStatement
-    {
-        $cacheKey = null;
-        $statement = null;
-
-        // Try to get from cache if available
-        if ($this->container !== null && $this->container->has(StatementCache::class)) {
-            $cache = $this->container->get(StatementCache::class);
-            $cacheKey = $this->generateStatementCacheKey($query, $params);
-            $statement = $cache->get($cacheKey);
-        }
-
-        // If not in cache or cache not available, prepare statement
-        if ($statement === null) {
-            $statement = $this->getPdo()->prepare($query);
-
-            // Store in cache if available
-            if ($cacheKey !== null && isset($cache)) {
-                $cache->put($cacheKey, $statement);
-            }
-        }
-
-        // Execute with parameters
-        $statement->execute($params);
-
-        return $statement;
-    }
-
-    /**
-     * @param string $query
-     * @param array $params
-     * @return string
-     */
-    private function generateStatementCacheKey(string $query, array $params = []): string
-    {
-        $paramString = '';
-        if (!empty($params)) {
-            ksort($params);
-            $paramString = json_encode($params);
-        }
-
-        return md5('mysql' . $this->config->host . $this->config->database . $query . $paramString);
-    }
-
-    /**
      * @param PDOException $e
      * @return bool
      */
@@ -276,5 +243,38 @@ class Connection implements ConnectionInterface
         ];
 
         return in_array((int)$e->getCode(), $connectionErrorCodes);
+    }
+
+    public function queryAll(string $query, array $params = []): array
+    {
+        $statement = $this->query($query, $params);
+        return $statement->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function beginTransaction(): bool
+    {
+        return $this->getPdo()->beginTransaction();
+    }
+
+    public function commit(): bool
+    {
+        return $this->getPdo()->commit();
+    }
+
+    public function rollback(): bool
+    {
+        return $this->getPdo()->rollBack();
+    }
+
+    public function inTransaction(): bool
+    {
+        return $this->isConnected() && $this->pdo->inTransaction();
+    }
+
+    public function disconnect(): void
+    {
+        $this->pdo = null;
+        $this->connected = false;
+        $this->logger->debug('Database connection closed');
     }
 }

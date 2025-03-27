@@ -10,6 +10,20 @@ namespace App\Infrastructure\Database\QueryBuilder;
 trait JsonQueryTrait
 {
     /**
+     * Fügt eine WHERE OR-Bedingung für JSON-Pfad hinzu
+     *
+     * @param string $column Spalte mit JSON-Daten
+     * @param string $path JSON-Pfad
+     * @param mixed $operator Operator oder Wert
+     * @param mixed $value Wert (optional)
+     * @return static
+     */
+    public function orWhereJson(string $column, string $path, mixed $operator = null, mixed $value = null): static
+    {
+        return $this->whereJson($column, $path, $operator, $value, 'OR');
+    }
+
+    /**
      * Fügt eine WHERE-Bedingung für JSON-Pfad hinzu
      *
      * @param string $column Spalte mit JSON-Daten
@@ -42,29 +56,15 @@ trait JsonQueryTrait
     }
 
     /**
-     * Erstellt eine neue Raw-SQL-Expression
-     *
-     * @param string $expression Die rohe SQL-Expression
-     * @param array $bindings Parameter-Bindungen für die Expression
-     * @return RawExpression
-     */
-    protected function raw(string $expression, array $bindings = []): RawExpression
-    {
-        return new RawExpression($expression, $bindings);
-    }
-
-    /**
-     * Fügt eine WHERE OR-Bedingung für JSON-Pfad hinzu
+     * Fügt eine WHERE OR-Bedingung hinzu, die prüft, ob ein JSON-Pfad existiert
      *
      * @param string $column Spalte mit JSON-Daten
      * @param string $path JSON-Pfad
-     * @param mixed $operator Operator oder Wert
-     * @param mixed $value Wert (optional)
      * @return static
      */
-    public function orWhereJson(string $column, string $path, mixed $operator = null, mixed $value = null): static
+    public function orWhereJsonContains(string $column, string $path): static
     {
-        return $this->whereJson($column, $path, $operator, $value, 'OR');
+        return $this->whereJsonContains($column, $path, 'OR');
     }
 
     /**
@@ -89,15 +89,16 @@ trait JsonQueryTrait
     }
 
     /**
-     * Fügt eine WHERE OR-Bedingung hinzu, die prüft, ob ein JSON-Pfad existiert
+     * Fügt eine WHERE OR-Bedingung hinzu, die prüft, ob ein JSON-Array einen Wert enthält
      *
      * @param string $column Spalte mit JSON-Daten
-     * @param string $path JSON-Pfad
+     * @param string $path JSON-Pfad zum Array
+     * @param mixed $value Zu suchender Wert
      * @return static
      */
-    public function orWhereJsonContains(string $column, string $path): static
+    public function orWhereJsonArrayContains(string $column, string $path, mixed $value): static
     {
-        return $this->whereJsonContains($column, $path, 'OR');
+        return $this->whereJsonArrayContains($column, $path, $value, 'OR');
     }
 
     /**
@@ -126,16 +127,17 @@ trait JsonQueryTrait
     }
 
     /**
-     * Fügt eine WHERE OR-Bedingung hinzu, die prüft, ob ein JSON-Array einen Wert enthält
+     * Fügt eine WHERE OR-Bedingung hinzu, die die Länge eines JSON-Arrays prüft
      *
      * @param string $column Spalte mit JSON-Daten
      * @param string $path JSON-Pfad zum Array
-     * @param mixed $value Zu suchender Wert
+     * @param mixed $operator Operator oder Wert
+     * @param mixed $value Wert (optional)
      * @return static
      */
-    public function orWhereJsonArrayContains(string $column, string $path, mixed $value): static
+    public function orWhereJsonLength(string $column, string $path, mixed $operator = null, mixed $value = null): static
     {
-        return $this->whereJsonArrayContains($column, $path, $value, 'OR');
+        return $this->whereJsonLength($column, $path, $operator, $value, 'OR');
     }
 
     /**
@@ -171,17 +173,17 @@ trait JsonQueryTrait
     }
 
     /**
-     * Fügt eine WHERE OR-Bedingung hinzu, die die Länge eines JSON-Arrays prüft
+     * Fügt eine WHERE OR-Bedingung hinzu, die einen JSON-Wert als String vergleicht
      *
      * @param string $column Spalte mit JSON-Daten
-     * @param string $path JSON-Pfad zum Array
+     * @param string $path JSON-Pfad
      * @param mixed $operator Operator oder Wert
      * @param mixed $value Wert (optional)
      * @return static
      */
-    public function orWhereJsonLength(string $column, string $path, mixed $operator = null, mixed $value = null): static
+    public function orWhereJsonText(string $column, string $path, mixed $operator = null, mixed $value = null): static
     {
-        return $this->whereJsonLength($column, $path, $operator, $value, 'OR');
+        return $this->whereJsonText($column, $path, $operator, $value, 'OR');
     }
 
     /**
@@ -218,17 +220,15 @@ trait JsonQueryTrait
     }
 
     /**
-     * Fügt eine WHERE OR-Bedingung hinzu, die einen JSON-Wert als String vergleicht
+     * Fügt eine WHERE OR-Bedingung hinzu, die prüft, ob ein JSON-Schlüssel existiert
      *
      * @param string $column Spalte mit JSON-Daten
-     * @param string $path JSON-Pfad
-     * @param mixed $operator Operator oder Wert
-     * @param mixed $value Wert (optional)
+     * @param string $key Der zu prüfende Schlüssel
      * @return static
      */
-    public function orWhereJsonText(string $column, string $path, mixed $operator = null, mixed $value = null): static
+    public function orWhereJsonHasKey(string $column, string $key): static
     {
-        return $this->whereJsonText($column, $path, $operator, $value, 'OR');
+        return $this->whereJsonHasKey($column, $key, 'OR');
     }
 
     /**
@@ -248,14 +248,14 @@ trait JsonQueryTrait
     }
 
     /**
-     * Fügt eine WHERE OR-Bedingung hinzu, die prüft, ob ein JSON-Schlüssel existiert
+     * Erstellt eine neue Raw-SQL-Expression
      *
-     * @param string $column Spalte mit JSON-Daten
-     * @param string $key Der zu prüfende Schlüssel
-     * @return static
+     * @param string $expression Die rohe SQL-Expression
+     * @param array $bindings Parameter-Bindungen für die Expression
+     * @return RawExpression
      */
-    public function orWhereJsonHasKey(string $column, string $key): static
+    protected function raw(string $expression, array $bindings = []): RawExpression
     {
-        return $this->whereJsonHasKey($column, $key, 'OR');
+        return new RawExpression($expression, $bindings);
     }
 }

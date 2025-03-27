@@ -8,6 +8,7 @@ namespace App\Domain\Services;
 use App\Domain\Entities\Task;
 use App\Domain\Repositories\TaskRepository;
 use App\Infrastructure\Container\Attributes\Injectable;
+use DateTime;
 use RuntimeException;
 
 #[Injectable]
@@ -46,7 +47,7 @@ class TaskService
             title: $title,
             description: $description,
             status: 'pending',
-            dueDate: $dueDate ? new \DateTime($dueDate) : null
+            dueDate: $dueDate ? new DateTime($dueDate) : null
         );
 
         return $this->taskRepository->create($task);
@@ -65,7 +66,7 @@ class TaskService
             title: $data['title'] ?? $task->title,
             description: $data['description'] ?? $task->description,
             status: $data['status'] ?? $task->status,
-            dueDate: isset($data['due_date']) ? new \DateTime($data['due_date']) : $task->dueDate,
+            dueDate: isset($data['due_date']) ? new DateTime($data['due_date']) : $task->dueDate,
             createdAt: $task->createdAt
         );
 

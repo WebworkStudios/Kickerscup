@@ -11,6 +11,7 @@ use App\Infrastructure\Http\Contracts\ResponseFactoryInterface;
 use App\Infrastructure\Http\Contracts\ResponseInterface;
 use App\Infrastructure\Logging\Contracts\LoggerInterface;
 use App\Infrastructure\Routing\Attributes\Post;
+use Throwable;
 
 #[Injectable]
 #[Post('/tasks', 'tasks.create')]
@@ -62,7 +63,7 @@ final class TaskCreateAction
                     'task' => $task->toArray()
                 ]
             ], 201);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             if ($this->logger) {
                 $this->logger->error('Error in TaskCreateAction', [
                     'exception' => get_class($e),

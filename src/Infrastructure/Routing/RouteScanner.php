@@ -16,6 +16,7 @@ use App\Infrastructure\Routing\Contracts\RouterInterface;
 use App\Infrastructure\Routing\Contracts\RouteScannerInterface;
 use App\Infrastructure\Routing\Contracts\UrlGeneratorInterface;
 use App\Infrastructure\Security\Csrf\Attributes\CsrfProtection;
+use FilesystemIterator;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use ReflectionAttribute;
@@ -82,7 +83,7 @@ class RouteScanner implements RouteScannerInterface
         $this->logger->debug('RouteScanner: Scanning directory', ['directory' => $directory]);
 
         $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($directory, RecursiveDirectoryIterator::SKIP_DOTS)
+            new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS)
         );
 
         $scannedFiles = 0;
@@ -123,8 +124,6 @@ class RouteScanner implements RouteScannerInterface
      */
     protected function getClassNameFromFile(string $filePath, string $namespace): ?string
     {
-        // Normalisiere Pfadtrenner für Betriebssystem-Unabhängigkeit
-        $directory = dirname($filePath);
         $filename = basename($filePath, '.php');
 
         // Logger für Debug-Zwecke
@@ -138,8 +137,11 @@ class RouteScanner implements RouteScannerInterface
                 str_contains($filePath, '/Presentation/Actions') ||
                 str_contains($filePath, '\\Presentation\\Actions')
             )) {
-            // Direkter Ansatz: Setze den Namespace basierend auf bekannten Pfadfragmenten
-            if (str_contains($filePath, '/Actions/Users/') || str_contains($filePath, '\\Actions\\Users\\')) {
+
+// Mit array_any kann das verbessert werden:
+            $path = $filePath;
+            $pathFragments = ['/Actions/Users/', '\\Actions\\Users\\'];
+            if (array_any($pathFragments, fn($fragment) => str_contains($path, $fragment))) {
                 $fullClassName = 'App\\Presentation\\Actions\\Users\\' . $filename;
             } else {
                 $fullClassName = 'App\\Presentation\\Actions\\' . $filename;
@@ -150,7 +152,7 @@ class RouteScanner implements RouteScannerInterface
                 'attempted_class' => $fullClassName
             ]);
 
-            // Überprüfe ob die Klasse existiert
+            // Überprüfe, ob die Klasse existiert
             if (class_exists($fullClassName)) {
                 $this->logger->debug('RouteScanner: Class found', ['class' => $fullClassName]);
                 return $fullClassName;
@@ -407,16 +409,12 @@ class RouteScanner implements RouteScannerInterface
         foreach ($method->getParameters() as $parameter) {
             $paramName = $parameter->getName();
 
-            // Überspringe Parameter, die weder im Pfad noch in der Domain vorkommen
-            if (!isset($parameterInfo[$paramName]) && !isset($domainParameterInfo[$paramName])) {
+            if (!array_any([$parameterInfo, $domainParameterInfo], fn($info) => isset($info[$paramName]))) {
                 continue;
             }
 
-            // Prüfe auf RouteParam-Attribute
-            $routeParamAttrs = $parameter->getAttributes(RouteParam::class);
-            if (!empty($routeParamAttrs)) {
-                /** @var RouteParam $routeParam */
-                $routeParam = $routeParamAttrs[0]->newInstance();
+            $routeParam = array_find($parameter->getAttributes(RouteParam::class), fn() => true)?->newInstance();
+            if ($routeParam !== null) {
 
                 // Aktualisiere Parameter für Pfad oder Domain
                 if (isset($parameterInfo[$paramName])) {

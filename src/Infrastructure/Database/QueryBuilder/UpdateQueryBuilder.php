@@ -7,6 +7,7 @@ namespace App\Infrastructure\Database\QueryBuilder;
 
 use App\Infrastructure\Database\Exceptions\QueryException;
 use Closure;
+use Exception;
 use PDOStatement;
 
 class UpdateQueryBuilder extends QueryBuilder
@@ -24,18 +25,6 @@ class UpdateQueryBuilder extends QueryBuilder
     protected ?WhereClauseGroup $whereGroup = null;
 
     /**
-     * Fügt zu aktualisierende Daten hinzu
-     *
-     * @param array $values Zu aktualisierende Daten
-     * @return $this
-     */
-    public function values(array $values): self
-    {
-        $this->values = array_merge($this->values, $values);
-        return $this;
-    }
-
-    /**
      * Setzt einen einzelnen Wert, der auch eine Raw-Expression sein kann
      *
      * @param string $column Spalte
@@ -46,14 +35,6 @@ class UpdateQueryBuilder extends QueryBuilder
     {
         $this->values[$column] = $value;
         return $this;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function where(string|RawExpression $column, mixed $operator = null, mixed $value = null): static
-    {
-        return parent::where($column, $operator, $value);
     }
 
     /**
@@ -72,7 +53,6 @@ class UpdateQueryBuilder extends QueryBuilder
         return parent::whereGroup($callback);
     }
 
-
     /**
      * {@inheritdoc}
      */
@@ -80,7 +60,6 @@ class UpdateQueryBuilder extends QueryBuilder
     {
         return parent::orWhereGroup($callback);
     }
-
 
     /**
      * Fügt eine WHERE IN-Bedingung hinzu
@@ -119,6 +98,14 @@ class UpdateQueryBuilder extends QueryBuilder
     }
 
     /**
+     * {@inheritdoc}
+     */
+    public function where(string|RawExpression $column, mixed $operator = null, mixed $value = null): static
+    {
+        return parent::where($column, $operator, $value);
+    }
+
+    /**
      * Fügt eine WHERE NULL-Bedingung hinzu
      *
      * @param string $column Spalte
@@ -148,25 +135,6 @@ class UpdateQueryBuilder extends QueryBuilder
 
         $this->whereGroup->where(new RawExpression("{$column} IS NOT NULL"));
         return $this;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function execute(): PDOStatement
-    {
-        if (empty($this->values)) {
-            throw new QueryException('No values specified for update query');
-        }
-
-        if ($this->whereGroup === null || empty($this->whereGroup->toSql())) {
-            throw new QueryException('No WHERE clause specified for update query. To update all records, use whereTrue() explicitly.');
-        }
-
-        $sql = $this->toSql();
-        $statement = $this->getConnection()->query($sql, $this->parameters);
-
-        return $statement;
     }
 
     /**
@@ -227,10 +195,41 @@ class UpdateQueryBuilder extends QueryBuilder
 
             $connection->commit();
             return $updated;
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             $connection->rollback();
             throw $e;
         }
+    }
+
+    /**
+     * Fügt zu aktualisierende Daten hinzu
+     *
+     * @param array $values Zu aktualisierende Daten
+     * @return $this
+     */
+    public function values(array $values): self
+    {
+        $this->values = array_merge($this->values, $values);
+        return $this;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function execute(): PDOStatement
+    {
+        if (empty($this->values)) {
+            throw new QueryException('No values specified for update query');
+        }
+
+        if ($this->whereGroup === null || empty($this->whereGroup->toSql())) {
+            throw new QueryException('No WHERE clause specified for update query. To update all records, use whereTrue() explicitly.');
+        }
+
+        $sql = $this->toSql();
+        $statement = $this->getConnection()->query($sql, $this->parameters);
+
+        return $statement;
     }
 
     /**

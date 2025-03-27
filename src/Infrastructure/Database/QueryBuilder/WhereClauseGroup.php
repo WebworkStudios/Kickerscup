@@ -5,6 +5,8 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Database\QueryBuilder;
 
+use Closure;
+
 class WhereClauseGroup
 {
     /**
@@ -28,6 +30,19 @@ class WhereClauseGroup
     public function __construct(string $boolean = 'AND')
     {
         $this->boolean = strtoupper($boolean);
+    }
+
+    /**
+     * Fügt eine WHERE OR-Bedingung hinzu
+     *
+     * @param string|RawExpression $column Spalte oder Raw-Expression
+     * @param mixed $operator Operator oder Wert
+     * @param mixed $value Wert (optional)
+     * @return $this
+     */
+    public function orWhere(string|RawExpression $column, mixed $operator = null, mixed $value = null): self
+    {
+        return $this->where($column, $operator, $value, 'OR');
     }
 
     /**
@@ -60,49 +75,6 @@ class WhereClauseGroup
         $this->conditions[] = ["{$column} {$operator} :{$paramName}", $boolean];
 
         return $this;
-    }
-
-    /**
-     * Fügt eine WHERE OR-Bedingung hinzu
-     *
-     * @param string|RawExpression $column Spalte oder Raw-Expression
-     * @param mixed $operator Operator oder Wert
-     * @param mixed $value Wert (optional)
-     * @return $this
-     */
-    public function orWhere(string|RawExpression $column, mixed $operator = null, mixed $value = null): self
-    {
-        return $this->where($column, $operator, $value, 'OR');
-    }
-
-    /**
-     * Erstellt eine neue verschachtelte Bedingungsgruppe mit AND-Verknüpfung
-     *
-     * @param \Closure $callback Callback-Funktion, die die neue Gruppe konfiguriert
-     * @param string $boolean Boolean Operator für die Verknüpfung (AND oder OR)
-     * @return $this
-     */
-    public function whereGroup(\Closure $callback, string $boolean = 'AND'): self
-    {
-        $group = new WhereClauseGroup();
-
-        $callback($group);
-
-        $this->parameters = array_merge($this->parameters, $group->getParameters());
-        $this->conditions[] = [$group, $boolean];
-
-        return $this;
-    }
-
-    /**
-     * Erstellt eine neue verschachtelte Bedingungsgruppe mit OR-Verknüpfung
-     *
-     * @param \Closure $callback Callback-Funktion, die die neue Gruppe konfiguriert
-     * @return $this
-     */
-    public function orWhereGroup(\Closure $callback): self
-    {
-        return $this->whereGroup($callback, 'OR');
     }
 
     /**
@@ -153,5 +125,35 @@ class WhereClauseGroup
     {
         static $counter = 0;
         return $prefix . '_' . (++$counter);
+    }
+
+    /**
+     * Erstellt eine neue verschachtelte Bedingungsgruppe mit OR-Verknüpfung
+     *
+     * @param Closure $callback Callback-Funktion, die die neue Gruppe konfiguriert
+     * @return $this
+     */
+    public function orWhereGroup(Closure $callback): self
+    {
+        return $this->whereGroup($callback, 'OR');
+    }
+
+    /**
+     * Erstellt eine neue verschachtelte Bedingungsgruppe mit AND-Verknüpfung
+     *
+     * @param Closure $callback Callback-Funktion, die die neue Gruppe konfiguriert
+     * @param string $boolean Boolean Operator für die Verknüpfung (AND oder OR)
+     * @return $this
+     */
+    public function whereGroup(Closure $callback, string $boolean = 'AND'): self
+    {
+        $group = new WhereClauseGroup();
+
+        $callback($group);
+
+        $this->parameters = array_merge($this->parameters, $group->getParameters());
+        $this->conditions[] = [$group, $boolean];
+
+        return $this;
     }
 }

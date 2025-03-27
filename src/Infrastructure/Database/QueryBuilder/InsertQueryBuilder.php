@@ -63,6 +63,42 @@ class InsertQueryBuilder extends QueryBuilder
     }
 
     /**
+     * {@inheritdoc}
+     */
+    public function toSql(): string
+    {
+        if (empty($this->values)) {
+            throw new QueryException('No values specified for insert query');
+        }
+
+        $sql = "INSERT INTO {$this->table}";
+
+        // Extrahiere die Spalten aus dem ersten Datensatz
+        $columns = array_keys($this->values[0]);
+        $sql .= ' (' . implode(', ', $columns) . ')';
+
+        $sql .= ' VALUES ';
+
+        $valueSets = [];
+
+        foreach ($this->values as $index => $record) {
+            $placeholders = [];
+
+            foreach ($record as $column => $value) {
+                $paramName = "value_{$index}_{$column}";
+                $this->parameters[$paramName] = $value;
+                $placeholders[] = ":{$paramName}";
+            }
+
+            $valueSets[] = '(' . implode(', ', $placeholders) . ')';
+        }
+
+        $sql .= implode(', ', $valueSets);
+
+        return $sql;
+    }
+
+    /**
      * Führt den Insert aus und gibt die ID des neuen Datensatzes zurück
      *
      * @return int|string|null Die ID des eingefügten Datensatzes oder null
@@ -119,41 +155,5 @@ class InsertQueryBuilder extends QueryBuilder
         $this->values = $allValues;
 
         return $totalInserted;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function toSql(): string
-    {
-        if (empty($this->values)) {
-            throw new QueryException('No values specified for insert query');
-        }
-
-        $sql = "INSERT INTO {$this->table}";
-
-        // Extrahiere die Spalten aus dem ersten Datensatz
-        $columns = array_keys($this->values[0]);
-        $sql .= ' (' . implode(', ', $columns) . ')';
-
-        $sql .= ' VALUES ';
-
-        $valueSets = [];
-
-        foreach ($this->values as $index => $record) {
-            $placeholders = [];
-
-            foreach ($record as $column => $value) {
-                $paramName = "value_{$index}_{$column}";
-                $this->parameters[$paramName] = $value;
-                $placeholders[] = ":{$paramName}";
-            }
-
-            $valueSets[] = '(' . implode(', ', $placeholders) . ')';
-        }
-
-        $sql .= implode(', ', $valueSets);
-
-        return $sql;
     }
 }

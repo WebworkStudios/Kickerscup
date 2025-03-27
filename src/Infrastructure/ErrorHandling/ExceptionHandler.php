@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\ErrorHandling;
 
+use App\Infrastructure\Config\Config;
 use App\Infrastructure\Container\Attributes\Injectable;
 use App\Infrastructure\Container\Attributes\Singleton;
 use App\Infrastructure\ErrorHandling\Contracts\ExceptionHandlerInterface;
@@ -93,22 +94,34 @@ class ExceptionHandler implements ExceptionHandlerInterface
     }
 
     /**
-     * {@inheritdoc}
+     * Sammelt zusätzliche Kontextinformationen
+     *
+     * @param Throwable $exception Die aufgetretene Exception
+     * @return array<string, mixed> Gesammelte Kontextinformationen
      */
-    public function registerTransformer(string $sourceException, callable $transformer): static
+    protected function collectAdditionalContext(Throwable $exception): array
     {
-        $this->transformers[$sourceException] = $transformer;
-        return $this;
-    }
+        $additionalContext = [];
 
-    /**
-     * {@inheritdoc}
-     */
-    public function registerContextCollector(callable $collector, ?string $name = null): static
-    {
-        $key = $name ?? 'collector_' . (count($this->contextCollectors) + 1);
-        $this->contextCollectors[$key] = $collector;
-        return $this;
+        // Grundlegende Informationen über die Anwendung
+        $additionalContext['environment'] = (new Config)->get('app.env', 'production');
+        $additionalContext['php_version'] = PHP_VERSION;
+        $additionalContext['memory_usage'] = memory_get_usage(true);
+
+        // Aufruf aller registrierten Kontextsammler
+        foreach ($this->contextCollectors as $name => $collector) {
+            try {
+                $result = call_user_func($collector, $exception);
+                if (is_array($result)) {
+                    $additionalContext[$name] = $result;
+                }
+            } catch (Throwable $e) {
+                // Fehler im Sammler verhindern nicht die weitere Verarbeitung
+                $additionalContext['collector_errors'][$name] = $e->getMessage();
+            }
+        }
+
+        return $additionalContext;
     }
 
     /**
@@ -129,46 +142,6 @@ class ExceptionHandler implements ExceptionHandlerInterface
 
         // Verwende den Logger, um die Exception zu protokollieren
         $this->logger->exception($exception, $level->value, '', $context);
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function registerHandler(string $exceptionClass, callable $handler): static
-    {
-        $this->handlers[$exceptionClass] = $handler;
-        return $this;
-    }
-
-    /**
-     * Sammelt zusätzliche Kontextinformationen
-     *
-     * @param Throwable $exception Die aufgetretene Exception
-     * @return array<string, mixed> Gesammelte Kontextinformationen
-     */
-    protected function collectAdditionalContext(Throwable $exception): array
-    {
-        $additionalContext = [];
-
-        // Grundlegende Informationen über die Anwendung
-        $additionalContext['environment'] = (new \App\Infrastructure\Config\Config)->get('app.env', 'production');
-        $additionalContext['php_version'] = PHP_VERSION;
-        $additionalContext['memory_usage'] = memory_get_usage(true);
-
-        // Aufruf aller registrierten Kontextsammler
-        foreach ($this->contextCollectors as $name => $collector) {
-            try {
-                $result = call_user_func($collector, $exception);
-                if (is_array($result)) {
-                    $additionalContext[$name] = $result;
-                }
-            } catch (Throwable $e) {
-                // Fehler im Sammler verhindern nicht die weitere Verarbeitung
-                $additionalContext['collector_errors'][$name] = $e->getMessage();
-            }
-        }
-
-        return $additionalContext;
     }
 
     /**
@@ -194,41 +167,6 @@ class ExceptionHandler implements ExceptionHandlerInterface
         }
 
         return $requestInfo;
-    }
-
-    /**
-     * Sammelt globale Informationen
-     *
-     * @return array<string, mixed> Gesammelte globale Informationen
-     */
-    protected function collectGlobalInformation(): array
-    {
-        return [
-            'time' => date('Y-m-d H:i:s'),
-            'server' => $this->sanitizeServerData($_SERVER),
-            'session_active' => session_status() === PHP_SESSION_ACTIVE,
-        ];
-    }
-
-    /**
-     * Bestimmt das geeignete Log-Level für eine Exception
-     *
-     * @param Throwable $exception Die Exception
-     * @return LogLevel Das zu verwendende Log-Level
-     */
-    protected function getLogLevelForException(Throwable $exception): LogLevel
-    {
-        // Je nach Exception-Typ ein passendes Log-Level zurückgeben
-        return match (true) {
-            // Schwerwiegende Fehler
-            $exception instanceof Error => LogLevel::CRITICAL,
-
-            // Logische Fehler
-            $exception instanceof LogicException => LogLevel::WARNING,
-
-            // Alle anderen Exceptions (inkl. RuntimeException)
-            default => LogLevel::ERROR,
-        };
     }
 
     /**
@@ -286,6 +224,20 @@ class ExceptionHandler implements ExceptionHandlerInterface
     }
 
     /**
+     * Sammelt globale Informationen
+     *
+     * @return array<string, mixed> Gesammelte globale Informationen
+     */
+    protected function collectGlobalInformation(): array
+    {
+        return [
+            'time' => date('Y-m-d H:i:s'),
+            'server' => $this->sanitizeServerData($_SERVER),
+            'session_active' => session_status() === PHP_SESSION_ACTIVE,
+        ];
+    }
+
+    /**
      * Entfernt sensible Daten aus Server-Daten
      *
      * @param array<string, mixed> $serverData Die zu bereinigenden Server-Daten
@@ -321,5 +273,54 @@ class ExceptionHandler implements ExceptionHandlerInterface
         }
 
         return $result;
+    }
+
+    /**
+     * Bestimmt das geeignete Log-Level für eine Exception
+     *
+     * @param Throwable $exception Die Exception
+     * @return LogLevel Das zu verwendende Log-Level
+     */
+    protected function getLogLevelForException(Throwable $exception): LogLevel
+    {
+        // Je nach Exception-Typ ein passendes Log-Level zurückgeben
+        return match (true) {
+            // Schwerwiegende Fehler
+            $exception instanceof Error => LogLevel::CRITICAL,
+
+            // Logische Fehler
+            $exception instanceof LogicException => LogLevel::WARNING,
+
+            // Alle anderen Exceptions (inkl. RuntimeException)
+            default => LogLevel::ERROR,
+        };
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function registerTransformer(string $sourceException, callable $transformer): static
+    {
+        $this->transformers[$sourceException] = $transformer;
+        return $this;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function registerContextCollector(callable $collector, ?string $name = null): static
+    {
+        $key = $name ?? 'collector_' . (count($this->contextCollectors) + 1);
+        $this->contextCollectors[$key] = $collector;
+        return $this;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function registerHandler(string $exceptionClass, callable $handler): static
+    {
+        $this->handlers[$exceptionClass] = $handler;
+        return $this;
     }
 }

@@ -23,15 +23,6 @@ class DeleteQueryBuilder extends QueryBuilder
     protected bool $whereTrue = false;
 
     /**
-     * {@inheritdoc}
-     */
-    public function where(string|RawExpression $column, mixed $operator = null, mixed $value = null): static
-    {
-        return parent::where($column, $operator, $value);
-    }
-
-
-    /**
      * Fügt eine WHERE IN-Bedingung hinzu
      *
      * @param string $column Spalte
@@ -65,6 +56,14 @@ class DeleteQueryBuilder extends QueryBuilder
         $this->whereGroup->where($expr);
 
         return $this;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function where(string|RawExpression $column, mixed $operator = null, mixed $value = null): static
+    {
+        return parent::where($column, $operator, $value);
     }
 
     /**

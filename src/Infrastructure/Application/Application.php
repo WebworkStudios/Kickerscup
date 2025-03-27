@@ -8,6 +8,7 @@ namespace App\Infrastructure\Application;
 use App\Infrastructure\Container\Attributes\Injectable;
 use App\Infrastructure\Container\Attributes\Singleton;
 use App\Infrastructure\Container\Contracts\ContainerInterface;
+use App\Infrastructure\Container\Exceptions\BindingResolutionException;
 use App\Infrastructure\Container\Exceptions\ContainerException;
 use App\Infrastructure\Container\Exceptions\NotFoundException;
 use App\Infrastructure\ErrorHandling\Contracts\ExceptionHandlerInterface;
@@ -16,6 +17,8 @@ use App\Infrastructure\Http\Contracts\ResponseInterface;
 use App\Infrastructure\Http\Request;
 use App\Infrastructure\Logging\Contracts\LoggerInterface;
 use App\Infrastructure\Routing\Contracts\RouterInterface;
+use App\Infrastructure\Routing\Exceptions\MethodNotAllowedException;
+use App\Infrastructure\Routing\Exceptions\RouteNotFoundException;
 use App\Infrastructure\Session\Contracts\SessionInterface;
 use Throwable;
 
@@ -86,6 +89,33 @@ class Application
     }
 
     /**
+     * Behandelt Ausnahmen, die während der Verarbeitung auftreten
+     *
+     * @param Throwable $e Die aufgetretene Ausnahme
+     * @param Request $request Der aktuelle Request
+     * @return ResponseInterface
+     * @throws ContainerException
+     * @throws NotFoundException
+     */
+    protected function handleException(Throwable $e, Request $request): ResponseInterface
+    {
+        // Rufe den zentralen Exception-Handler auf
+        try {
+            $exceptionHandler = $this->container->get(ExceptionHandlerInterface::class);
+            $exceptionHandler->handle($e, ['request' => $request]);
+        } catch (Throwable $handlerException) {
+            // Fallback wenn Exception-Handler selbst eine Exception wirft
+            $this->logger->critical('Error in exception handler', [
+                'original_exception' => get_class($e) . ': ' . $e->getMessage(),
+                'handler_exception' => $handlerException->getMessage()
+            ]);
+        }
+
+        // Erstelle eine Response basierend auf der Exception
+        return $this->createExceptionResponse($e, $request);
+    }
+
+    /**
      * Verarbeitet eine eingehende Anfrage mit einem benutzerdefinierten Request-Objekt
      *
      * @param Request $request Das zu verarbeitende Request-Objekt
@@ -117,33 +147,6 @@ class Application
     }
 
     /**
-     * Behandelt Ausnahmen, die während der Verarbeitung auftreten
-     *
-     * @param Throwable $e Die aufgetretene Ausnahme
-     * @param Request $request Der aktuelle Request
-     * @return ResponseInterface
-     * @throws ContainerException
-     * @throws NotFoundException
-     */
-    protected function handleException(Throwable $e, Request $request): ResponseInterface
-    {
-        // Rufe den zentralen Exception-Handler auf
-        try {
-            $exceptionHandler = $this->container->get(ExceptionHandlerInterface::class);
-            $exceptionHandler->handle($e, ['request' => $request]);
-        } catch (Throwable $handlerException) {
-            // Fallback wenn Exception-Handler selbst eine Exception wirft
-            $this->logger->critical('Error in exception handler', [
-                'original_exception' => get_class($e) . ': ' . $e->getMessage(),
-                'handler_exception' => $handlerException->getMessage()
-            ]);
-        }
-
-        // Erstelle eine Response basierend auf der Exception
-        return $this->createExceptionResponse($e, $request);
-    }
-
-    /**
      * Erstellt eine passende Response für eine Exception
      *
      * @param Throwable $e Die aufgetretene Ausnahme
@@ -158,14 +161,14 @@ class Application
 
         // Je nach Exception-Typ eine passende Response erstellen
         return match (true) {
-            $e instanceof \App\Infrastructure\Routing\Exceptions\RouteNotFoundException =>
+            $e instanceof RouteNotFoundException =>
             $factory->createNotFound('Die angeforderte Seite wurde nicht gefunden.'),
 
-            $e instanceof \App\Infrastructure\Routing\Exceptions\MethodNotAllowedException =>
+            $e instanceof MethodNotAllowedException =>
             $factory->createMethodNotAllowed('Die HTTP-Methode ist für diese Route nicht erlaubt.'),
 
-            $e instanceof \App\Infrastructure\Container\Exceptions\NotFoundException,
-                $e instanceof \App\Infrastructure\Container\Exceptions\BindingResolutionException =>
+            $e instanceof NotFoundException,
+                $e instanceof BindingResolutionException =>
             $factory->createServerError('Ein interner Serverfehler ist aufgetreten.'),
 
             default => $factory->createServerError('Ein Fehler ist aufgetreten: ' . $this->getSafeExceptionMessage($e))

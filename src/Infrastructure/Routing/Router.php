@@ -146,35 +146,6 @@ class Router implements RouterInterface
     }
 
     /**
-     * Fügt eine Umleitung hinzu
-     *
-     * @param string $fromPath Quellpfad
-     * @param string $toPath Zielpfad (kann auch eine benannte Route sein mit 'name: routeName')
-     * @param int $statusCode HTTP-Statuscode (301 = permanent, 302 = temporär)
-     * @param bool $preserveQueryString Ob der Query-String übernommen werden soll
-     * @return static
-     */
-    public function addRedirect(
-        string $fromPath,
-        string $toPath,
-        int    $statusCode = 302,
-        bool   $preserveQueryString = true
-    ): static
-    {
-        // Normalisiere Quellpfad
-        $fromPath = $this->normalizePath($fromPath);
-
-        // Speichere die Umleitung
-        $this->redirects[$fromPath] = [
-            'toPath' => $toPath,
-            'statusCode' => $statusCode,
-            'preserveQueryString' => $preserveQueryString
-        ];
-
-        return $this;
-    }
-
-    /**
      * Normalisiert einen Pfad
      *
      * @param string $path Der zu normalisierende Pfad
@@ -234,6 +205,300 @@ class Router implements RouterInterface
             'pattern' => $pattern,
             'parameters' => $parameters
         ];
+    }
+
+    /**
+     * Fügt eine Umleitung hinzu
+     *
+     * @param string $fromPath Quellpfad
+     * @param string $toPath Zielpfad (kann auch eine benannte Route sein mit 'name: routeName')
+     * @param int $statusCode HTTP-Statuscode (301 = permanent, 302 = temporär)
+     * @param bool $preserveQueryString Ob der Query-String übernommen werden soll
+     * @return static
+     */
+    public function addRedirect(
+        string $fromPath,
+        string $toPath,
+        int    $statusCode = 302,
+        bool   $preserveQueryString = true
+    ): static
+    {
+        // Normalisiere Quellpfad
+        $fromPath = $this->normalizePath($fromPath);
+
+        // Speichere die Umleitung
+        $this->redirects[$fromPath] = [
+            'toPath' => $toPath,
+            'statusCode' => $statusCode,
+            'preserveQueryString' => $preserveQueryString
+        ];
+
+        return $this;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @param RequestInterface $request
+     * @return ResponseInterface
+     * @throws ContainerException
+     * @throws NotFoundException
+     * @throws RouteCreationException
+     * @throws ReflectionException
+     */
+    public function dispatch(RequestInterface $request): ResponseInterface
+    {
+        try {
+            // Prüfe auf Redirects für diesen Pfad
+            $redirectResponse = $this->checkForRedirect($request);
+            if ($redirectResponse !== null) {
+                return $redirectResponse;
+            }
+
+            // CORS Preflight-Anfragen behandeln
+            if ($request->getMethod() === 'OPTIONS' && $request->hasHeader('access-control-request-method')) {
+                return $this->handleCorsPreflightRequest($request);
+            }
+
+            $match = $this->match($request);
+
+            if ($match === false) {
+                $this->logger->info('Route not found', [
+                    'method' => $request->getMethod(),
+                    'path' => $request->getPath()
+                ]);
+                throw new RouteNotFoundException(
+                    "Keine Route gefunden für {$request->getMethod()} {$request->getPath()}."
+                );
+            }
+
+            $route = $match['route'];
+            $parameters = $match['parameters'];
+            $handler = $route['handler'];
+            $path = $request->getPath();
+
+            // CSRF-Validierung durchführen, wenn nötig
+            $csrfConfig = $this->findCsrfConfigurationForPath($path);
+            if ($csrfConfig !== null && $csrfConfig->enabled && $this->shouldValidateCsrf($request)) {
+                $csrfService = $this->container->get(CsrfProtectionInterface::class);
+                $token = $this->getTokenFromRequest($request);
+
+                if (!$token || !$csrfService->validateToken($token, $csrfConfig->tokenKey)) {
+                    return $this->handleCsrfError();
+                }
+
+                if ($csrfConfig->validateOrigin && !$csrfService->validateOrigin([])) {
+                    return $this->handleCsrfError("Ungültiger Request-Origin");
+                }
+            }
+
+            // Rufe den Handler mit den Parametern auf
+            $response = $this->callHandler($handler, $parameters, $request);
+
+            // Wenn der Handler bereits eine Response zurückgibt, verwende diese
+            if ($response instanceof ResponseInterface) {
+                // CORS-Header für normale Anfragen hinzufügen
+                $this->addCorsHeadersToResponse($response, $request);
+                return $response;
+            }
+
+            // Sonst erstelle eine Response basierend auf dem Rückgabewert
+            if (is_string($response)) {
+                $response = $this->responseFactory->createHtml($response);
+            } elseif (is_array($response) || is_object($response)) {
+                $response = $this->responseFactory->createJson($response);
+            } else {
+                // Fallback für andere Rückgabetypen
+                $response = $this->responseFactory->create(200, (string)$response);
+            }
+
+            // CORS-Header hinzufügen
+            $this->addCorsHeadersToResponse($response, $request);
+
+            return $response;
+        } catch (RouteNotFoundException $e) {
+            return $this->handleNotFoundError($request, $e);
+        } catch (MethodNotAllowedException $e) {
+            return $this->handleMethodNotAllowedError($request, $e);
+        }
+    }
+
+    /**
+     * Prüft, ob für den Request eine Umleitung definiert ist
+     *
+     * @param RequestInterface $request Der HTTP-Request
+     * @return ResponseInterface|null Die Redirect-Response oder null, wenn keine Umleitung definiert ist
+     */
+    protected function checkForRedirect(RequestInterface $request): ?ResponseInterface
+    {
+        $path = $this->normalizePath($request->getPath());
+
+        // Prüfe direkte Pfadübereinstimmung
+        if (isset($this->redirects[$path])) {
+            $redirect = $this->redirects[$path];
+            return $this->createRedirectResponse($request, $redirect);
+        }
+
+        // Prüfe Wildcard-Umleitungen (z.B. /old/* -> /new/*)
+        foreach ($this->redirects as $fromPath => $redirect) {
+            if (str_ends_with($fromPath, '/*')) {
+                $prefix = substr($fromPath, 0, -2);
+
+                if (str_starts_with($path, $prefix)) {
+                    // Wildcard-Umleitung
+                    $suffix = substr($path, strlen($prefix));
+                    $toPath = $redirect['toPath'];
+
+                    // Falls Zielpfad auch mit Wildcard endet, Suffix hinzufügen
+                    if (str_ends_with($toPath, '/*')) {
+                        $toPath = substr($toPath, 0, -2) . $suffix;
+                    }
+
+                    // Umleitung mit angepasstem Zielpfad erstellen
+                    $wildcardRedirect = $redirect;
+                    $wildcardRedirect['toPath'] = $toPath;
+                    return $this->createRedirectResponse($request, $wildcardRedirect);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Erstellt eine Redirect-Response
+     *
+     * @param RequestInterface $request Der HTTP-Request
+     * @param array $redirect Die Redirect-Konfiguration
+     * @return ResponseInterface Die Response
+     */
+    protected function createRedirectResponse(RequestInterface $request, array $redirect): ResponseInterface
+    {
+        $toPath = $redirect['toPath'];
+
+        // Prüfe, ob der Zielpfad eine benannte Route ist
+        if (str_starts_with($toPath, 'name:')) {
+            $routeName = substr($toPath, 5);
+            $toPath = $this->generateUrl($routeName);
+        }
+
+        // Query-String hinzufügen, wenn gewünscht
+        if ($redirect['preserveQueryString']) {
+            $queryString = $request->getQueryString();
+            if ($queryString) {
+                $hasQueryString = str_contains($toPath, '?');
+                $toPath .= ($hasQueryString ? '&' : '?') . $queryString;
+            }
+        }
+
+        // Erstelle die Redirect-Response
+        return $this->responseFactory->createRedirect($toPath, $redirect['statusCode']);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function generateUrl(string $name, array $parameters = []): string
+    {
+        return $this->urlGenerator->generate($name, $parameters);
+    }
+
+    /**
+     * Behandelt CORS Preflight-Anfragen
+     *
+     * @param RequestInterface $request Der HTTP-Request
+     * @return ResponseInterface Die Response
+     */
+    protected function handleCorsPreflightRequest(RequestInterface $request): ResponseInterface
+    {
+        $path = $this->normalizePath($request->getPath());
+        $corsConfig = $this->findCorsConfigurationForPath($path);
+
+        // Wenn keine CORS-Konfiguration gefunden wurde, erstelle eine leere Response
+        if ($corsConfig === null) {
+            return $this->responseFactory->create(204);
+        }
+
+        $response = $this->responseFactory->create(204);
+
+        // Origin-Header setzen
+        $this->setCorsHeaders($request, $response, $corsConfig);
+
+        // Methoden-Header setzen
+        if ($corsConfig['allowMethods'] === '*') {
+            $requestMethod = $request->getHeader('access-control-request-method');
+            if ($requestMethod !== null) {
+                $response->setHeader('Access-Control-Allow-Methods', $requestMethod);
+            }
+        } else {
+            $allowedMethods = is_array($corsConfig['allowMethods'])
+                ? implode(', ', $corsConfig['allowMethods'])
+                : $corsConfig['allowMethods'];
+            $response->setHeader('Access-Control-Allow-Methods', $allowedMethods);
+        }
+
+        // Header-Header setzen
+        if ($corsConfig['allowHeaders'] === '*') {
+            $requestHeaders = $request->getHeader('access-control-request-headers');
+            if ($requestHeaders !== null) {
+                $response->setHeader('Access-Control-Allow-Headers', $requestHeaders);
+            }
+        } else {
+            $allowedHeaders = is_array($corsConfig['allowHeaders'])
+                ? implode(', ', $corsConfig['allowHeaders'])
+                : $corsConfig['allowHeaders'];
+            $response->setHeader('Access-Control-Allow-Headers', $allowedHeaders);
+        }
+
+        // Credentials-Header setzen
+        if ($corsConfig['allowCredentials']) {
+            $response->setHeader('Access-Control-Allow-Credentials', 'true');
+        }
+
+        // Max-Age-Header setzen
+        $response->setHeader('Access-Control-Max-Age', (string)$corsConfig['maxAge']);
+
+        return $response;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function findCorsConfigurationForPath(string $path): ?array
+    {
+        // Exakte Übereinstimmung
+        if (isset($this->corsConfigurations[$path])) {
+            return $this->corsConfigurations[$path];
+        }
+
+        // Nearest match (z.B. /api/* für /api/users)
+        foreach ($this->corsConfigurations as $routePath => $config) {
+            // Pfad endet mit * (Wildcard)
+            if (str_ends_with($routePath, '*')) {
+                $prefix = rtrim(string: substr($routePath, 0, -1), characters: '/');
+                if (str_starts_with($path, $prefix)) {
+                    return $config;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    protected function setCorsHeaders(RequestInterface $request, ResponseInterface $response, array $corsConfig): void
+    {
+        // Origin-Header setzen
+        $requestOrigin = $request->getHeader('origin');
+        if ($requestOrigin !== null) {
+            if ($corsConfig['allowOrigin'] === '*') {
+                $response->setHeader('Access-Control-Allow-Origin', '*');
+            } elseif (is_array($corsConfig['allowOrigin']) && in_array($requestOrigin, $corsConfig['allowOrigin'])) {
+                $response->setHeader('Access-Control-Allow-Origin', $requestOrigin);
+                $response->setHeader('Vary', 'Origin');
+            } elseif (is_string($corsConfig['allowOrigin']) && $corsConfig['allowOrigin'] === $requestOrigin) {
+                $response->setHeader('Access-Control-Allow-Origin', $requestOrigin);
+                $response->setHeader('Vary', 'Origin');
+            }
+        }
     }
 
     /**
@@ -436,126 +701,25 @@ class Router implements RouterInterface
     }
 
     /**
-     * {@inheritdoc}
-     * @param RequestInterface $request
-     * @return ResponseInterface
-     * @throws ContainerException
-     * @throws NotFoundException
-     * @throws RouteCreationException
-     * @throws ReflectionException
-     */
-    public function dispatch(RequestInterface $request): ResponseInterface
-    {
-        try {
-            // Prüfe auf Redirects für diesen Pfad
-            $redirectResponse = $this->checkForRedirect($request);
-            if ($redirectResponse !== null) {
-                return $redirectResponse;
-            }
-
-            // CORS Preflight-Anfragen behandeln
-            if ($request->getMethod() === 'OPTIONS' && $request->hasHeader('access-control-request-method')) {
-                return $this->handleCorsPreflightRequest($request);
-            }
-
-            $match = $this->match($request);
-
-            if ($match === false) {
-                $this->logger->info('Route not found', [
-                    'method' => $request->getMethod(),
-                    'path' => $request->getPath()
-                ]);
-                throw new RouteNotFoundException(
-                    "Keine Route gefunden für {$request->getMethod()} {$request->getPath()}."
-                );
-            }
-
-            $route = $match['route'];
-            $parameters = $match['parameters'];
-            $handler = $route['handler'];
-            $path = $request->getPath();
-
-            // CSRF-Validierung durchführen, wenn nötig
-            $csrfConfig = $this->findCsrfConfigurationForPath($path);
-            if ($csrfConfig !== null && $csrfConfig->enabled && $this->shouldValidateCsrf($request)) {
-                $csrfService = $this->container->get(CsrfProtectionInterface::class);
-                $token = $this->getTokenFromRequest($request);
-
-                if (!$token || !$csrfService->validateToken($token, $csrfConfig->tokenKey)) {
-                    return $this->handleCsrfError();
-                }
-
-                if ($csrfConfig->validateOrigin && !$csrfService->validateOrigin([])) {
-                    return $this->handleCsrfError("Ungültiger Request-Origin");
-                }
-            }
-
-            // Rufe den Handler mit den Parametern auf
-            $response = $this->callHandler($handler, $parameters, $request);
-
-            // Wenn der Handler bereits eine Response zurückgibt, verwende diese
-            if ($response instanceof ResponseInterface) {
-                // CORS-Header für normale Anfragen hinzufügen
-                $this->addCorsHeadersToResponse($response, $request);
-                return $response;
-            }
-
-            // Sonst erstelle eine Response basierend auf dem Rückgabewert
-            if (is_string($response)) {
-                $response = $this->responseFactory->createHtml($response);
-            } elseif (is_array($response) || is_object($response)) {
-                $response = $this->responseFactory->createJson($response);
-            } else {
-                // Fallback für andere Rückgabetypen
-                $response = $this->responseFactory->create(200, (string)$response);
-            }
-
-            // CORS-Header hinzufügen
-            $this->addCorsHeadersToResponse($response, $request);
-
-            return $response;
-        } catch (RouteNotFoundException $e) {
-            return $this->handleNotFoundError($request, $e);
-        } catch (MethodNotAllowedException $e) {
-            return $this->handleMethodNotAllowedError($request, $e);
-        }
-    }
-
-    /**
-     * Prüft, ob für den Request eine Umleitung definiert ist
+     * Findet die CSRF-Konfiguration für einen Pfad
      *
-     * @param RequestInterface $request Der HTTP-Request
-     * @return ResponseInterface|null Die Redirect-Response oder null, wenn keine Umleitung definiert ist
+     * @param string $path Der Pfad
+     * @return CsrfProtection|null Die CSRF-Konfiguration oder null
      */
-    protected function checkForRedirect(RequestInterface $request): ?ResponseInterface
+    public function findCsrfConfigurationForPath(string $path): ?CsrfProtection
     {
-        $path = $this->normalizePath($request->getPath());
-
-        // Prüfe direkte Pfadübereinstimmung
-        if (isset($this->redirects[$path])) {
-            $redirect = $this->redirects[$path];
-            return $this->createRedirectResponse($request, $redirect);
+        // Exakte Übereinstimmung
+        if (isset($this->csrfConfigurations[$path])) {
+            return $this->csrfConfigurations[$path];
         }
 
-        // Prüfe Wildcard-Umleitungen (z.B. /old/* -> /new/*)
-        foreach ($this->redirects as $fromPath => $redirect) {
-            if (str_ends_with($fromPath, '/*')) {
-                $prefix = substr($fromPath, 0, -2);
-
+        // Nearest match (z.B. /admin/* für /admin/users)
+        foreach ($this->csrfConfigurations as $routePath => $config) {
+            // Pfad endet mit * (Wildcard)
+            if (str_ends_with($routePath, '*')) {
+                $prefix = rtrim(substr($routePath, 0, -1), '/');
                 if (str_starts_with($path, $prefix)) {
-                    // Wildcard-Umleitung
-                    $suffix = substr($path, strlen($prefix));
-                    $toPath = $redirect['toPath'];
-
-                    // Falls Zielpfad auch mit Wildcard endet, Suffix hinzufügen
-                    if (str_ends_with($toPath, '/*')) {
-                        $toPath = substr($toPath, 0, -2) . $suffix;
-                    }
-
-                    // Umleitung mit angepasstem Zielpfad erstellen
-                    $wildcardRedirect = $redirect;
-                    $wildcardRedirect['toPath'] = $toPath;
-                    return $this->createRedirectResponse($request, $wildcardRedirect);
+                    return $config;
                 }
             }
         }
@@ -564,91 +728,51 @@ class Router implements RouterInterface
     }
 
     /**
-     * Erstellt eine Redirect-Response
-     *
-     * @param RequestInterface $request Der HTTP-Request
-     * @param array $redirect Die Redirect-Konfiguration
-     * @return ResponseInterface Die Response
+     * @param RequestInterface $request
+     * @return bool
+     * @throws ContainerException
+     * @throws NotFoundException
      */
-    protected function createRedirectResponse(RequestInterface $request, array $redirect): ResponseInterface
+    protected function shouldValidateCsrf(RequestInterface $request): bool
     {
-        $toPath = $redirect['toPath'];
-
-        // Prüfe, ob der Zielpfad eine benannte Route ist
-        if (str_starts_with($toPath, 'name:')) {
-            $routeName = substr($toPath, 5);
-            $toPath = $this->generateUrl($routeName);
-        }
-
-        // Query-String hinzufügen, wenn gewünscht
-        if ($redirect['preserveQueryString']) {
-            $queryString = $request->getQueryString();
-            if ($queryString) {
-                $hasQueryString = str_contains($toPath, '?');
-                $toPath .= ($hasQueryString ? '&' : '?') . $queryString;
-            }
-        }
-
-        // Erstelle die Redirect-Response
-        return $this->responseFactory->createRedirect($toPath, $redirect['statusCode']);
+        $csrfService = $this->container->get(CsrfProtectionInterface::class);
+        return $csrfService->shouldProtectRequest($request);
     }
 
     /**
-     * Behandelt CORS Preflight-Anfragen
-     *
-     * @param RequestInterface $request Der HTTP-Request
-     * @return ResponseInterface Die Response
+     * Extrahiert das CSRF-Token aus dem Request
      */
-    protected function handleCorsPreflightRequest(RequestInterface $request): ResponseInterface
+    protected function getTokenFromRequest(RequestInterface $request): ?string
     {
-        $path = $this->normalizePath($request->getPath());
-        $corsConfig = $this->findCorsConfigurationForPath($path);
-
-        // Wenn keine CORS-Konfiguration gefunden wurde, erstelle eine leere Response
-        if ($corsConfig === null) {
-            return $this->responseFactory->create(204);
+        // Token aus POST/PUT-Parameter
+        $token = $request->getInput('_csrf_token');
+        if ($token) {
+            return $token;
         }
 
-        $response = $this->responseFactory->create(204);
-
-        // Origin-Header setzen
-        $this->setCorsHeaders($request, $response, $corsConfig);
-
-        // Methoden-Header setzen
-        if ($corsConfig['allowMethods'] === '*') {
-            $requestMethod = $request->getHeader('access-control-request-method');
-            if ($requestMethod !== null) {
-                $response->setHeader('Access-Control-Allow-Methods', $requestMethod);
-            }
-        } else {
-            $allowedMethods = is_array($corsConfig['allowMethods'])
-                ? implode(', ', $corsConfig['allowMethods'])
-                : $corsConfig['allowMethods'];
-            $response->setHeader('Access-Control-Allow-Methods', $allowedMethods);
+        // Token aus Header (für AJAX-Requests)
+        $token = $request->getHeader('X-CSRF-TOKEN');
+        if ($token) {
+            return $token;
         }
 
-        // Header-Header setzen
-        if ($corsConfig['allowHeaders'] === '*') {
-            $requestHeaders = $request->getHeader('access-control-request-headers');
-            if ($requestHeaders !== null) {
-                $response->setHeader('Access-Control-Allow-Headers', $requestHeaders);
-            }
-        } else {
-            $allowedHeaders = is_array($corsConfig['allowHeaders'])
-                ? implode(', ', $corsConfig['allowHeaders'])
-                : $corsConfig['allowHeaders'];
-            $response->setHeader('Access-Control-Allow-Headers', $allowedHeaders);
+        // Token aus X-XSRF-TOKEN Header (für AJAX mit Cookies)
+        $token = $request->getHeader('X-XSRF-TOKEN');
+        if ($token) {
+            return $token;
         }
 
-        // Credentials-Header setzen
-        if ($corsConfig['allowCredentials']) {
-            $response->setHeader('Access-Control-Allow-Credentials', 'true');
-        }
+        return null;
+    }
 
-        // Max-Age-Header setzen
-        $response->setHeader('Access-Control-Max-Age', (string)$corsConfig['maxAge']);
-
-        return $response;
+    /**
+     * Behandelt CSRF-Fehler
+     * @param string|null $detailMessage
+     * @return ResponseInterface
+     */
+    protected function handleCsrfError(?string $detailMessage = null): ResponseInterface
+    {
+        return $this->responseFactory->createForbidden("CSRF-Fehler: " . ($detailMessage ?? "Token ungültig"));
     }
 
     /**
@@ -856,57 +980,6 @@ class Router implements RouterInterface
     }
 
     /**
-     * {@inheritdoc}
-     */
-    public function generateUrl(string $name, array $parameters = []): string
-    {
-        return $this->urlGenerator->generate($name, $parameters);
-    }
-
-    /**
-     * Fügt eine CORS-Konfiguration für eine Route hinzu
-     *
-     * @param string $path Der Pfad der Route
-     * @param Cors $corsConfig Die CORS-Konfiguration
-     * @return void
-     */
-    public function addCorsConfiguration(string $path, Cors $corsConfig): void
-    {
-        $this->corsConfigurations[$path] = [
-            'allowOrigin' => $corsConfig->allowOrigin,
-            'allowMethods' => $corsConfig->allowMethods,
-            'allowHeaders' => $corsConfig->allowHeaders,
-            'allowCredentials' => $corsConfig->allowCredentials,
-            'maxAge' => $corsConfig->maxAge,
-            'exposeHeaders' => $corsConfig->exposeHeaders
-        ];
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function findCorsConfigurationForPath(string $path): ?array
-    {
-        // Exakte Übereinstimmung
-        if (isset($this->corsConfigurations[$path])) {
-            return $this->corsConfigurations[$path];
-        }
-
-        // Nearest match (z.B. /api/* für /api/users)
-        foreach ($this->corsConfigurations as $routePath => $config) {
-            // Pfad endet mit * (Wildcard)
-            if (str_ends_with($routePath, '*')) {
-                $prefix = rtrim(string: substr($routePath, 0, -1), characters: '/');
-                if (str_starts_with($path, $prefix)) {
-                    return $config;
-                }
-            }
-        }
-
-        return null;
-    }
-
-    /**
      * Behandelt 404 Not Found Fehler
      *
      * @param RequestInterface $request Der HTTP-Request
@@ -926,6 +999,37 @@ class Router implements RouterInterface
 
         // Standard 404-Response
         return $this->responseFactory->createNotFound($exception->getMessage());
+    }
+
+    /**
+     * Ruft einen benutzerdefinierten Error-Handler auf
+     *
+     * @param callable|array|string $handler Der Error-Handler
+     * @param RequestInterface $request Der HTTP-Request
+     * @param Exception $exception Die ausgelöste Exception
+     * @return ResponseInterface Die Response vom Handler
+     * @throws ContainerException
+     * @throws NotFoundException
+     * @throws ReflectionException
+     * @throws RouteCreationException
+     */
+    protected function callErrorHandler(callable|array|string $handler, RequestInterface $request, Exception $exception): ResponseInterface
+    {
+        $response = $this->callHandler($handler, ['exception' => $exception], $request);
+
+        // Wenn der Handler keine Response zurückgibt, erstelle eine Standard-Response
+        if (!$response instanceof ResponseInterface) {
+            if (is_string($response)) {
+                $response = $this->responseFactory->createHtml($response, $exception instanceof MethodNotAllowedException ? 405 : 404);
+            } elseif (is_array($response) || is_object($response)) {
+                $response = $this->responseFactory->createJson($response, $exception instanceof MethodNotAllowedException ? 405 : 404);
+            } else {
+                $statusCode = $exception instanceof MethodNotAllowedException ? 405 : 404;
+                $response = $this->responseFactory->create($statusCode, (string)$response);
+            }
+        }
+
+        return $response;
     }
 
     /**
@@ -961,34 +1065,22 @@ class Router implements RouterInterface
     }
 
     /**
-     * Ruft einen benutzerdefinierten Error-Handler auf
+     * Fügt eine CORS-Konfiguration für eine Route hinzu
      *
-     * @param callable|array|string $handler Der Error-Handler
-     * @param RequestInterface $request Der HTTP-Request
-     * @param Exception $exception Die ausgelöste Exception
-     * @return ResponseInterface Die Response vom Handler
-     * @throws ContainerException
-     * @throws NotFoundException
-     * @throws ReflectionException
-     * @throws RouteCreationException
+     * @param string $path Der Pfad der Route
+     * @param Cors $corsConfig Die CORS-Konfiguration
+     * @return void
      */
-    protected function callErrorHandler(callable|array|string $handler, RequestInterface $request, Exception $exception): ResponseInterface
+    public function addCorsConfiguration(string $path, Cors $corsConfig): void
     {
-        $response = $this->callHandler($handler, ['exception' => $exception], $request);
-
-        // Wenn der Handler keine Response zurückgibt, erstelle eine Standard-Response
-        if (!$response instanceof ResponseInterface) {
-            if (is_string($response)) {
-                $response = $this->responseFactory->createHtml($response, $exception instanceof MethodNotAllowedException ? 405 : 404);
-            } elseif (is_array($response) || is_object($response)) {
-                $response = $this->responseFactory->createJson($response, $exception instanceof MethodNotAllowedException ? 405 : 404);
-            } else {
-                $statusCode = $exception instanceof MethodNotAllowedException ? 405 : 404;
-                $response = $this->responseFactory->create($statusCode, (string)$response);
-            }
-        }
-
-        return $response;
+        $this->corsConfigurations[$path] = [
+            'allowOrigin' => $corsConfig->allowOrigin,
+            'allowMethods' => $corsConfig->allowMethods,
+            'allowHeaders' => $corsConfig->allowHeaders,
+            'allowCredentials' => $corsConfig->allowCredentials,
+            'maxAge' => $corsConfig->maxAge,
+            'exposeHeaders' => $corsConfig->exposeHeaders
+        ];
     }
 
     /**
@@ -1014,97 +1106,5 @@ class Router implements RouterInterface
     public function addCsrfConfiguration(string $path, CsrfProtection $csrfConfig): void
     {
         $this->csrfConfigurations[$path] = $csrfConfig;
-    }
-
-    /**
-     * Findet die CSRF-Konfiguration für einen Pfad
-     *
-     * @param string $path Der Pfad
-     * @return CsrfProtection|null Die CSRF-Konfiguration oder null
-     */
-    public function findCsrfConfigurationForPath(string $path): ?CsrfProtection
-    {
-        // Exakte Übereinstimmung
-        if (isset($this->csrfConfigurations[$path])) {
-            return $this->csrfConfigurations[$path];
-        }
-
-        // Nearest match (z.B. /admin/* für /admin/users)
-        foreach ($this->csrfConfigurations as $routePath => $config) {
-            // Pfad endet mit * (Wildcard)
-            if (str_ends_with($routePath, '*')) {
-                $prefix = rtrim(substr($routePath, 0, -1), '/');
-                if (str_starts_with($path, $prefix)) {
-                    return $config;
-                }
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * @param RequestInterface $request
-     * @return bool
-     * @throws ContainerException
-     * @throws NotFoundException
-     */
-    protected function shouldValidateCsrf(RequestInterface $request): bool
-    {
-        $csrfService = $this->container->get(CsrfProtectionInterface::class);
-        return $csrfService->shouldProtectRequest($request);
-    }
-
-    /**
-     * Extrahiert das CSRF-Token aus dem Request
-     */
-    protected function getTokenFromRequest(RequestInterface $request): ?string
-    {
-        // Token aus POST/PUT-Parameter
-        $token = $request->getInput('_csrf_token');
-        if ($token) {
-            return $token;
-        }
-
-        // Token aus Header (für AJAX-Requests)
-        $token = $request->getHeader('X-CSRF-TOKEN');
-        if ($token) {
-            return $token;
-        }
-
-        // Token aus X-XSRF-TOKEN Header (für AJAX mit Cookies)
-        $token = $request->getHeader('X-XSRF-TOKEN');
-        if ($token) {
-            return $token;
-        }
-
-        return null;
-    }
-
-    protected function setCorsHeaders(RequestInterface $request, ResponseInterface $response, array $corsConfig): void
-    {
-        // Origin-Header setzen
-        $requestOrigin = $request->getHeader('origin');
-        if ($requestOrigin !== null) {
-            if ($corsConfig['allowOrigin'] === '*') {
-                $response->setHeader('Access-Control-Allow-Origin', '*');
-            } elseif (is_array($corsConfig['allowOrigin']) && in_array($requestOrigin, $corsConfig['allowOrigin'])) {
-                $response->setHeader('Access-Control-Allow-Origin', $requestOrigin);
-                $response->setHeader('Vary', 'Origin');
-            } elseif (is_string($corsConfig['allowOrigin']) && $corsConfig['allowOrigin'] === $requestOrigin) {
-                $response->setHeader('Access-Control-Allow-Origin', $requestOrigin);
-                $response->setHeader('Vary', 'Origin');
-            }
-        }
-    }
-
-    /**
-     * Behandelt CSRF-Fehler
-     * @param string|null $detailMessage
-     * @return ResponseInterface
-     */
-    protected function handleCsrfError(?string $detailMessage = null): ResponseInterface
-    {
-        return $this->responseFactory->createForbidden("CSRF-Fehler: " . ($detailMessage ?? "Token ungültig"));
     }
 }

@@ -63,14 +63,31 @@ class StatementCache
         $this->lastUsed[$key] = time();
     }
 
-    public function has(string $key): bool
+    private function evictLeastRecentlyUsed(): void
     {
-        return isset($this->statements[$key]);
+        if (empty($this->lastUsed)) {
+            return;
+        }
+
+        $oldestKey = array_find_key(
+            $this->lastUsed,
+            fn($key, $timestamp, $min) => $timestamp < $min,
+            PHP_INT_MAX
+        );
+
+        if ($oldestKey !== null) {
+            $this->remove($oldestKey);
+        }
     }
 
     public function remove(string $key): void
     {
         unset($this->statements[$key], $this->hits[$key], $this->lastUsed[$key]);
+    }
+
+    public function has(string $key): bool
+    {
+        return isset($this->statements[$key]);
     }
 
     public function clear(): void
@@ -112,22 +129,5 @@ class StatementCache
             'hits' => $this->hits,
             'total_hits' => array_sum($this->hits),
         ];
-    }
-
-    private function evictLeastRecentlyUsed(): void
-    {
-        if (empty($this->lastUsed)) {
-            return;
-        }
-
-        $oldestKey = array_find_key(
-            $this->lastUsed,
-            fn($key, $timestamp, $min) => $timestamp < $min,
-            PHP_INT_MAX
-        );
-
-        if ($oldestKey !== null) {
-            $this->remove($oldestKey);
-        }
     }
 }

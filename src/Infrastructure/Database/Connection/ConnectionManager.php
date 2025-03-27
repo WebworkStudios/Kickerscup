@@ -62,22 +62,6 @@ class ConnectionManager
     }
 
     /**
-     * Legt den Namen der Standardverbindung fest
-     *
-     * @param string $name Name der Standardverbindung
-     * @return self
-     */
-    public function setDefaultConnection(string $name): self
-    {
-        if (!isset($this->configurations[$name])) {
-            throw new ConnectionException("Connection configuration '{$name}' does not exist");
-        }
-
-        $this->defaultConnection = $name;
-        return $this;
-    }
-
-    /**
      * Gibt den Namen der Standardverbindung zurück
      *
      * @return string
@@ -156,6 +140,22 @@ class ConnectionManager
     public function getDefaultConnection(): ConnectionInterface
     {
         return $this->getConnection($this->defaultConnection);
+    }
+
+    /**
+     * Legt den Namen der Standardverbindung fest
+     *
+     * @param string $name Name der Standardverbindung
+     * @return self
+     */
+    public function setDefaultConnection(string $name): self
+    {
+        if (!isset($this->configurations[$name])) {
+            throw new ConnectionException("Connection configuration '{$name}' does not exist");
+        }
+
+        $this->defaultConnection = $name;
+        return $this;
     }
 
     /**

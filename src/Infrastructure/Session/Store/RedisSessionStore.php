@@ -49,11 +49,6 @@ class RedisSessionStore implements SessionStoreInterface, UserSessionStoreInterf
         return $this->redis->setex($this->prefix . $id, $this->ttl, $data);
     }
 
-    public function destroy(string $id): bool
-    {
-        return $this->redis->del($this->prefix . $id) > 0;
-    }
-
     public function gc(int $maxlifetime): bool
     {
         // Redis übernimmt das Ablaufen automatisch
@@ -69,6 +64,11 @@ class RedisSessionStore implements SessionStoreInterface, UserSessionStoreInterf
     public function destroySession(string $sessionId): bool
     {
         return $this->destroy($sessionId);
+    }
+
+    public function destroy(string $id): bool
+    {
+        return $this->redis->del($this->prefix . $id) > 0;
     }
 
     /**

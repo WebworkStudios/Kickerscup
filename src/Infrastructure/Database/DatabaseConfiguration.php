@@ -9,6 +9,7 @@ use App\Infrastructure\Config\Config;
 use App\Infrastructure\Container\Attributes\Injectable;
 use App\Infrastructure\Database\Connection\ConnectionConfiguration;
 use App\Infrastructure\Database\Connection\ConnectionManager;
+use RuntimeException;
 
 #[Injectable]
 class DatabaseConfiguration
@@ -27,7 +28,7 @@ class DatabaseConfiguration
 
         // Überprüfe, ob die Standardverbindung konfiguriert ist
         if (!isset($connections[$defaultConnection])) {
-            throw new \RuntimeException("Die Standardverbindung '$defaultConnection' ist nicht konfiguriert");
+            throw new RuntimeException("Die Standardverbindung '$defaultConnection' ist nicht konfiguriert");
         }
 
         $dbConfig = $connections[$defaultConnection];

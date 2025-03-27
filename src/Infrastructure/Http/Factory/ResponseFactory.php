@@ -17,29 +17,6 @@ use JsonException;
 class ResponseFactory implements ResponseFactoryInterface
 {
     /**
-     * Erstellt eine neue Standard-Response
-     */
-    public function create(int $statusCode = 200, ?string $body = null): Response
-    {
-        return new Response($statusCode, $body);
-    }
-
-    /**
-     * Erstellt eine Response mit JSON-Inhalt
-     *
-     * @param mixed $data Die zu serialisierenden Daten
-     * @throws JsonException
-     */
-    public function createJson(mixed $data, int $statusCode = 200, int $options = 0): Response
-    {
-        $response = $this->create($statusCode);
-        $response->setHeader('Content-Type', 'application/json');
-        $response->setBody(json_encode($data, $options | JSON_THROW_ON_ERROR));
-
-        return $response;
-    }
-
-    /**
      * Erstellt eine Response mit HTML-Inhalt
      */
     public function createHtml(string $content, int $statusCode = 200): Response
@@ -49,6 +26,14 @@ class ResponseFactory implements ResponseFactoryInterface
         $response->setBody($content);
 
         return $response;
+    }
+
+    /**
+     * Erstellt eine neue Standard-Response
+     */
+    public function create(int $statusCode = 200, ?string $body = null): Response
+    {
+        return new Response($statusCode, $body);
     }
 
     /**
@@ -104,6 +89,21 @@ class ResponseFactory implements ResponseFactoryInterface
             'success' => false,
             'error' => $message
         ], 400);
+    }
+
+    /**
+     * Erstellt eine Response mit JSON-Inhalt
+     *
+     * @param mixed $data Die zu serialisierenden Daten
+     * @throws JsonException
+     */
+    public function createJson(mixed $data, int $statusCode = 200, int $options = 0): Response
+    {
+        $response = $this->create($statusCode);
+        $response->setHeader('Content-Type', 'application/json');
+        $response->setBody(json_encode($data, $options | JSON_THROW_ON_ERROR));
+
+        return $response;
     }
 
     /**

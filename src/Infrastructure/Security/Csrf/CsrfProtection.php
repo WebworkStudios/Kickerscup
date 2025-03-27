@@ -39,36 +39,6 @@ class CsrfProtection implements CsrfProtectionInterface
     }
 
     /**
-     * {@inheritdoc}
-     */
-    public function generateToken(string $key = 'default', ?int $lifetime = null): string
-    {
-        // Verwende die konfigurierte Lebensdauer oder den Standardwert
-        $lifetime = $lifetime ?? $this->config->defaultTokenLifetime ?? self::DEFAULT_TOKEN_LIFETIME;
-
-        try {
-            // Verwende den neuen Randomizer von PHP 8.4
-            $randomizer = new Randomizer();
-            $token = bin2hex($randomizer->getBytes(32));
-        } catch (Exception) {
-            // Fallback
-            $token = md5(uniqid((string)mt_rand(), true));
-        }
-
-        // Speichere das Token mit Metadaten in der Session
-        $tokens = $this->session->get(self::TOKEN_SESSION_KEY, []);
-        $tokens[$key] = [
-            'token' => $token,
-            'created_at' => time(),
-            'expires_at' => $lifetime > 0 ? time() + $lifetime : null
-        ];
-
-        $this->session->set(self::TOKEN_SESSION_KEY, $tokens);
-
-        return $token;
-    }
-
-    /**
      * Validiert ein CSRF-Token
      *
      * @param string $token Das zu validierende Token
@@ -121,6 +91,36 @@ class CsrfProtection implements CsrfProtectionInterface
             htmlspecialchars($token),
             htmlspecialchars($key)
         );
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function generateToken(string $key = 'default', ?int $lifetime = null): string
+    {
+        // Verwende die konfigurierte Lebensdauer oder den Standardwert
+        $lifetime = $lifetime ?? $this->config->defaultTokenLifetime ?? self::DEFAULT_TOKEN_LIFETIME;
+
+        try {
+            // Verwende den neuen Randomizer von PHP 8.4
+            $randomizer = new Randomizer();
+            $token = bin2hex($randomizer->getBytes(32));
+        } catch (Exception) {
+            // Fallback
+            $token = md5(uniqid((string)mt_rand(), true));
+        }
+
+        // Speichere das Token mit Metadaten in der Session
+        $tokens = $this->session->get(self::TOKEN_SESSION_KEY, []);
+        $tokens[$key] = [
+            'token' => $token,
+            'created_at' => time(),
+            'expires_at' => $lifetime > 0 ? time() + $lifetime : null
+        ];
+
+        $this->session->set(self::TOKEN_SESSION_KEY, $tokens);
+
+        return $token;
     }
 
     /**

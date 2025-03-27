@@ -12,65 +12,6 @@ use App\Infrastructure\Http\Contracts\RequestInterface;
  */
 class Request implements RequestInterface
 {
-    /**
-     * HTTP Methode
-     */
-    protected string $method;
-
-    /**
-     * Request URI
-     */
-    protected string $uri;
-
-    /**
-     * Query Parameter
-     *
-     * @var array<string, string>
-     */
-    protected array $queryParams;
-
-    /**
-     * Post Daten
-     *
-     * @var array<string, mixed>
-     */
-    protected array $postData;
-
-    /**
-     * Cookies
-     *
-     * @var array<string, string>
-     */
-    protected array $cookies;
-
-    /**
-     * Files
-     *
-     * @var array<string, array<string, mixed>>
-     */
-    protected array $files;
-
-    /**
-     * Server Parameter
-     *
-     * @var array<string, string>
-     */
-    protected array $serverParams;
-
-    /**
-     * Headers
-     *
-     * @var array<string, string>
-     */
-    protected array $headers;
-
-    /**
-     * Raw Body
-     */
-    protected ?string $rawBody = null;
-
-    private string $_path;
-
     public string $path {
         get {
             return $this->_path;
@@ -81,6 +22,55 @@ class Request implements RequestInterface
             $this->_path = '/' . $path;
         }
     }
+    /**
+     * HTTP Methode
+     */
+    protected string $method;
+    /**
+     * Request URI
+     */
+    protected string $uri;
+    /**
+     * Query Parameter
+     *
+     * @var array<string, string>
+     */
+    protected array $queryParams;
+    /**
+     * Post Daten
+     *
+     * @var array<string, mixed>
+     */
+    protected array $postData;
+    /**
+     * Cookies
+     *
+     * @var array<string, string>
+     */
+    protected array $cookies;
+    /**
+     * Files
+     *
+     * @var array<string, array<string, mixed>>
+     */
+    protected array $files;
+    /**
+     * Server Parameter
+     *
+     * @var array<string, string>
+     */
+    protected array $serverParams;
+    /**
+     * Headers
+     *
+     * @var array<string, string>
+     */
+    protected array $headers;
+    /**
+     * Raw Body
+     */
+    protected ?string $rawBody = null;
+    private string $_path;
 
     /**
      * Konstruktor

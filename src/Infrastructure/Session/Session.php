@@ -18,14 +18,13 @@ use RuntimeException;
 class Session implements SessionInterface
 {
     /**
-     * Flag, ob die Session gestartet wurde
-     */
-    protected bool $started = false;
-
-    /**
      * Konstante für Benutzer-Session-Metadaten
      */
     protected const string USER_SESSION_KEY = '_user_session';
+    /**
+     * Flag, ob die Session gestartet wurde
+     */
+    protected bool $started = false;
 
     /**
      * Konstruktor
@@ -54,13 +53,15 @@ class Session implements SessionInterface
     /**
      * {@inheritdoc}
      */
-    public function regenerate(bool $deleteOldSession = true): bool
+    public function remove(string $key): static
     {
         if (!$this->started) {
             $this->start();
         }
 
-        return session_regenerate_id($deleteOldSession);
+        unset($_SESSION[$key]);
+
+        return $this;
     }
 
     /**
@@ -133,6 +134,90 @@ class Session implements SessionInterface
         ini_set('session.gc_probability', (string)$this->config->gcProbability);
         ini_set('session.gc_divisor', (string)$this->config->gcDivisor);
         ini_set('session.gc_maxlifetime', (string)$this->config->gcMaxLifetime);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getId(): ?string
+    {
+        if (!$this->started) {
+            $this->start();
+        }
+
+        return session_id() ?: null;
+    }
+
+    protected function hasAbsoluteLifetimeExpired(): bool
+    {
+        $createdAt = $this->get('_created_at');
+        if (!$createdAt) {
+            return false; // Keine Erstellungszeit, kann nicht prüfen
+        }
+
+        $now = time();
+        $maxAge = $this->config->absoluteLifetime;
+
+        return ($now - $createdAt) > $maxAge;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function get(string $key, mixed $default = null): mixed
+    {
+        if (!$this->started) {
+            $this->start();
+        }
+
+        return $_SESSION[$key] ?? $default;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function destroy(): bool
+    {
+        if (!$this->started) {
+            $this->start();
+        }
+
+        // Lösche Session-Daten
+        $_SESSION = [];
+
+        // Lösche Session-Cookie
+        if (ini_get("session.use_cookies")) {
+            $params = session_get_cookie_params();
+            setcookie(
+                session_name(),
+                '',
+                time() - 42000,
+                $params["path"],
+                $params["domain"],
+                $params["secure"],
+                $params["httponly"]
+            );
+        }
+
+        // Zerstöre die Session
+        $result = session_destroy();
+        $this->started = false;
+
+        return $result;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function set(string $key, mixed $value): static
+    {
+        if (!$this->started) {
+            $this->start();
+        }
+
+        $_SESSION[$key] = $value;
+
+        return $this;
     }
 
     /**
@@ -228,18 +313,6 @@ class Session implements SessionInterface
     }
 
     /**
-     * {@inheritdoc}
-     */
-    public function get(string $key, mixed $default = null): mixed
-    {
-        if (!$this->started) {
-            $this->start();
-        }
-
-        return $_SESSION[$key] ?? $default;
-    }
-
-    /**
      * Generiert einen Fingerprint basierend auf Client-Informationen
      *
      * @return string Der generierte Fingerprint
@@ -300,48 +373,13 @@ class Session implements SessionInterface
     /**
      * {@inheritdoc}
      */
-    public function set(string $key, mixed $value): static
+    public function getUserAgent(): ?string
     {
         if (!$this->started) {
             $this->start();
         }
 
-        $_SESSION[$key] = $value;
-
-        return $this;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function destroy(): bool
-    {
-        if (!$this->started) {
-            $this->start();
-        }
-
-        // Lösche Session-Daten
-        $_SESSION = [];
-
-        // Lösche Session-Cookie
-        if (ini_get("session.use_cookies")) {
-            $params = session_get_cookie_params();
-            setcookie(
-                session_name(),
-                '',
-                time() - 42000,
-                $params["path"],
-                $params["domain"],
-                $params["secure"],
-                $params["httponly"]
-            );
-        }
-
-        // Zerstöre die Session
-        $result = session_destroy();
-        $this->started = false;
-
-        return $result;
+        return $_SERVER['HTTP_USER_AGENT'] ?? null;
     }
 
     /**
@@ -395,15 +433,13 @@ class Session implements SessionInterface
     /**
      * {@inheritdoc}
      */
-    public function remove(string $key): static
+    public function regenerate(bool $deleteOldSession = true): bool
     {
         if (!$this->started) {
             $this->start();
         }
 
-        unset($_SESSION[$key]);
-
-        return $this;
+        return session_regenerate_id($deleteOldSession);
     }
 
     /**
@@ -422,18 +458,6 @@ class Session implements SessionInterface
     public function getFlash(string $key, mixed $default = null): mixed
     {
         return $this->flashProvider->getFlashMessage()->get($key, $default);
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function getId(): ?string
-    {
-        if (!$this->started) {
-            $this->start();
-        }
-
-        return session_id() ?: null;
     }
 
     /**
@@ -498,17 +522,7 @@ class Session implements SessionInterface
         return $_SESSION;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getUserAgent(): ?string
-    {
-        if (!$this->started) {
-            $this->start();
-        }
-
-        return $_SERVER['HTTP_USER_AGENT'] ?? null;
-    }
+    // Neue Methode zum Überprüfen der absoluten Lebensdauer
 
     /**
      * @return bool
@@ -536,20 +550,6 @@ class Session implements SessionInterface
         return session_write_close();
     }
 
-    // Neue Methode zum Überprüfen der absoluten Lebensdauer
-    protected function hasAbsoluteLifetimeExpired(): bool
-    {
-        $createdAt = $this->get('_created_at');
-        if (!$createdAt) {
-            return false; // Keine Erstellungszeit, kann nicht prüfen
-        }
-
-        $now = time();
-        $maxAge = $this->config->absoluteLifetime;
-
-        return ($now - $createdAt) > $maxAge;
-    }
-
     /**
      * {@inheritdoc}
      */
@@ -571,19 +571,6 @@ class Session implements SessionInterface
         $this->regenerate();
 
         return $this;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function isBoundToUser(int|string $userId): bool
-    {
-        if (!$this->started) {
-            $this->start();
-        }
-
-        $sessionData = $this->get(self::USER_SESSION_KEY);
-        return $sessionData !== null && $sessionData['user_id'] == $userId;
     }
 
     /**
@@ -617,6 +604,19 @@ class Session implements SessionInterface
         }
 
         return false;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function isBoundToUser(int|string $userId): bool
+    {
+        if (!$this->started) {
+            $this->start();
+        }
+
+        $sessionData = $this->get(self::USER_SESSION_KEY);
+        return $sessionData !== null && $sessionData['user_id'] == $userId;
     }
 
     /**

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Database\QueryBuilder;
 
 use App\Infrastructure\Database\Contracts\QueryBuilderInterface;
+use PDOStatement;
 
 class Subquery implements QueryBuilderInterface
 {
@@ -34,7 +35,7 @@ class Subquery implements QueryBuilderInterface
         return '(' . $this->builder->toSql() . ') AS ' . $this->alias;
     }
 
-    public function execute(): \PDOStatement
+    public function execute(): PDOStatement
     {
         return $this->builder->execute();
     }
