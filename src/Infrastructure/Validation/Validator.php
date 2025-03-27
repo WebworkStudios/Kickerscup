@@ -58,29 +58,26 @@ class Validator implements ValidatorInterface
             }
 
             foreach ($fieldRules as $rule) {
+                $ruleName = $rule;
                 $params = [];
 
-                // Behandle Regeln mit Parametern (z.B. max: 255)
+                // Behandle Regeln mit Parametern (z.B. max:255)
                 if (is_string($rule) && str_contains($rule, ':')) {
                     [$ruleName, $paramStr] = explode(':', $rule, 2);
                     $params = explode(',', $paramStr);
-                    $rule = $ruleName;
                 } elseif (is_array($rule)) {
                     // Array-Format: ['rule' => 'max', 'params' => [255]]
                     $params = $rule['params'] ?? [];
-                    $rule = $rule['rule'];
+                    $ruleName = $rule['rule'];
                 }
 
-                if (!$this->validateSingle($value, $rule, $params, $field)) {
-                    if (!isset($this->errors[$field])) {
-                        $this->errors[$field] = [];
-                    }
+                if (!$this->validateSingle($value, $ruleName, $params, $field)) {
                     // Füge die Fehlermeldung hinzu
-                    $this->errors[$field][] = $this->getErrorMessage($field, $rule, $params, $value);
+                    $this->addError($field, $this->getErrorMessage($field, $ruleName, $params, $value));
 
                     // Bei 'required' Validierungen, breche weitere Validierungen für dieses Feld ab,
                     // wenn es leer ist und die required-Validierung fehlschlägt
-                    if ($rule === 'required' && empty($value)) {
+                    if ($ruleName === 'required' && ($value === null || $value === '' || (is_array($value) && count($value) === 0))) {
                         break;
                     }
                 }
@@ -95,15 +92,17 @@ class Validator implements ValidatorInterface
      */
     public function validateSingle(mixed $value, string $rule, array $params = [], string $field = ''): bool
     {
-        // Prüfe zuerst benutzerdefinierte Regeln
+        // Prüfen, ob es sich um eine benutzerdefinierte Regel handelt
         if (isset($this->customRules[$rule])) {
-            return (bool)($this->customRules[$rule]['callback'])($value, $params, $field);
+            $result = call_user_func($this->customRules[$rule]['callback'], $value, $params, $field);
+            return $result;
         }
-
-        // Prüfe auf Methode in dieser Klasse
+        
+        // Prüfen, ob eine interne Validierungsmethode existiert
         $methodName = 'validate' . ucfirst($rule);
         if (method_exists($this, $methodName)) {
-            return $this->$methodName($value, $params, $field);
+            $result = $this->$methodName($value, $params, $field);
+            return $result;
         }
 
         // Versuche, die Regel aus dem Registry zu holen
@@ -140,9 +139,25 @@ class Validator implements ValidatorInterface
             }
         }
 
+        return $this->formatErrorMessage($message, $field, $rule, $params, $value);
+    }
+
+    /**
+     * Formatiert eine Fehlermeldung mit Platzhaltern
+     *
+     * @param string $message Die Nachrichtenvorlage
+     * @param string $field Das Feld, das validiert wurde
+     * @param string $rule Die angewendete Regel
+     * @param array<string, mixed> $params Die Parameter der Regel
+     * @param mixed $value Der validierte Wert
+     * @return string Die formatierte Fehlermeldung
+     */
+    protected function formatErrorMessage(string $message, string $field, string $rule, array $params, mixed $value = null): string
+    {
         // Platzhalter ersetzen
         $replacements = [
             ':field' => $field,
+            ':rule' => $rule,
             ':value' => is_scalar($value) ? (string)$value : gettype($value)
         ];
 
@@ -152,6 +167,21 @@ class Validator implements ValidatorInterface
         }
 
         return strtr($message, $replacements);
+    }
+
+    /**
+     * Fügt einen Fehler zur Fehlerliste hinzu
+     *
+     * @param string $field Das Feld mit dem Fehler
+     * @param string $message Die Fehlermeldung
+     */
+    protected function addError(string $field, string $message): void
+    {
+        if (!isset($this->errors[$field])) {
+            $this->errors[$field] = [];
+        }
+        
+        $this->errors[$field][] = $message;
     }
 
     /**
@@ -169,9 +199,9 @@ class Validator implements ValidatorInterface
     {
         $this->customRules[$name] = [
             'callback' => $callback,
-            'message' => $errorMessage ?? "Die Validierung für das Feld :field mit der Regel '{$name}' ist fehlgeschlagen."
+            'message' => $errorMessage ?? "Das Feld :field erfüllt nicht die Regel '$name'."
         ];
-
+        
         return $this;
     }
 
