@@ -60,6 +60,11 @@ interface ResponseFactoryInterface
     public function createForbidden(string $message = 'Forbidden'): Response;
 
     /**
+     * Erstellt eine Method Not Allowed Response (405)
+     */
+    public function createMethodNotAllowed(string $message = 'Method Not Allowed'): Response;
+
+    /**
      * Erstellt eine Internal Server Error Response (500)
      */
     public function createServerError(string $message = 'Internal Server Error'): Response;

@@ -13,6 +13,8 @@ use App\Infrastructure\Container\Exceptions\ContainerException;
 use App\Infrastructure\Container\Exceptions\NotFoundException;
 use App\Infrastructure\ErrorHandling\Contracts\ExceptionHandlerInterface;
 use App\Infrastructure\Http\Contracts\RequestFactoryInterface;
+use App\Infrastructure\Http\Contracts\RequestInterface;
+use App\Infrastructure\Http\Contracts\ResponseFactoryInterface;
 use App\Infrastructure\Http\Contracts\ResponseInterface;
 use App\Infrastructure\Http\Request;
 use App\Infrastructure\Logging\Contracts\LoggerInterface;
@@ -20,6 +22,8 @@ use App\Infrastructure\Routing\Contracts\RouterInterface;
 use App\Infrastructure\Routing\Exceptions\MethodNotAllowedException;
 use App\Infrastructure\Routing\Exceptions\RouteNotFoundException;
 use App\Infrastructure\Session\Contracts\SessionInterface;
+use App\Infrastructure\Validation\Contracts\ValidatorInterface;
+use App\Infrastructure\Validation\ValidationException;
 use Throwable;
 
 #[Injectable]
@@ -32,6 +36,7 @@ class Application
     public function __construct(
         protected ContainerInterface      $container,
         protected RequestFactoryInterface $requestFactory,
+        protected ResponseFactoryInterface $responseFactory,
         protected RouterInterface         $router,
         protected SessionInterface        $session,
         protected LoggerInterface         $logger
@@ -67,6 +72,11 @@ class Application
         ]);
 
         try {
+            // Validiere den Request, falls notwendig
+            if ($this->shouldValidateRequest($request)) {
+                $this->validateRequest($request);
+            }
+            
             // Router ausführen
             $response = $this->router->dispatch($request);
             $this->logger->info('Request processed successfully', [
@@ -92,19 +102,19 @@ class Application
      * Behandelt Ausnahmen, die während der Verarbeitung auftreten
      *
      * @param Throwable $e Die aufgetretene Ausnahme
-     * @param Request $request Der aktuelle Request
+     * @param RequestInterface $request Der aktuelle Request
      * @return ResponseInterface
      * @throws ContainerException
      * @throws NotFoundException
      */
-    protected function handleException(Throwable $e, Request $request): ResponseInterface
+    protected function handleException(Throwable $e, RequestInterface $request): ResponseInterface
     {
         // Rufe den zentralen Exception-Handler auf
         try {
             $exceptionHandler = $this->container->get(ExceptionHandlerInterface::class);
             $exceptionHandler->handle($e, ['request' => $request]);
         } catch (Throwable $handlerException) {
-            // Fallback wenn Exception-Handler selbst eine Exception wirft
+            // Fallback, wenn Exception-Handler selbst eine Exception wirft
             $this->logger->critical('Error in exception handler', [
                 'original_exception' => get_class($e) . ': ' . $e->getMessage(),
                 'handler_exception' => $handlerException->getMessage()
@@ -133,6 +143,11 @@ class Application
         $this->container->bind(Request::class, $request);
 
         try {
+            // Validiere den Request, falls notwendig
+            if ($this->shouldValidateRequest($request)) {
+                $this->validateRequest($request);
+            }
+            
             // Router ausführen
             $response = $this->router->dispatch($request);
         } catch (Throwable $e) {
@@ -150,28 +165,29 @@ class Application
      * Erstellt eine passende Response für eine Exception
      *
      * @param Throwable $e Die aufgetretene Ausnahme
-     * @param Request $request Der aktuelle Request
+     * @param RequestInterface $request Der aktuelle Request
      * @return ResponseInterface
      * @throws ContainerException
      * @throws NotFoundException
      */
-    protected function createExceptionResponse(Throwable $e, Request $request): ResponseInterface
+    protected function createExceptionResponse(Throwable $e, RequestInterface $request): ResponseInterface
     {
-        $factory = $this->container->get('App\Infrastructure\Http\Contracts\ResponseFactoryInterface');
-
         // Je nach Exception-Typ eine passende Response erstellen
         return match (true) {
+            $e instanceof ValidationException =>
+            $this->handleValidationException($e, $request),
+            
             $e instanceof RouteNotFoundException =>
-            $factory->createNotFound('Die angeforderte Seite wurde nicht gefunden.'),
+            $this->responseFactory->createNotFound('Die angeforderte Seite wurde nicht gefunden.'),
 
             $e instanceof MethodNotAllowedException =>
-            $factory->createMethodNotAllowed('Die HTTP-Methode ist für diese Route nicht erlaubt.'),
+            $this->responseFactory->createMethodNotAllowed('Die HTTP-Methode ist für diese Route nicht erlaubt.'),
 
             $e instanceof NotFoundException,
-                $e instanceof BindingResolutionException =>
-            $factory->createServerError('Ein interner Serverfehler ist aufgetreten.'),
+            $e instanceof BindingResolutionException =>
+            $this->responseFactory->createServerError('Ein interner Serverfehler ist aufgetreten.'),
 
-            default => $factory->createServerError('Ein Fehler ist aufgetreten: ' . $this->getSafeExceptionMessage($e))
+            default => $this->responseFactory->createServerError('Ein Fehler ist aufgetreten: ' . $this->getSafeExceptionMessage($e))
         };
     }
 
@@ -192,5 +208,105 @@ class Application
 
         // In anderen Umgebungen die tatsächliche Fehlermeldung zurückgeben
         return $e->getMessage();
+    }
+
+    /**
+     * Prüft, ob der Request validiert werden sollte
+     * 
+     * @param RequestInterface $request
+     * @return bool
+     */
+    protected function shouldValidateRequest(RequestInterface $request): bool
+    {
+        // Implementiere Logik, um zu entscheiden, ob der Request validiert werden soll
+        // Beispiel: Nur POST, PUT, PATCH Requests validieren
+        return in_array($request->getMethod(), ['POST', 'PUT', 'PATCH']);
+    }
+
+    /**
+     * Validiert den Request
+     * 
+     * @param RequestInterface $request
+     * @throws ValidationException
+     */
+    protected function validateRequest(RequestInterface $request): void
+    {
+        // Validator aus dem Container holen
+        $validator = $this->container->get(ValidatorInterface::class);
+        
+        // Validierungsregeln basierend auf Route oder Controller ermitteln
+        $rules = $this->getValidationRules($request);
+        
+        if (empty($rules)) {
+            return; // Keine Regeln, keine Validierung notwendig
+        }
+        
+        // Daten für die Validierung sammeln
+        $data = array_merge(
+            $request->getQueryParams(),
+            $request->getPostData()
+        );
+        
+        // Daten validieren
+        $isValid = $validator->validate($data, $rules);
+        
+        if (!$isValid) {
+            throw new ValidationException('Validation failed', $validator->getErrors());
+        }
+    }
+
+    /**
+     * Ermittelt die Validierungsregeln für den Request
+     * 
+     * @param RequestInterface $request
+     * @return array<string, string|array<string>>
+     */
+    protected function getValidationRules(RequestInterface $request): array
+    {
+        // Hier könnten Regeln aus verschiedenen Quellen kommen:
+        // - Route-Attribute
+        // - Controller-Methoden
+        // - Konfigurationsdateien
+        
+        // Beispiel-Implementierung:
+        $route = $this->router->match($request);
+        if ($route && method_exists($route->getHandler(), 'getValidationRules')) {
+            return $route->getHandler()->getValidationRules();
+        }
+        
+        return [];
+    }
+
+    /**
+     * Behandelt Validierungsfehler
+     * 
+     * @param ValidationException $exception
+     * @param RequestInterface $request
+     * @return ResponseInterface
+     * @throws ContainerException
+     * @throws NotFoundException
+     */
+    protected function handleValidationException(ValidationException $exception, RequestInterface $request): ResponseInterface
+    {
+        // Erstelle eine Response für Validierungsfehler
+        // bei API-Anfragen: JSON-Response mit Fehlern
+        // bei Web-Anfragen: Redirect zurück mit Fehlern in der Session
+        
+        if ($request->isJson()) {
+            return $this->responseFactory->createJson(['errors' => $exception->getErrors()], 422);
+        }
+        
+        // Fehler in die Session schreiben
+        $this->session->flash('errors', $exception->getErrors());
+        
+        // Alte Eingabedaten in die Session schreiben
+        $inputData = array_merge(
+            $request->getQueryParams(),
+            $request->getPostData()
+        );
+        $this->session->flash('old', $inputData);
+        
+        // Zurück zur vorherigen Seite
+        return $this->responseFactory->createRedirect($request->getHeader('Referer') ?? '/');
     }
 }

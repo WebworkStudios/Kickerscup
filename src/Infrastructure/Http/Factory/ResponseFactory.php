@@ -129,4 +129,12 @@ class ResponseFactory implements ResponseFactoryInterface
     {
         return $this->create(500, $message);
     }
+
+    /**
+     * Erstellt eine Method Not Allowed Response (405)
+     */
+    public function createMethodNotAllowed(string $message = 'Method Not Allowed'): Response
+    {
+        return $this->create(405, $message);
+    }
 }

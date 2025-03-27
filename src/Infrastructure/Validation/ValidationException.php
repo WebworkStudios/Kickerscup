@@ -1,13 +1,10 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Infrastructure\Validation;
 
-use App\Infrastructure\Container\Exceptions\ContainerException;
-
-class ValidationException extends ContainerException
+class ValidationException extends \RuntimeException
 {
     /**
      * Validierungsfehler
@@ -15,6 +12,24 @@ class ValidationException extends ContainerException
      * @var array<string, array<string>>
      */
     protected array $errors = [];
+
+    /**
+     * Erstellt eine neue ValidationException
+     *
+     * @param string $message Die Fehlermeldung
+     * @param int $code Der Fehlercode
+     * @param \Throwable|null $previous Die vorherige Exception
+     * @param array<string, array<string>> $errors Die Validierungsfehler
+     */
+    public function __construct(
+        string $message = "Validierungsfehler", 
+        int $code = 0, 
+        ?\Throwable $previous = null,
+        array $errors = []
+    ) {
+        parent::__construct($message, $code, $previous);
+        $this->errors = $errors;
+    }
 
     /**
      * Setzt die Validierungsfehler

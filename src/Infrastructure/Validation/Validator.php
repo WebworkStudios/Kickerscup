@@ -1,9 +1,10 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Infrastructure\Validation;
+
+use App\Infrastructure\Validation\ValidationException;
 
 use App\Infrastructure\Container\Attributes\Injectable;
 use App\Infrastructure\Container\Attributes\Singleton;
@@ -94,9 +95,9 @@ class Validator implements ValidatorInterface
      */
     public function validateSingle(mixed $value, string $rule, array $params = [], string $field = ''): bool
     {
-        // Prüfe auf benutzerdefinierte Regeln
+        // Prüfe zuerst benutzerdefinierte Regeln
         if (isset($this->customRules[$rule])) {
-            return call_user_func($this->customRules[$rule]['callback'], $value, $params, $field);
+            return (bool)($this->customRules[$rule]['callback'])($value, $params, $field);
         }
 
         // Prüfe auf Methode in dieser Klasse
@@ -132,6 +133,11 @@ class Validator implements ValidatorInterface
         } else {
             // Standardmeldungen aus dem Registry holen
             $message = $this->ruleRegistry->getErrorMessage($rule);
+            
+            // Fallback, falls keine Nachricht gefunden wurde
+            if (empty($message)) {
+                $message = "Die Validierung für das Feld :field mit der Regel '{$rule}' ist fehlgeschlagen.";
+            }
         }
 
         // Platzhalter ersetzen
@@ -163,7 +169,7 @@ class Validator implements ValidatorInterface
     {
         $this->customRules[$name] = [
             'callback' => $callback,
-            'message' => $errorMessage ?? "Das Feld :field hat die Validierung '$name' nicht bestanden."
+            'message' => $errorMessage ?? "Die Validierung für das Feld :field mit der Regel '{$name}' ist fehlgeschlagen."
         ];
 
         return $this;
@@ -183,31 +189,47 @@ class Validator implements ValidatorInterface
 
     /**
      * Überprüft, ob ein Wert in der Datenbank existiert
+     * 
+     * @throws ValidationException Wenn die Datenbankverbindung nicht verfügbar ist oder Parameter fehlen
      */
     protected function validateExists(mixed $value, array $params, string $field): bool
     {
-        if ($this->database === null || empty($params[0]) || empty($params[1])) {
-            return false;
+        if ($this->database === null) {
+            throw new ValidationException("Datenbankverbindung für 'exists'-Validierung nicht verfügbar");
+        }
+
+        if (count($params) < 2) {
+            throw new ValidationException("Die 'exists'-Regel benötigt mindestens zwei Parameter: Tabelle und Spalte");
         }
 
         $table = $params[0];
         $column = $params[1];
 
-        $result = $this->database->table($table)
-            ->select('COUNT(*) as count')
-            ->where($column, '=', $value)
-            ->first();
+        try {
+            $result = $this->database->table($table)
+                ->select('COUNT(*) as count')
+                ->where($column, '=', $value)
+                ->first();
 
-        return ($result['count'] ?? 0) > 0;
+            return ($result['count'] ?? 0) > 0;
+        } catch (\Throwable $e) {
+            throw new ValidationException("Datenbankfehler bei 'exists'-Validierung: " . $e->getMessage());
+        }
     }
 
     /**
      * Überprüft, ob ein Wert in der Datenbank einzigartig ist
+     * 
+     * @throws ValidationException Wenn die Datenbankverbindung nicht verfügbar ist oder Parameter fehlen
      */
     protected function validateUnique(mixed $value, array $params, string $field): bool
     {
-        if ($this->database === null || empty($params[0]) || empty($params[1])) {
-            return false;
+        if ($this->database === null) {
+            throw new ValidationException("Datenbankverbindung für 'unique'-Validierung nicht verfügbar");
+        }
+
+        if (count($params) < 2) {
+            throw new ValidationException("Die 'unique'-Regel benötigt mindestens zwei Parameter: Tabelle und Spalte");
         }
 
         $table = $params[0];
@@ -217,16 +239,20 @@ class Validator implements ValidatorInterface
         $ignoreId = $params[2] ?? null;
         $idColumn = $params[3] ?? 'id';
 
-        $query = $this->database->table($table)
-            ->select('COUNT(*) as count')
-            ->where($column, '=', $value);
+        try {
+            $query = $this->database->table($table)
+                ->select('COUNT(*) as count')
+                ->where($column, '=', $value);
 
-        if ($ignoreId !== null) {
-            $query->where($idColumn, '!=', $ignoreId);
+            if ($ignoreId !== null) {
+                $query->where($idColumn, '!=', $ignoreId);
+            }
+
+            $result = $query->first();
+
+            return ($result['count'] ?? 0) === 0;
+        } catch (\Throwable $e) {
+            throw new ValidationException("Datenbankfehler bei 'unique'-Validierung: " . $e->getMessage());
         }
-
-        $result = $query->first();
-
-        return ($result['count'] ?? 1) === 0;
     }
 }

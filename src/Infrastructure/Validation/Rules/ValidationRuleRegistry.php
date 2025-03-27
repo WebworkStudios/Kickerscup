@@ -16,7 +16,7 @@ class ValidationRuleRegistry
     /**
      * Verfügbare Validierungsregeln
      *
-     * @var array<string, class-string<ValidationRuleInterface>>
+     * @var array<string, ValidationRuleInterface>
      */
     protected array $rules = [];
 
@@ -35,9 +35,9 @@ class ValidationRuleRegistry
      */
     protected function registerDefaultRules(): void
     {
-        $this->registerRule('required', RequiredRule::class);
-        $this->registerRule('email', EmailRule::class);
-        $this->registerRule('numeric', NumericRule::class);
+        $this->registerRule('required', RequiredRule::class)
+             ->registerRule('email', EmailRule::class)
+             ->registerRule('numeric', NumericRule::class);
         // ... weitere Regeln
     }
 
@@ -45,12 +45,30 @@ class ValidationRuleRegistry
      * Registriert eine Validierungsregel
      *
      * @param string $name Name der Regel
-     * @param class-string<ValidationRuleInterface> $ruleClass Klassenname der Regel
-     * @return void
+     * @param ValidationRuleInterface|string $rule Regel-Instanz oder Klassenname
+     * @return self
+     * @throws \InvalidArgumentException wenn die Regel ungültig ist
      */
-    public function registerRule(string $name, string $ruleClass): void
+    public function registerRule(string $name, ValidationRuleInterface|string $rule): self
     {
-        $this->rules[$name] = $ruleClass;
+        if (is_string($rule) && class_exists($rule)) {
+            try {
+                $rule = $this->container->get($rule);
+            } catch (\Throwable $e) {
+                throw new \InvalidArgumentException(
+                    "Konnte Regel '$rule' nicht instanziieren: " . $e->getMessage()
+                );
+            }
+        }
+
+        if (!$rule instanceof ValidationRuleInterface) {
+            throw new \InvalidArgumentException(
+                "Die Regel muss eine Instanz von ValidationRuleInterface sein."
+            );
+        }
+
+        $this->rules[$name] = $rule;
+        return $this;
     }
 
     /**
@@ -61,17 +79,28 @@ class ValidationRuleRegistry
      */
     public function getRule(string $name): ?ValidationRuleInterface
     {
-        if (!isset($this->rules[$name])) {
-            return null;
-        }
+        return $this->rules[$name] ?? null;
+    }
 
-        $ruleClass = $this->rules[$name];
+    /**
+     * Prüft, ob eine Regel existiert
+     *
+     * @param string $name Name der Regel
+     * @return bool
+     */
+    public function hasRule(string $name): bool
+    {
+        return array_key_exists($name, $this->rules);
+    }
 
-        try {
-            return $this->container->get($ruleClass);
-        } catch (\Throwable) {
-            return null;
-        }
+    /**
+     * Gibt alle registrierten Regeln zurück
+     * 
+     * @return array<string, ValidationRuleInterface>
+     */
+    public function getAllRules(): array
+    {
+        return $this->rules;
     }
 
     /**
