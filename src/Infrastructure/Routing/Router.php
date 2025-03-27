@@ -90,7 +90,7 @@ class Router implements RouterInterface
         protected ContainerInterface       $container,
         protected UrlGeneratorInterface    $urlGenerator,
         protected ResponseFactoryInterface $responseFactory,
-        protected LoggerInterface          $logger
+        protected ?LoggerInterface         $logger = null
     )
     {
     }

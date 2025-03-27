@@ -1,6 +1,5 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Infrastructure\Application;
@@ -30,7 +29,6 @@ use Throwable;
 #[Singleton]
 class Application
 {
-
     /**
      * Konstruktor
      */
@@ -43,9 +41,7 @@ class Application
         protected ?LoggerInterface         $logger = null
     )
     {
-        // Verzögere das Abrufen der optionalen Abhängigkeiten
-        $this->session = $session ?? $this->container->get(SessionInterface::class);
-        $this->logger = $logger ?? $this->container->get(LoggerInterface::class);
+        // Entferne die direkte Auflösung im Konstruktor, um zirkuläre Abhängigkeiten zu vermeiden
     }
 
     /**
@@ -57,7 +53,7 @@ class Application
      */
     public function run(): ResponseInterface
     {
-        $this->logger->info('Application starting');
+        $this->getLoggerIfNeeded()?->info('Application starting');
 
         // Erstelle Request nur, wenn keiner im Container gebunden ist
         if (!$this->container->has(RequestInterface::class)) {
@@ -68,7 +64,7 @@ class Application
             $request = $this->container->get(RequestInterface::class);
         }
 
-        $this->logger->debug('Request initialized', [
+        $this->getLoggerIfNeeded()?->debug('Request initialized', [
             'method' => $request->getMethod(),
             'path' => $request->getPath(),
             'ip' => $request->getClientIp()
@@ -76,7 +72,7 @@ class Application
 
         // Session nur bei Bedarf starten (z.B. nicht für API-Anfragen)
         if ($this->shouldStartSession($request)) {
-            $this->session->start();
+            $this->getSessionIfNeeded()?->start();
         }
 
         try {
@@ -87,11 +83,11 @@ class Application
 
             // Router ausführen
             $response = $this->router->dispatch($request);
-            $this->logger->info('Request processed successfully', [
+            $this->getLoggerIfNeeded()?->info('Request processed successfully', [
                 'status' => $response->getStatusCode()
             ]);
         } catch (Throwable $e) {
-            $this->logger->error('Exception during request processing', [
+            $this->getLoggerIfNeeded()?->error('Exception during request processing', [
                 'exception' => get_class($e),
                 'message' => $e->getMessage()
             ]);
@@ -99,10 +95,11 @@ class Application
             $response = $this->handleException($e, $request);
         } finally {
             // Session nur speichern, wenn sie gestartet wurde
-            if ($this->session->isStarted()) {
-                $this->session->flush();
+            $session = $this->getSessionIfNeeded();
+            if ($session && $session->isStarted()) {
+                $session->flush();
             }
-            $this->logger->debug('Request finished');
+            $this->getLoggerIfNeeded()?->debug('Request finished');
         }
 
         return $response;
@@ -147,7 +144,7 @@ class Application
             $exceptionHandler->handle($e, ['request' => $request]);
         } catch (Throwable $handlerException) {
             // Fallback, wenn Exception-Handler selbst eine Exception wirft
-            $this->logger->critical('Error in exception handler', [
+            $this->getLoggerIfNeeded()?->critical('Error in exception handler', [
                 'original_exception' => get_class($e) . ': ' . $e->getMessage(),
                 'handler_exception' => $handlerException->getMessage()
             ]);
@@ -168,7 +165,7 @@ class Application
     public function handle(Request $request): ResponseInterface
     {
         // Session am Anfang des Requests starten und validieren
-        $this->session->start();
+        $this->getSessionIfNeeded()?->start();
 
         // Binde den aktuellen Request im Container
         $this->container->bind(RequestInterface::class, $request);
@@ -179,7 +176,7 @@ class Application
             if ($this->shouldValidateRequest($request)) {
                 $this->validateRequest($request);
             }
-            
+
             // Router ausführen
             $response = $this->router->dispatch($request);
         } catch (Throwable $e) {
@@ -187,7 +184,7 @@ class Application
             $response = $this->handleException($e, $request);
         } finally {
             // Session am Ende des Requests speichern
-            $this->session->flush();
+            $this->getSessionIfNeeded()?->flush();
         }
 
         return $response;
@@ -208,7 +205,7 @@ class Application
         return match (true) {
             $e instanceof ValidationException =>
             $this->handleValidationException($e, $request),
-            
+
             $e instanceof RouteNotFoundException =>
             $this->responseFactory->createNotFound('Die angeforderte Seite wurde nicht gefunden.'),
 
@@ -216,7 +213,7 @@ class Application
             $this->responseFactory->createMethodNotAllowed('Die HTTP-Methode ist für diese Route nicht erlaubt.'),
 
             $e instanceof NotFoundException,
-            $e instanceof BindingResolutionException =>
+                $e instanceof BindingResolutionException =>
             $this->responseFactory->createServerError('Ein interner Serverfehler ist aufgetreten.'),
 
             default => $this->responseFactory->createServerError('Ein Fehler ist aufgetreten: ' . $this->getSafeExceptionMessage($e))
@@ -228,6 +225,8 @@ class Application
      *
      * @param Throwable $e Die Exception
      * @return string Die sichere Fehlermeldung
+     * @throws ContainerException
+     * @throws NotFoundException
      */
     protected function getSafeExceptionMessage(Throwable $e): string
     {
@@ -244,7 +243,7 @@ class Application
 
     /**
      * Prüft, ob der Request validiert werden sollte
-     * 
+     *
      * @param RequestInterface $request
      * @return bool
      */
@@ -257,39 +256,40 @@ class Application
 
     /**
      * Validiert den Request
-     * 
+     *
      * @param RequestInterface $request
-     * @throws ValidationException
+     * @throws ContainerException
+     * @throws NotFoundException
      */
     protected function validateRequest(RequestInterface $request): void
     {
         // Validator aus dem Container holen
         $validator = $this->container->get(ValidatorInterface::class);
-        
+
         // Validierungsregeln basierend auf Route oder Controller ermitteln
         $rules = $this->getValidationRules($request);
-        
+
         if (empty($rules)) {
             return; // Keine Regeln, keine Validierung notwendig
         }
-        
+
         // Daten für die Validierung sammeln
         $data = array_merge(
             $request->getQueryParams(),
             $request->getPostData()
         );
-        
+
         // Daten validieren
         $isValid = $validator->validate($data, $rules);
-        
+
         if (!$isValid) {
-            throw new ValidationException('Validation failed', $validator->getErrors());
+            throw new ValidationException('Validation failed', 0, null, $validator->getErrors());
         }
     }
 
     /**
      * Ermittelt die Validierungsregeln für den Request
-     * 
+     *
      * @param RequestInterface $request
      * @return array<string, string|array<string>>
      */
@@ -299,46 +299,82 @@ class Application
         // - Route-Attribute
         // - Controller-Methoden
         // - Konfigurationsdateien
-        
+
         // Beispiel-Implementierung:
         $route = $this->router->match($request);
-        if ($route && method_exists($route->getHandler(), 'getValidationRules')) {
-            return $route->getHandler()->getValidationRules();
+        if ($route && isset($route['route']['handler']) &&
+            method_exists($route['route']['handler'], 'getValidationRules')) {
+            return $route['route']['handler']->getValidationRules();
         }
-        
+
         return [];
     }
 
     /**
      * Behandelt Validierungsfehler
-     * 
+     *
      * @param ValidationException $exception
      * @param RequestInterface $request
      * @return ResponseInterface
-     * @throws ContainerException
-     * @throws NotFoundException
      */
     protected function handleValidationException(ValidationException $exception, RequestInterface $request): ResponseInterface
     {
         // Erstelle eine Response für Validierungsfehler
         // bei API-Anfragen: JSON-Response mit Fehlern
         // bei Web-Anfragen: Redirect zurück mit Fehlern in der Session
-        
+
         if ($request->isJson()) {
             return $this->responseFactory->createJson(['errors' => $exception->getErrors()], 422);
         }
-        
+
         // Fehler in die Session schreiben
-        $this->session->flash('errors', $exception->getErrors());
-        
-        // Alte Eingabedaten in die Session schreiben
-        $inputData = array_merge(
-            $request->getQueryParams(),
-            $request->getPostData()
-        );
-        $this->session->flash('old', $inputData);
-        
+        $session = $this->getSessionIfNeeded();
+        if ($session) {
+            $session->flash('errors', $exception->getErrors());
+
+            // Alte Eingabedaten in die Session schreiben
+            $inputData = array_merge(
+                $request->getQueryParams(),
+                $request->getPostData()
+            );
+            $session->flash('old', $inputData);
+        }
+
         // Zurück zur vorherigen Seite
         return $this->responseFactory->createRedirect($request->getHeader('Referer') ?? '/');
+    }
+
+    /**
+     * Lädt die Session bei Bedarf
+     *
+     * @return SessionInterface|null
+     */
+    private function getSessionIfNeeded(): ?SessionInterface
+    {
+        if ($this->session === null && $this->container->has(SessionInterface::class)) {
+            try {
+                $this->session = $this->container->get(SessionInterface::class);
+            } catch (Throwable) {
+                // Ignoriere Fehler, um zirkuläre Abhängigkeiten zu vermeiden
+            }
+        }
+        return $this->session;
+    }
+
+    /**
+     * Lädt den Logger bei Bedarf
+     *
+     * @return LoggerInterface|null
+     */
+    private function getLoggerIfNeeded(): ?LoggerInterface
+    {
+        if ($this->logger === null && $this->container->has(LoggerInterface::class)) {
+            try {
+                $this->logger = $this->container->get(LoggerInterface::class);
+            } catch (Throwable) {
+                // Ignoriere Fehler, um zirkuläre Abhängigkeiten zu vermeiden
+            }
+        }
+        return $this->logger;
     }
 }

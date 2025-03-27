@@ -12,6 +12,7 @@ use App\Infrastructure\Container\Contracts\ContainerInterface;
 use App\Infrastructure\Database\Contracts\QueryBuilderInterface;
 use App\Infrastructure\Validation\Contracts\ValidatorInterface;
 use App\Infrastructure\Validation\Rules\ValidationRuleRegistry;
+use Throwable;
 
 #[Injectable]
 #[Singleton]
@@ -242,7 +243,7 @@ class Validator implements ValidatorInterface
                 ->first();
 
             return ($result['count'] ?? 0) > 0;
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             throw new ValidationException("Datenbankfehler bei 'exists'-Validierung: " . $e->getMessage());
         }
     }
@@ -281,7 +282,7 @@ class Validator implements ValidatorInterface
             $result = $query->first();
 
             return ($result['count'] ?? 0) === 0;
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             throw new ValidationException("Datenbankfehler bei 'unique'-Validierung: " . $e->getMessage());
         }
     }

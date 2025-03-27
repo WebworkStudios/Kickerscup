@@ -51,7 +51,7 @@ class RoutingServiceProvider extends ServiceProvider
         $routeScanner = new RouteScanner(
             $container->get(RouterInterface::class),
             $container->get(UrlGeneratorInterface::class),
-            $container->get(\App\Infrastructure\Logging\Contracts\LoggerInterface::class),
+            $container->get(LoggerInterface::class),
             $container
         );
 

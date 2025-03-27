@@ -8,6 +8,8 @@ namespace App\Infrastructure\Validation\Rules;
 use App\Infrastructure\Container\Attributes\Injectable;
 use App\Infrastructure\Container\Attributes\Singleton;
 use App\Infrastructure\Container\Contracts\ContainerInterface;
+use InvalidArgumentException;
+use Throwable;
 
 #[Injectable]
 #[Singleton]
@@ -47,22 +49,22 @@ class ValidationRuleRegistry
      * @param string $name Name der Regel
      * @param ValidationRuleInterface|string $rule Regel-Instanz oder Klassenname
      * @return self
-     * @throws \InvalidArgumentException wenn die Regel ungültig ist
+     * @throws InvalidArgumentException wenn die Regel ungültig ist
      */
     public function registerRule(string $name, ValidationRuleInterface|string $rule): self
     {
         if (is_string($rule) && class_exists($rule)) {
             try {
                 $rule = $this->container->get($rule);
-            } catch (\Throwable $e) {
-                throw new \InvalidArgumentException(
+            } catch (Throwable $e) {
+                throw new InvalidArgumentException(
                     "Konnte Regel '$rule' nicht instanziieren: " . $e->getMessage()
                 );
             }
         }
 
         if (!$rule instanceof ValidationRuleInterface) {
-            throw new \InvalidArgumentException(
+            throw new InvalidArgumentException(
                 "Die Regel muss eine Instanz von ValidationRuleInterface sein."
             );
         }

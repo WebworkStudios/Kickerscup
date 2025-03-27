@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Validation;
 
-class ValidationException extends \RuntimeException
+use RuntimeException;
+use Throwable;
+
+class ValidationException extends RuntimeException
 {
     /**
      * Validierungsfehler
@@ -18,14 +21,14 @@ class ValidationException extends \RuntimeException
      *
      * @param string $message Die Fehlermeldung
      * @param int $code Der Fehlercode
-     * @param \Throwable|null $previous Die vorherige Exception
+     * @param Throwable|null $previous Die vorherige Exception
      * @param array<string, array<string>> $errors Die Validierungsfehler
      */
     public function __construct(
-        string $message = "Validierungsfehler", 
-        int $code = 0, 
-        ?\Throwable $previous = null,
-        array $errors = []
+        string     $message = "Validierungsfehler",
+        int        $code = 0,
+        ?Throwable $previous = null,
+        array      $errors = []
     ) {
         parent::__construct($message, $code, $previous);
         $this->errors = $errors;

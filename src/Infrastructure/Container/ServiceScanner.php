@@ -181,6 +181,9 @@ class ServiceScanner
      */
     protected function registerClassIfInjectable(string $className): void
     {
+        if ($className === "App\\Infrastructure\\Application\\Application") {
+            return;
+        }
         try {
             $reflector = new ReflectionClass($className);
 

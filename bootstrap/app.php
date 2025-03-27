@@ -60,7 +60,6 @@ $config = require APP_ROOT . '/config/app.php';
 // Routen-Scanner ausführen
 $routeScanner = $container->get(App\Infrastructure\Routing\Contracts\RouteScannerInterface::class);
 $routeScanner->scan([
-    APP_ROOT . '/src/Presentation/Controllers',
     APP_ROOT . '/src/Presentation/Actions',
 ], 'App\\Presentation');
 
@@ -68,5 +67,16 @@ $routeScanner->scan([
 $routesCallback = require APP_ROOT . '/config/routes.php';
 $routesCallback($container);
 
+// Erstelle die Application-Instanz manuell, um zirkuläre Abhängigkeiten zu vermeiden
+$application = new Application(
+    $container,
+    $container->get(App\Infrastructure\Http\Contracts\RequestFactoryInterface::class),
+    $container->get(App\Infrastructure\Http\Contracts\ResponseFactoryInterface::class),
+    $container->get(App\Infrastructure\Routing\Contracts\RouterInterface::class)
+);
+
+// Registriere die Application-Instanz im Container
+$container->bind(Application::class, $application);
+
 // Application zurückgeben
-return $container->get(Application::class);
+return $application;
