@@ -40,6 +40,7 @@ class RouteScanner implements RouteScannerInterface
      * @param LoggerInterface $logger Der Logger
      * @param ContainerInterface $container Der Container
      */
+    // Ändern Sie den Konstruktor
     public function __construct(
         protected RouterInterface       $router,
         protected UrlGeneratorInterface $urlGenerator,
@@ -47,6 +48,7 @@ class RouteScanner implements RouteScannerInterface
         protected ContainerInterface    $container
     )
     {
+        // Entfernen Sie die Abhängigkeit von RouteScannerInterface
     }
 
     /**
