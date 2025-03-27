@@ -15,13 +15,6 @@ interface SessionInterface
     public function start(): bool;
 
     /**
-     * Prüft, ob die Session bereits gestartet wurde
-     *
-     * @return bool
-     */
-    public function isStarted(): bool;
-
-    /**
      * Beendet die aktuelle Session
      *
      * @return bool True, wenn die Session erfolgreich beendet wurde

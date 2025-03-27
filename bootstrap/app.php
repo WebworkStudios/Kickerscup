@@ -8,7 +8,6 @@ use App\Infrastructure\Container\ServiceScanner;
 use App\Infrastructure\ErrorHandling\ErrorHandlingServiceProvider;
 use App\Infrastructure\Http\Factory\RequestFactory;
 use App\Infrastructure\Http\Factory\ResponseFactory;
-use App\Infrastructure\Http\Request;
 use App\Infrastructure\Logging\LoggerServiceProvider;
 use App\Infrastructure\Routing\RoutingServiceProvider;
 
@@ -31,6 +30,9 @@ $errorHandlingProvider->register($container);
 // Routing-Provider registrieren (wichtig für grundlegende Anwendungsfunktionalität)
 $routingProvider = new RoutingServiceProvider;
 $routingProvider->register($container);
+
+$sessionProvider = new App\Infrastructure\Session\SessionServiceProvider;
+$sessionProvider->register($container);
 
 // Kern-Factories registrieren
 $container->singleton(App\Infrastructure\Http\Contracts\RequestFactoryInterface::class, RequestFactory::class);

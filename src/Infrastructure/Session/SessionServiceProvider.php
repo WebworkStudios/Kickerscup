@@ -20,6 +20,8 @@ class SessionServiceProvider extends ServiceProvider
     /**
      * {@inheritdoc}
      */
+    // src/Infrastructure/Session/SessionServiceProvider.php
+
     public function register(ContainerInterface $container): void
     {
         // Registriere die Session-Konfiguration
@@ -29,6 +31,7 @@ class SessionServiceProvider extends ServiceProvider
             return new SessionConfiguration();
         });
 
+        // Registriere den Session-Store basierend auf der Konfiguration
         $container->bind(SessionStoreInterface::class, function (ContainerInterface $c) {
             $config = $c->get(SessionConfiguration::class);
 
@@ -48,7 +51,7 @@ class SessionServiceProvider extends ServiceProvider
             return new DefaultSessionStore($config);
         });
 
-        // Registriere die Interfaces
+        // Registriere die Interfaces und deren Implementierungen
         $container->bind(SessionInterface::class, Session::class);
         $container->bind(FlashMessageInterface::class, FlashMessage::class);
 
