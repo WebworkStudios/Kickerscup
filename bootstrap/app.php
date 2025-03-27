@@ -34,6 +34,10 @@ $routingProvider->register($container);
 $sessionProvider = new App\Infrastructure\Session\SessionServiceProvider;
 $sessionProvider->register($container);
 
+// ValidationServiceProvider registrieren
+$validationProvider = new App\Infrastructure\Validation\ValidationServiceProvider();
+$validationProvider->register($container);
+
 // Kern-Factories registrieren
 $container->singleton(App\Infrastructure\Http\Contracts\RequestFactoryInterface::class, RequestFactory::class);
 $container->singleton(App\Infrastructure\Http\Contracts\ResponseFactoryInterface::class, ResponseFactory::class);
