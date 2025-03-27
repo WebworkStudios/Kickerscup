@@ -133,17 +133,7 @@ class Container implements ContainerInterface
      */
     public function bind(string $abstract, mixed $concrete = null): static
     {
-        // Wenn keine konkrete Implementierung angegeben ist, verwende den abstrakten Typ
-        $concrete = $concrete ?? $abstract;
-
-        // Speichere die Bindung
-        $this->bindings[$abstract] = [
-            'concrete' => $concrete,
-            'shared' => false,
-            'scoped' => false,
-        ];
-
-        return $this;
+        return $this->addBinding($abstract, $concrete, shared: false, scoped: false);
     }
 
     /**
@@ -151,15 +141,7 @@ class Container implements ContainerInterface
      */
     public function singleton(string $abstract, mixed $concrete = null): static
     {
-        $concrete = $concrete ?? $abstract;
-
-        $this->bindings[$abstract] = [
-            'concrete' => $concrete,
-            'shared' => true,
-            'scoped' => false,
-        ];
-
-        return $this;
+        return $this->addBinding($abstract, $concrete, shared: true, scoped: false);
     }
 
     /**
@@ -167,12 +149,24 @@ class Container implements ContainerInterface
      */
     public function scoped(string $abstract, mixed $concrete = null): static
     {
-        $concrete = $concrete ?? $abstract;
+        return $this->addBinding($abstract, $concrete, shared: false, scoped: true);
+    }
 
+    /**
+     * Fügt eine Bindung zum Container hinzu.
+     *
+     * @param string $abstract Der abstrakte Typ
+     * @param mixed $concrete Die konkrete Implementierung
+     * @param bool $shared Ob die Implementierung geteilt werden soll (Singleton)
+     * @param bool $scoped Ob die Implementierung scoped sein soll
+     * @return static
+     */
+    protected function addBinding(string $abstract, mixed $concrete = null, bool $shared = false, bool $scoped = false): static
+    {
         $this->bindings[$abstract] = [
-            'concrete' => $concrete,
-            'shared' => false,
-            'scoped' => true,
+            'concrete' => $concrete ?? $abstract,
+            'shared' => $shared,
+            'scoped' => $scoped,
         ];
 
         return $this;
@@ -255,16 +249,7 @@ class Container implements ContainerInterface
 
         // Prüfe auf zirkuläre Abhängigkeit
         if (in_array($abstract, $this->resolutionStack)) {
-            // Logging mit Fallback
-            try {
-                $this->logger?->error('Circular dependency detected', [
-                    'stack' => $this->resolutionStack,
-                    'current' => $abstract
-                ]);
-            } catch (Throwable) {
-                error_log('Circular dependency: ' . implode(' -> ', $this->resolutionStack) . " -> $abstract");
-            }
-
+            $this->logCircularDependency($abstract);
             throw new BindingResolutionException(
                 "Zirkuläre Abhängigkeit erkannt: " .
                 implode(' -> ', $this->resolutionStack) . " -> $abstract"
@@ -275,72 +260,9 @@ class Container implements ContainerInterface
         $this->resolutionStack[] = $abstract;
 
         try {
-            // 1. Prüfe auf vorhandene Singleton-Instanz
-            if (isset($this->instances[$abstract])) {
-                // Typ aus dem Stack entfernen vor Rückgabe
-                array_pop($this->resolutionStack);
-                return $this->instances[$abstract];
-            }
-
-            // 2. Prüfe auf Scoped-Instanz
-            if (
-                isset($this->bindings[$abstract]['scoped']) &&
-                $this->bindings[$abstract]['scoped'] &&
-                isset($this->scopedInstances[$this->currentScopeId][$abstract])
-            ) {
-                // Typ aus dem Stack entfernen vor Rückgabe
-                array_pop($this->resolutionStack);
-                return $this->scopedInstances[$this->currentScopeId][$abstract];
-            }
-
-            // 3. Prüfe auf registrierte Factory
-            if (isset($this->factories[$abstract])) {
-                // Typ aus dem Stack entfernen vor Rückgabe der Factory-Instanz
-                array_pop($this->resolutionStack);
-                return $this->factories[$abstract]->make($this, $parameters);
-            }
-
-            // 4. Prüfe auf Bindung
-            if (!isset($this->bindings[$abstract])) {
-                // Wenn keine Bindung existiert, versuche, den Typ direkt aufzulösen
-                if (class_exists($abstract)) {
-                    $instance = $this->reflectionResolver->resolve($abstract, $parameters);
-                    // Typ aus dem Stack entfernen vor Rückgabe
-                    array_pop($this->resolutionStack);
-                    return $instance;
-                }
-
-                // Typ aus dem Stack entfernen vor Exception
-                array_pop($this->resolutionStack);
-                throw new NotFoundException("Typ $abstract konnte nicht gefunden werden.");
-            }
-
-            $concrete = $this->bindings[$abstract]['concrete'];
-
-            // Wenn die konkrete Implementierung ein Closure ist, führe es aus
-            if ($concrete instanceof Closure) {
-                $instance = $concrete($this, $parameters);
-            } elseif (is_string($concrete) && $concrete !== $abstract) {
-                // Wenn die konkrete Implementierung ein anderer Typ ist, löse diesen rekursiv auf
-                $instance = $this->resolve($concrete, $parameters);
-            } else {
-                // Sonst versuche, den Typ via Reflection aufzulösen
-                $instance = $this->reflectionResolver->resolve($concrete, $parameters);
-            }
-
-            // Speichere Singleton-Instanzen
-            if (isset($this->bindings[$abstract]['shared']) && $this->bindings[$abstract]['shared']) {
-                $this->instances[$abstract] = $instance;
-            }
-
-            // Speichere Scoped-Instanzen
-            if (isset($this->bindings[$abstract]['scoped']) && $this->bindings[$abstract]['scoped']) {
-                if (!isset($this->scopedInstances[$this->currentScopeId])) {
-                    $this->scopedInstances[$this->currentScopeId] = [];
-                }
-                $this->scopedInstances[$this->currentScopeId][$abstract] = $instance;
-            }
-
+            // Versuche, eine Instanz zu erhalten oder zu erstellen
+            $instance = $this->resolveInstance($abstract, $parameters);
+            
             // Typ aus dem Stack entfernen vor Rückgabe
             array_pop($this->resolutionStack);
 
@@ -360,24 +282,122 @@ class Container implements ContainerInterface
     }
 
     /**
+     * Versucht, eine Instanz für den gegebenen Typ zu erhalten oder zu erstellen.
+     *
+     * @param string $abstract Typ oder Identifier
+     * @param array $parameters Zusätzliche Parameter
+     * @return mixed Die Instanz
+     * @throws BindingResolutionException
+     * @throws NotFoundException
+     */
+    protected function resolveInstance(string $abstract, array $parameters = []): mixed
+    {
+        // 1. Prüfe auf vorhandene Singleton-Instanz
+        if (isset($this->instances[$abstract])) {
+            return $this->instances[$abstract];
+        }
+
+        // 2. Prüfe auf Scoped-Instanz
+        $binding = $this->bindings[$abstract] ?? null;
+        $isScoped = $binding['scoped'] ?? false;
+
+        if ($isScoped && isset($this->scopedInstances[$this->currentScopeId][$abstract])) {
+            return $this->scopedInstances[$this->currentScopeId][$abstract];
+        }
+
+        // 3. Prüfe auf registrierte Factory
+        if (isset($this->factories[$abstract])) {
+            return $this->factories[$abstract]->make($this, $parameters);
+        }
+
+        // 4. Erstelle eine neue Instanz
+        $instance = $this->createInstance($abstract, $parameters);
+
+        // Speichere Singleton-Instanzen
+        $isShared = $binding['shared'] ?? false;
+        if ($isShared) {
+            $this->instances[$abstract] = $instance;
+        }
+
+        // Speichere Scoped-Instanzen
+        if ($isScoped) {
+            if (!isset($this->scopedInstances[$this->currentScopeId])) {
+                $this->scopedInstances[$this->currentScopeId] = [];
+            }
+            $this->scopedInstances[$this->currentScopeId][$abstract] = $instance;
+        }
+
+        return $instance;
+    }
+
+    /**
+     * Erstellt eine neue Instanz für den gegebenen Typ.
+     *
+     * @param string $abstract Typ oder Identifier
+     * @param array $parameters Zusätzliche Parameter
+     * @return mixed Die erstellte Instanz
+     * @throws BindingResolutionException
+     * @throws NotFoundException
+     */
+    protected function createInstance(string $abstract, array $parameters): mixed
+    {
+        // Prüfe auf Bindung
+        $binding = $this->bindings[$abstract] ?? null;
+        
+        // Wenn keine Bindung existiert, versuche, den Typ direkt aufzulösen
+        if ($binding === null) {
+            if (class_exists($abstract)) {
+                return $this->reflectionResolver->resolve($abstract, $parameters);
+            }
+
+            throw new NotFoundException("Typ $abstract konnte nicht gefunden werden.");
+        }
+
+        $concrete = $binding['concrete'];
+
+        // Wenn die konkrete Implementierung ein Closure ist, führe es aus
+        if ($concrete instanceof Closure) {
+            return $concrete($this, $parameters);
+        } 
+        
+        // Wenn die konkrete Implementierung ein anderer Typ ist, löse diesen rekursiv auf
+        if (is_string($concrete) && $concrete !== $abstract) {
+            return $this->resolve($concrete, $parameters);
+        } 
+        
+        // Sonst versuche, den Typ via Reflection aufzulösen
+        return $this->reflectionResolver->resolve($concrete, $parameters);
+    }
+
+    /**
+     * Loggt eine erkannte zirkuläre Abhängigkeit
+     *
+     * @param string $abstract Der Typ, der die zirkuläre Abhängigkeit verursacht
+     * @return void
+     */
+    protected function logCircularDependency(string $abstract): void
+    {
+        try {
+            $this->logger?->error('Circular dependency detected', [
+                'stack' => $this->resolutionStack,
+                'current' => $abstract
+            ]);
+        } catch (Throwable) {
+            error_log('Circular dependency: ' . implode(' -> ', $this->resolutionStack) . " -> $abstract");
+        }
+    }
+
+    /**
      * {@inheritdoc}
      */
     public function has(string $id): bool
     {
-        return isset($this->bindings[$id]) ||
-            isset($this->instances[$id]) ||
-            isset($this->factories[$id]);
+        // Using PHP 8.4's array_any to check if any of the collections has the ID
+        return array_any(
+            [$this->bindings, $this->instances, $this->factories],
+            fn($collection) => isset($collection[$id])
+        );
     }
-
-    /**
-     * Löst einen Typ auf und gibt eine Instanz zurück.
-     *
-     * @param string $abstract
-     * @param array $parameters
-     * @return mixed
-     * @throws ContainerException
-     * @throws Throwable
-     */
 
     /**
      * {@inheritdoc}
