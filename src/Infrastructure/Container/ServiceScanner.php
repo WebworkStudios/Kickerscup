@@ -10,6 +10,7 @@ use App\Infrastructure\Container\Attributes\Scoped;
 use App\Infrastructure\Container\Attributes\Singleton;
 use App\Infrastructure\Container\Attributes\Transient;
 use App\Infrastructure\Container\Contracts\ContainerInterface;
+use App\Infrastructure\Container\Enums\LifecycleType;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use ReflectionClass;
@@ -139,21 +140,14 @@ class ServiceScanner
             $abstract = $injectableAttribute->alias ?? $className;
 
             // Ermittle den Lifecycle basierend auf den Attributen
-            $hasSingleton = !empty($reflector->getAttributes(Singleton::class));
-            $hasScoped = !empty($reflector->getAttributes(Scoped::class));
-            $hasTransient = !empty($reflector->getAttributes(Transient::class));
+            $lifecycleType = $this->determineLifecycleType($reflector);
 
             // Registriere entsprechend dem Lifecycle
-            if ($hasSingleton) {
-                $this->container->singleton($abstract, $className);
-            } elseif ($hasScoped) {
-                $this->container->scoped($abstract, $className);
-            } elseif ($hasTransient) {
-                $this->container->bind($abstract, $className);
-            } else {
-                // Standard ist Transient
-                $this->container->bind($abstract, $className);
-            }
+            match ($lifecycleType) {
+                LifecycleType::Singleton => $this->container->singleton($abstract, $className),
+                LifecycleType::Scoped => $this->container->scoped($abstract, $className),
+                LifecycleType::Transient => $this->container->bind($abstract, $className),
+            };
 
             // Registriere auch Interfaces, die die Klasse implementiert
             foreach ($reflector->getInterfaces() as $interface) {
@@ -165,5 +159,29 @@ class ServiceScanner
         } catch (ReflectionException) {
             // Ignoriere Reflection-Fehler und mache mit dem nächsten weiter
         }
+    }
+
+    /**
+     * Ermittelt den Lifecycle-Typ einer Klasse basierend auf ihren Attributen.
+     *
+     * @param ReflectionClass $reflector
+     * @return LifecycleType
+     */
+    protected function determineLifecycleType(ReflectionClass $reflector): LifecycleType
+    {
+        if (!empty($reflector->getAttributes(Singleton::class))) {
+            return LifecycleType::Singleton;
+        }
+
+        if (!empty($reflector->getAttributes(Scoped::class))) {
+            return LifecycleType::Scoped;
+        }
+
+        if (!empty($reflector->getAttributes(Transient::class))) {
+            return LifecycleType::Transient;
+        }
+
+        // Standard ist Transient
+        return LifecycleType::Transient;
     }
 }

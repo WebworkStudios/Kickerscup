@@ -236,11 +236,13 @@ class Container implements ContainerInterface
     /**
      * Löst einen Typ auf und gibt eine Instanz zurück.
      *
-     * @param string $abstract
-     * @param array $parameters
-     * @return mixed
-     * @throws ContainerException
-     * @throws Throwable
+     * @param string $abstract Typ oder Identifier aufzulösen
+     * @param array $parameters Zusätzliche Parameter für die Konstruktion
+     * @return mixed Die aufgelöste Instanz
+     * @throws BindingResolutionException Wenn ein Problem bei der Auflösung einer Abhängigkeit auftritt
+     * @throws NotFoundException Wenn der angeforderte Typ nicht gefunden wurde
+     * @throws ContainerException Bei allgemeinen Container-Fehlern
+     * @throws Throwable Bei unerwarteten Fehlern
      */
     protected function resolve(string $abstract, array $parameters = []): mixed
     {
