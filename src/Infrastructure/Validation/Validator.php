@@ -8,7 +8,7 @@ namespace App\Infrastructure\Validation;
 use App\Infrastructure\Container\Attributes\Injectable;
 use App\Infrastructure\Container\Attributes\Singleton;
 use App\Infrastructure\Container\Contracts\ContainerInterface;
-use App\Infrastructure\Database\Contracts\DatabaseInterface;
+use App\Infrastructure\Database\Contracts\QueryBuilderInterface;
 use App\Infrastructure\Validation\Contracts\ValidatorInterface;
 use App\Infrastructure\Validation\Rules\ValidationRuleRegistry;
 
@@ -36,7 +36,7 @@ class Validator implements ValidatorInterface
     public function __construct(
         protected ValidationRuleRegistry $ruleRegistry,
         protected ContainerInterface     $container,
-        protected ?DatabaseInterface     $database = null
+        protected ?QueryBuilderInterface $database = null
     )
     {
     }
@@ -59,7 +59,7 @@ class Validator implements ValidatorInterface
             foreach ($fieldRules as $rule) {
                 $params = [];
 
-                // Behandle Regeln mit Parametern (z.B. max:255)
+                // Behandle Regeln mit Parametern (z.B. max: 255)
                 if (is_string($rule) && str_contains($rule, ':')) {
                     [$ruleName, $paramStr] = explode(':', $rule, 2);
                     $params = explode(',', $paramStr);
@@ -140,7 +140,7 @@ class Validator implements ValidatorInterface
             ':value' => is_scalar($value) ? (string)$value : gettype($value)
         ];
 
-        // Parameter als Platzhalter hinzufügen (:param0, :param1, etc.)
+        // Parameter als Platzhalter hinzufügen (: param0, : param1, etc.)
         foreach ($params as $index => $param) {
             $replacements[':param' . $index] = is_scalar($param) ? (string)$param : gettype($param);
         }
@@ -193,12 +193,12 @@ class Validator implements ValidatorInterface
         $table = $params[0];
         $column = $params[1];
 
-        $result = $this->database->query(
-            "SELECT COUNT(*) as count FROM $table WHERE $column = ?",
-            [$value]
-        );
+        $result = $this->database->table($table)
+            ->select('COUNT(*) as count')
+            ->where($column, '=', $value)
+            ->first();
 
-        return ($result[0]['count'] ?? 0) > 0;
+        return ($result['count'] ?? 0) > 0;
     }
 
     /**
@@ -217,16 +217,16 @@ class Validator implements ValidatorInterface
         $ignoreId = $params[2] ?? null;
         $idColumn = $params[3] ?? 'id';
 
-        $query = "SELECT COUNT(*) as count FROM $table WHERE $column = ?";
-        $queryParams = [$value];
+        $query = $this->database->table($table)
+            ->select('COUNT(*) as count')
+            ->where($column, '=', $value);
 
         if ($ignoreId !== null) {
-            $query .= " AND $idColumn != ?";
-            $queryParams[] = $ignoreId;
+            $query->where($idColumn, '!=', $ignoreId);
         }
 
-        $result = $this->database->query($query, $queryParams);
+        $result = $query->first();
 
-        return ($result[0]['count'] ?? 1) === 0;
+        return ($result['count'] ?? 1) === 0;
     }
 }
