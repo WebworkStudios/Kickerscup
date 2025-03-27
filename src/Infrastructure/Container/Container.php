@@ -23,8 +23,20 @@ class Container implements ContainerInterface
 {
     public ?LoggerInterface $logger {
         get {
+            // Rufe den Logger nur bei Bedarf ab und cache das Ergebnis
             if ($this->_logger === null && $this->has(LoggerInterface::class)) {
-                $this->_logger = $this->get(LoggerInterface::class);
+                try {
+                    // Verwende vorhandene Instance direkt anstatt resolve zu nutzen
+                    $this->_logger = $this->instances[LoggerInterface::class] ?? null;
+
+                    // Fallback nur wenn nötig
+                    if ($this->_logger === null) {
+                        $this->_logger = $this->get(LoggerInterface::class);
+                    }
+                } catch (Throwable) {
+                    // Ignoriere Fehler beim Logger-Abruf, um Endlos-Rekursion zu vermeiden
+                    $this->_logger = null;
+                }
             }
             return $this->_logger;
         }
@@ -243,16 +255,12 @@ class Container implements ContainerInterface
      * @throws ContainerException Bei allgemeinen Container-Fehlern
      * @throws Throwable Bei unerwarteten Fehlern
      */
+    // src/Infrastructure/Container/Container.php
+
+// Optimiere die resolve-Methode
     protected function resolve(string $abstract, array $parameters = []): mixed
     {
-        // Logging-Versuch mit Fallback
-        try {
-            $this->logger?->debug('Resolving dependency', ['abstract' => $abstract]);
-        } catch (Throwable $loggerError) {
-            error_log('Logger-Fehler bei Dependency Resolution: ' . $loggerError->getMessage());
-        }
-
-        // Prüfe auf direkt registrierte Instanz
+        // Reduziere Logging auf das Wesentliche
         if (isset($this->instances[$abstract])) {
             return $this->instances[$abstract];
         }
@@ -284,11 +292,9 @@ class Container implements ContainerInterface
             // Typ aus dem Stack entfernen vor Rückgabe
             array_pop($this->resolutionStack);
 
-            // Logging-Versuch mit Fallback
-            try {
-                $this->logger?->debug('Resolved dependency', ['abstract' => $abstract]);
-            } catch (Throwable $loggerError) {
-                error_log('Logger-Fehler nach Dependency Resolution: ' . $loggerError->getMessage());
+            // Reduziere Logging - nur bei Debugging
+            if ($this->logger && getenv('APP_DEBUG') === 'true') {
+                $this->logger->debug('Resolved dependency', ['abstract' => $abstract]);
             }
 
             return $instance;

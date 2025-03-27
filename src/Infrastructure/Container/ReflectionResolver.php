@@ -23,6 +23,11 @@ class ReflectionResolver
      */
     protected ContainerInterface $container;
 
+    protected array $reflectionCache = [];
+    protected array $parameterCache = [];
+
+
+
     /**
      * Konstruktor.
      */
@@ -49,7 +54,12 @@ class ReflectionResolver
         }
 
         try {
-            $reflector = new ReflectionClass($concrete);
+            // Nutze gecachte Reflection wenn möglich
+            if (!isset($this->reflectionCache[$concrete])) {
+                $this->reflectionCache[$concrete] = new ReflectionClass($concrete);
+            }
+
+            $reflector = $this->reflectionCache[$concrete];
 
             // Prüfe, ob die Klasse instantiierbar ist
             if (!$reflector->isInstantiable()) {
@@ -64,11 +74,25 @@ class ReflectionResolver
                 return new $concrete();
             }
 
-            // Löse die Konstruktor-Parameter auf
-            $dependencies = $this->resolveDependencies($constructor->getParameters(), $parameters);
+            // Cache key für Parameter
+            $cacheKey = $concrete . ':' . md5(serialize($parameters));
+
+            // Nutze gecachte Parameter wenn möglich
+            if (!isset($this->parameterCache[$cacheKey])) {
+                $this->parameterCache[$cacheKey] = $this->resolveDependencies(
+                    $constructor->getParameters(),
+                    $parameters
+                );
+
+                // Begrenze Cache-Größe
+                if (count($this->parameterCache) > 100) {
+                    // Entferne älteste Einträge
+                    array_shift($this->parameterCache);
+                }
+            }
 
             // Erstelle die Instanz mit den aufgelösten Abhängigkeiten
-            return $reflector->newInstanceArgs($dependencies);
+            return $reflector->newInstanceArgs($this->parameterCache[$cacheKey]);
         } catch (ReflectionException $e) {
             throw new BindingResolutionException("Fehler beim Auflösen des Typs $concrete: " . $e->getMessage(), 0, $e);
         }

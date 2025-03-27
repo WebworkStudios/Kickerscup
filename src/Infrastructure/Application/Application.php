@@ -44,6 +44,8 @@ class Application
     {
     }
 
+    // src/Infrastructure/Application/Application.php - run-Methode überarbeiten
+
     /**
      * Führt die Anwendung aus
      *
@@ -54,29 +56,33 @@ class Application
     public function run(): ResponseInterface
     {
         $this->logger->info('Application starting');
-        // Session am Anfang des Requests starten und validieren
-        $this->session->start();
 
-// Request erstellen
-        $request = $this->requestFactory->createFromGlobals();
+        // Erstelle Request nur, wenn keiner im Container gebunden ist
+        if (!$this->container->has(RequestInterface::class)) {
+            $request = $this->requestFactory->createFromGlobals();
+            $this->container->bind(RequestInterface::class, $request);
+            $this->container->bind(Request::class, $request);
+        } else {
+            $request = $this->container->get(RequestInterface::class);
+        }
 
-// Wichtig: Registriere den aktuellen Request im Container als Singleton
-// Anstatt zu versuchen, eine neue Instanz zu binden, die existierende Instanz registrieren
-        $this->container->bind(RequestInterface::class, $request);
-        $this->container->bind(Request::class, $request);
-
-        $this->logger->debug('Request created', [
+        $this->logger->debug('Request initialized', [
             'method' => $request->getMethod(),
             'path' => $request->getPath(),
             'ip' => $request->getClientIp()
         ]);
+
+        // Session nur bei Bedarf starten (z.B. nicht für API-Anfragen)
+        if ($this->shouldStartSession($request)) {
+            $this->session->start();
+        }
 
         try {
             // Validiere den Request, falls notwendig
             if ($this->shouldValidateRequest($request)) {
                 $this->validateRequest($request);
             }
-            
+
             // Router ausführen
             $response = $this->router->dispatch($request);
             $this->logger->info('Request processed successfully', [
@@ -90,12 +96,36 @@ class Application
             // Fehlerbehandlung - hier könnten Sie einen Error-Handler aufrufen
             $response = $this->handleException($e, $request);
         } finally {
-            // Session am Ende des Requests speichern
-            $this->session->flush();
+            // Session nur speichern, wenn sie gestartet wurde
+            if ($this->session->isStarted()) {
+                $this->session->flush();
+            }
             $this->logger->debug('Request finished');
         }
 
         return $response;
+    }
+
+    /**
+     * Bestimmt, ob die Session für diesen Request gestartet werden soll
+     *
+     * @param RequestInterface $request
+     * @return bool
+     */
+    protected function shouldStartSession(RequestInterface $request): bool
+    {
+        // Keine Session für API-Anfragen starten
+        if ($request->isJson() || $request->hasHeader('X-Requested-With') === 'XMLHttpRequest') {
+            return false;
+        }
+
+        // Keine Session für bestimmte Pfade starten (z.B. Assets)
+        $path = $request->getPath();
+        if (preg_match('~^/(assets|images|css|js|favicon\.ico)~', $path)) {
+            return false;
+        }
+
+        return true;
     }
 
     /**

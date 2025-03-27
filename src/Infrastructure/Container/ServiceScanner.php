@@ -142,20 +142,20 @@ class ServiceScanner
             // Ermittle den Lifecycle basierend auf den Attributen
             $lifecycleType = $this->determineLifecycleType($reflector);
 
+            // Lazy-Loading für besonders aufwändige Services implementieren
+            $isHeavyService = $this->isHeavyService($className);
+
+            if ($isHeavyService) {
+                $this->registerLazyService($abstract, $className, $lifecycleType);
+                return;
+            }
+
             // Registriere entsprechend dem Lifecycle
             match ($lifecycleType) {
                 LifecycleType::Singleton => $this->container->singleton($abstract, $className),
                 LifecycleType::Scoped => $this->container->scoped($abstract, $className),
                 LifecycleType::Transient => $this->container->bind($abstract, $className),
             };
-
-            // Registriere auch Interfaces, die die Klasse implementiert
-            foreach ($reflector->getInterfaces() as $interface) {
-                // Nur registrieren, wenn kein expliziter Alias angegeben wurde
-                if ($injectableAttribute->alias === null) {
-                    $this->container->bind($interface->getName(), $className);
-                }
-            }
         } catch (ReflectionException) {
             // Ignoriere Reflection-Fehler und mache mit dem nächsten weiter
         }
@@ -183,5 +183,35 @@ class ServiceScanner
 
         // Standard ist Transient
         return LifecycleType::Transient;
+    }
+
+    // Neue Methode: Erkennt "schwere" Services
+    private function isHeavyService(string $className): bool
+    {
+        // Liste von Services, die besonders ressourcenintensiv sind
+        $heavyServices = [
+            // Beispiele für ressourcenintensive Services
+            'App\\Domain\\Services\\StatisticsService',
+            'App\\Infrastructure\\Database\\QueryBuilder',
+            'App\\Infrastructure\\File\\FileManager',
+            // Ergänzen Sie weitere Services nach Bedarf
+        ];
+
+        return in_array($className, $heavyServices);
+    }
+
+// Neue Methode: Registriert einen Lazy-Loading Service
+    private function registerLazyService(string $abstract, string $concrete, LifecycleType $lifecycleType): void
+    {
+        // Verwende Closures für Lazy-Loading
+        $factory = function ($container) use ($concrete) {
+            return $container->makeWith($concrete);
+        };
+
+        match ($lifecycleType) {
+            LifecycleType::Singleton => $this->container->singleton($abstract, $factory),
+            LifecycleType::Scoped => $this->container->scoped($abstract, $factory),
+            LifecycleType::Transient => $this->container->bind($abstract, $factory),
+        };
     }
 }

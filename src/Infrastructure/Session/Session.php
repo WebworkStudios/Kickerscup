@@ -6,12 +6,14 @@ namespace App\Infrastructure\Session;
 
 use App\Infrastructure\Container\Attributes\Injectable;
 use App\Infrastructure\Container\Attributes\Singleton;
+use App\Infrastructure\ErrorHandling\Contracts\ExceptionHandlerInterface;
 use App\Infrastructure\Logging\Contracts\LoggerInterface;
 use App\Infrastructure\Session\Contracts\SessionInterface;
 use App\Infrastructure\Session\Contracts\SessionStoreInterface;
 use App\Infrastructure\Session\Contracts\UserSessionStoreInterface;
 use App\Infrastructure\Session\Store\DefaultSessionStore;
 use RuntimeException;
+use Throwable;
 
 #[Injectable]
 #[Singleton]
@@ -113,6 +115,14 @@ class Session implements SessionInterface
         }
 
         return $this->started;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function isStarted(): bool
+    {
+        return $this->started; // oder entsprechender Status
     }
 
     /**
