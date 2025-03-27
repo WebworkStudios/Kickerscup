@@ -57,12 +57,12 @@ class Application
         // Session am Anfang des Requests starten und validieren
         $this->session->start();
 
-        // Request erstellen
+// Request erstellen
         $request = $this->requestFactory->createFromGlobals();
 
-        // Wichtig: Registriere den aktuellen Request im Container
+// Wichtig: Registriere den aktuellen Request im Container als Singleton
+// Anstatt zu versuchen, eine neue Instanz zu binden, die existierende Instanz registrieren
         $this->container->bind(RequestInterface::class, $request);
-        // Binde auch die konkrete Implementierung
         $this->container->bind(Request::class, $request);
 
         $this->logger->debug('Request created', [

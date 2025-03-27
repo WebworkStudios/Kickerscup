@@ -14,6 +14,7 @@ use App\Infrastructure\Logging\LoggerServiceProvider;
 use App\Infrastructure\Routing\RoutingServiceProvider;
 use App\Infrastructure\Security\Csrf\CsrfServiceProvider;
 use App\Infrastructure\Session\SessionServiceProvider;
+use App\Infrastructure\Validation\ValidationServiceProvider;
 
 
 $container = new Container;
@@ -39,6 +40,9 @@ $errorHandlingProvider->register($container);
 
 $databaseProvider = new DatabaseServiceProvider;
 $databaseProvider->register($container);
+
+$provider = new ValidationServiceProvider;
+$provider->register($container);
 
 $container->singleton(App\Infrastructure\Http\Contracts\RequestFactoryInterface::class, RequestFactory::class);
 $container->singleton(App\Infrastructure\Http\Contracts\ResponseFactoryInterface::class, ResponseFactory::class);

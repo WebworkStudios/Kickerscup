@@ -34,15 +34,20 @@ class ReflectionResolver
     /**
      * Löst einen Typ via Reflection auf.
      *
-     * @param string $concrete Der konkrete Typ
+     * @param string|object $concrete Der konkrete Typ oder eine vorhandene Instanz
      * @param array $parameters Zusätzliche Parameter
      * @return object Die aufgelöste Instanz
      * @throws BindingResolutionException
      * @throws ContainerException
      * @throws NotFoundException
      */
-    public function resolve(string $concrete, array $parameters = []): object
+    public function resolve(string|object $concrete, array $parameters = []): object
     {
+        // Wenn bereits eine Instanz übergeben wurde, gib diese direkt zurück
+        if (is_object($concrete)) {
+            return $concrete;
+        }
+
         try {
             $reflector = new ReflectionClass($concrete);
 
@@ -69,64 +74,71 @@ class ReflectionResolver
         }
     }
 
-    /**
-     * Löst die Konstruktor-Parameter auf.
-     *
-     * @param ReflectionParameter[] $parameters Die Reflection-Parameter
-     * @param array $primitives Zusätzliche primitive Parameter
-     * @return array Die aufgelösten Parameter
-     * @throws BindingResolutionException
-     * @throws ContainerException
-     * @throws NotFoundException
-     */
     protected function resolveDependencies(array $parameters, array $primitives): array
     {
         $dependencies = [];
+        $maxRecursionDepth = 50; // Füge eine maximale Rekursionstiefe hinzu
 
-        foreach ($parameters as $parameter) {
-            // Wenn der Parameter in den übergebenen Parametern enthalten ist, verwende diesen
-            $paramName = $parameter->getName();
-            if (array_key_exists($paramName, $primitives)) {
-                $dependencies[] = $primitives[$paramName];
-                continue;
-            }
+        static $recursionDepth = 0; // Zähler für Rekursionstiefe
+        $recursionDepth++;
 
-            // Wenn der Parameter einen Typ hat und dieser ein Klassenname ist
-            $paramType = $parameter->getType();
-
-            if ($paramType !== null && !$paramType->isBuiltin()) {
-                $typeName = $paramType->getName();
-                // Löse die Abhängigkeit über den Container auf
-                try {
-                    $dependencies[] = $this->container->get($typeName);
-                    continue;
-                } catch (BindingResolutionException $e) {
-                    // Wenn die Abhängigkeit nicht aufgelöst werden kann und der Parameter optional ist
-                    if ($parameter->isDefaultValueAvailable()) {
-                        $dependencies[] = $parameter->getDefaultValue();
-                        continue;
-                    }
-
-                    throw $e;
-                }
-            }
-
-            // Wenn der Parameter einen Standardwert hat
-            if ($parameter->isDefaultValueAvailable()) {
-                $dependencies[] = $parameter->getDefaultValue();
-                continue;
-            }
-
-            // Wenn nichts davon zutrifft und der Parameter erlaubt null
-            if ($paramType !== null && $paramType->allowsNull()) {
-                $dependencies[] = null;
-                continue;
-            }
-
-            // Sonst können wir den Parameter nicht auflösen
+        // Prüfe auf zu tiefe Rekursion
+        if ($recursionDepth > $maxRecursionDepth) {
+            $recursionDepth--; // Reduziere den Zähler vor dem Werfen der Exception
             throw new BindingResolutionException(
-                "Konnte Parameter $paramName für Klasse nicht auflösen."
+                "Maximale Rekursionstiefe ($maxRecursionDepth) überschritten. Mögliche zirkuläre Abhängigkeit."
             );
+        }
+
+        try {
+            foreach ($parameters as $parameter) {
+                // Wenn der Parameter in den übergebenen Parametern enthalten ist, verwende diesen
+                $paramName = $parameter->getName();
+                if (array_key_exists($paramName, $primitives)) {
+                    $dependencies[] = $primitives[$paramName];
+                    continue;
+                }
+
+                // Wenn der Parameter einen Typ hat und dieser ein Klassenname ist
+                $paramType = $parameter->getType();
+
+                if ($paramType !== null && !$paramType->isBuiltin()) {
+                    $typeName = $paramType->getName();
+                    // Löse die Abhängigkeit über den Container auf
+                    try {
+                        $dependencies[] = $this->container->get($typeName);
+                        continue;
+                    } catch (BindingResolutionException $e) {
+                        // Wenn die Abhängigkeit nicht aufgelöst werden kann und der Parameter optional ist
+                        if ($parameter->isDefaultValueAvailable()) {
+                            $dependencies[] = $parameter->getDefaultValue();
+                            continue;
+                        }
+
+                        throw $e;
+                    }
+                }
+
+                // Wenn der Parameter einen Standardwert hat
+                if ($parameter->isDefaultValueAvailable()) {
+                    $dependencies[] = $parameter->getDefaultValue();
+                    continue;
+                }
+
+                // Wenn nichts davon zutrifft und der Parameter erlaubt null
+                if ($paramType !== null && $paramType->allowsNull()) {
+                    $dependencies[] = null;
+                    continue;
+                }
+
+                // Sonst können wir den Parameter nicht auflösen
+                throw new BindingResolutionException(
+                    "Konnte Parameter $paramName für Klasse nicht auflösen."
+                );
+            }
+        } finally {
+            // Stelle sicher, dass die Rekursionstiefe in jedem Fall reduziert wird
+            $recursionDepth--;
         }
 
         return $dependencies;

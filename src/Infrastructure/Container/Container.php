@@ -133,9 +133,14 @@ class Container implements ContainerInterface
      */
     public function bind(string $abstract, mixed $concrete = null): static
     {
+        // Wenn eine konkrete Instanz übergeben wurde, speichere sie direkt als Singleton
+        if (is_object($concrete) && !$concrete instanceof Closure) {
+            $this->instances[$abstract] = $concrete;
+            return $this;
+        }
+
         return $this->addBinding($abstract, $concrete, shared: false, scoped: false);
     }
-
     /**
      * {@inheritdoc}
      */
@@ -247,6 +252,11 @@ class Container implements ContainerInterface
             error_log('Logger-Fehler bei Dependency Resolution: ' . $loggerError->getMessage());
         }
 
+        // Prüfe auf direkt registrierte Instanz
+        if (isset($this->instances[$abstract])) {
+            return $this->instances[$abstract];
+        }
+
         // Prüfe auf zirkuläre Abhängigkeit
         if (in_array($abstract, $this->resolutionStack)) {
             $this->logCircularDependency($abstract);
@@ -256,13 +266,21 @@ class Container implements ContainerInterface
             );
         }
 
+        // Schutz gegen zu tiefe Rekursion
+        if (count($this->resolutionStack) > 50) {
+            throw new BindingResolutionException(
+                "Maximale Rekursionstiefe überschritten bei Auflösung von '$abstract'. " .
+                "Mögliche zirkuläre Abhängigkeit: " . implode(' -> ', $this->resolutionStack)
+            );
+        }
+
         // Typ zum Auflösung-Stack hinzufügen
         $this->resolutionStack[] = $abstract;
 
         try {
             // Versuche, eine Instanz zu erhalten oder zu erstellen
             $instance = $this->resolveInstance($abstract, $parameters);
-            
+
             // Typ aus dem Stack entfernen vor Rückgabe
             array_pop($this->resolutionStack);
 
@@ -275,8 +293,8 @@ class Container implements ContainerInterface
 
             return $instance;
         } catch (Throwable $e) {
-            // Bei Fehlern den Stack zurücksetzen
-            $this->resolutionStack = [];
+            // Bei Fehlern den Stack korrigieren und Fehler weiterleiten
+            array_pop($this->resolutionStack);
             throw $e;
         }
     }
