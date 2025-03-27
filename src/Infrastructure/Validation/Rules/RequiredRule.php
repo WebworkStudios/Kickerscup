@@ -18,9 +18,6 @@ class RequiredRule extends AbstractRule
     /**
      * {@inheritdoc}
      */
-    // src/Infrastructure/Validation/Rules/RequiredRule.php
-// Korrigieren wir die validate-Methode, um sicherzustellen, dass leere Strings erkannt werden
-
     public function validate(mixed $value, array $params, string $field): bool
     {
         // Wenn es ein String ist, prüfen wir, ob er nicht leer ist (nach dem Trimmen)
@@ -31,6 +28,11 @@ class RequiredRule extends AbstractRule
         // Wenn es ein Array ist, prüfen wir, ob es nicht leer ist
         if (is_array($value)) {
             return !empty($value);
+        }
+
+        // Spezialfall für numerische Werte (0 ist gültig)
+        if (is_numeric($value)) {
+            return true;
         }
 
         // Prüfe auf null, leere Strings und false

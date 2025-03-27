@@ -29,13 +29,6 @@ class RequestValidator
      * @param bool $throwOnFailure
      * @return bool True, wenn die Validierung erfolgreich ist
      */
-    // src/Infrastructure/Validation/RequestValidator.php
-// Überprüfen und korrigieren wir die validate-Methode
-
-    // src/Infrastructure/Validation/RequestValidator.php
-// Fügen wir Debug-Logging hinzu
-
-    // src/Infrastructure/Validation/RequestValidator.php
 
     public function validate(
         RequestInterface $request,
@@ -58,19 +51,17 @@ class RequestValidator
             $data = array_merge($data, $queryParams);
         }
 
-        // Wichtig: Auch für leere Felder Schlüssel erstellen
-        // Dies stellt sicher, dass required-Validierungen auch greifen, wenn
-        // im Formular alle Felder leer gelassen wurden
-        foreach ($rules as $field => $rule) {
-            if (!isset($data[$field])) {
-                $data[$field] = '';
-            }
-        }
-
         // JSON-Body hinzufügen, wenn vorhanden
         if ($request->isJson()) {
             $jsonData = $request->getJsonBody() ?: [];
             $data = array_merge($data, $jsonData);
+        }
+
+        // Wichtig: Für jedes in den Regeln erwähnte Feld sicherstellen, dass es im Datensatz existiert
+        foreach ($rules as $field => $rule) {
+            if (!isset($data[$field])) {
+                $data[$field] = '';
+            }
         }
 
         // Validierung durchführen

@@ -46,11 +46,8 @@ class Validator implements ValidatorInterface
     /**
      * {@inheritdoc}
      */
-    // src/Infrastructure/Validation/Validator.php
-// Verbessern wir die validate-Methode, um sicherzustellen, dass leere Felder erkannt werden
 
     // src/Infrastructure/Validation/Validator.php
-// Stellen wir sicher, dass die validate-Methode mit leeren Werten richtig umgeht
 
     public function validate(array $data, array $rules): bool
     {
