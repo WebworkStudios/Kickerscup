@@ -30,21 +30,23 @@ use Throwable;
 #[Singleton]
 class Application
 {
+
     /**
      * Konstruktor
      */
     public function __construct(
-        protected ContainerInterface      $container,
-        protected RequestFactoryInterface $requestFactory,
+        protected ContainerInterface       $container,
+        protected RequestFactoryInterface  $requestFactory,
         protected ResponseFactoryInterface $responseFactory,
-        protected RouterInterface         $router,
-        protected SessionInterface        $session,
-        protected LoggerInterface         $logger
+        protected RouterInterface          $router,
+        protected ?SessionInterface        $session = null,
+        protected ?LoggerInterface         $logger = null
     )
     {
+        // Verzögere das Abrufen der optionalen Abhängigkeiten
+        $this->session = $session ?? $this->container->get(SessionInterface::class);
+        $this->logger = $logger ?? $this->container->get(LoggerInterface::class);
     }
-
-    // src/Infrastructure/Application/Application.php - run-Methode überarbeiten
 
     /**
      * Führt die Anwendung aus

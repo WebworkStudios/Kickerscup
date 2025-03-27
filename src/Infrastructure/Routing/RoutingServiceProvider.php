@@ -10,6 +10,7 @@ use App\Infrastructure\Container\Exceptions\NotFoundException;
 use App\Infrastructure\Container\ServiceProvider;
 use App\Infrastructure\Http\Contracts\ResponseFactoryInterface;
 use App\Infrastructure\Http\Factory\ResponseFactory;
+use App\Infrastructure\Logging\Contracts\LoggerInterface;
 use App\Infrastructure\Routing\Contracts\RouterInterface;
 use App\Infrastructure\Routing\Contracts\RouteScannerInterface;
 use App\Infrastructure\Routing\Contracts\UrlGeneratorInterface;
@@ -27,28 +28,39 @@ class RoutingServiceProvider extends ServiceProvider
      * @throws ContainerException
      * @throws NotFoundException
      */
+
     public function register(ContainerInterface $container): void
     {
         // Registriere Interfaces auf konkrete Implementierungen
         $container->bind(RouterInterface::class, Router::class);
         $container->bind(UrlGeneratorInterface::class, UrlGenerator::class);
-        $container->bind(RouteScannerInterface::class, RouteScanner::class);
-
-        // Bind ResponseFactoryInterface to ResponseFactory
-        $container->bind(ResponseFactoryInterface::class, ResponseFactory::class);
 
         // Registriere Singleton-Instanzen
         $container->singleton(Router::class);
         $container->singleton(UrlGenerator::class);
         $container->singleton(ResponseFactory::class);
 
+        // Bind ResponseFactoryInterface to ResponseFactory
+        $container->bind(ResponseFactoryInterface::class, ResponseFactory::class);
+
         // Router abrufen und optional Konfigurationen vornehmen
         $router = $container->get(RouterInterface::class);
+
+        // RouteScannerInterface direkt auf eine neue Instanz binden
+        // Nutze die importierte LoggerInterface-Klasse
+        $routeScanner = new RouteScanner(
+            $container->get(RouterInterface::class),
+            $container->get(UrlGeneratorInterface::class),
+            $container->get(\App\Infrastructure\Logging\Contracts\LoggerInterface::class),
+            $container
+        );
+
+        $container->bind(RouteScannerInterface::class, $routeScanner);
+        $container->bind(RouteScanner::class, $routeScanner);
 
         // Beispielhafte Konfiguration von Standard-Fehler-Handlern
         $this->configureDefaultErrorHandlers($router, $container);
     }
-
     /**
      * Konfiguriert Standard-Fehler-Handler für den Router
      *
