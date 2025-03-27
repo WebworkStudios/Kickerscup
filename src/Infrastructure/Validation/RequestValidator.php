@@ -26,23 +26,48 @@ class RequestValidator
      *
      * @param RequestInterface $request Der zu validierende Request
      * @param array<string, mixed> $rules Die Validierungsregeln
-     * @param bool $includeFiles Ob auch hochgeladene Dateien validiert werden sollen
+     * @param bool $throwOnFailure
      * @return bool True, wenn die Validierung erfolgreich ist
-     * @throws ValidationException Wenn die Validierung fehlschlägt und $throwOnFailure true ist
      */
+    // src/Infrastructure/Validation/RequestValidator.php
+// Überprüfen und korrigieren wir die validate-Methode
+
+    // src/Infrastructure/Validation/RequestValidator.php
+// Fügen wir Debug-Logging hinzu
+
+    // src/Infrastructure/Validation/RequestValidator.php
+
     public function validate(
         RequestInterface $request,
         array            $rules,
         bool             $throwOnFailure = false
     ): bool
     {
-        // Daten zum Validieren sammeln (POST + GET)
-        $data = array_merge(
-            $request->getQueryParams(),
-            $request->getPostData()
-        );
+        // Daten zum Validieren sammeln
+        $data = [];
 
-        // Json-Body hinzufügen, wenn vorhanden
+        // POST-Daten hinzufügen
+        $postData = $request->getPostData();
+        if (!empty($postData)) {
+            $data = array_merge($data, $postData);
+        }
+
+        // Query-Parameter hinzufügen
+        $queryParams = $request->getQueryParams();
+        if (!empty($queryParams)) {
+            $data = array_merge($data, $queryParams);
+        }
+
+        // Wichtig: Auch für leere Felder Schlüssel erstellen
+        // Dies stellt sicher, dass required-Validierungen auch greifen, wenn
+        // im Formular alle Felder leer gelassen wurden
+        foreach ($rules as $field => $rule) {
+            if (!isset($data[$field])) {
+                $data[$field] = '';
+            }
+        }
+
+        // JSON-Body hinzufügen, wenn vorhanden
         if ($request->isJson()) {
             $jsonData = $request->getJsonBody() ?: [];
             $data = array_merge($data, $jsonData);

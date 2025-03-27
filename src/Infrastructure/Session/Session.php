@@ -8,6 +8,8 @@ use App\Infrastructure\Container\Attributes\Injectable;
 use App\Infrastructure\Container\Attributes\Singleton;
 use App\Infrastructure\ErrorHandling\Contracts\ExceptionHandlerInterface;
 use App\Infrastructure\Logging\Contracts\LoggerInterface;
+use App\Infrastructure\Logging\FileLogger;
+use App\Infrastructure\Logging\LoggerConfiguration;
 use App\Infrastructure\Session\Contracts\SessionInterface;
 use App\Infrastructure\Session\Contracts\SessionStoreInterface;
 use App\Infrastructure\Session\Contracts\UserSessionStoreInterface;
@@ -35,11 +37,9 @@ class Session implements SessionInterface
         protected FlashMessageProvider  $flashProvider,
         protected SessionConfiguration  $config,
         protected SessionStoreInterface $store,
-        protected LoggerInterface       $logger
+        protected ?LoggerInterface      $logger = null
     )
     {
-        // Wenn ein benutzerdefinierter Store verwendet wird, registriere
-        // ihn als Session-Handler
         if (!$store instanceof DefaultSessionStore) {
             session_set_save_handler(
                 [$store, 'open'],
@@ -49,6 +49,17 @@ class Session implements SessionInterface
                 [$store, 'destroy'],
                 [$store, 'gc']
             );
+        }
+
+        // Logger initialisieren, wenn nicht vorhanden
+        if ($this->logger === null) {
+            try {
+                // Versuchen, den Logger aus einfachem Service zu bekommen
+                // Nicht über SessionInterface gehen, um Zirkularbezug zu vermeiden
+                $this->logger = new FileLogger(new LoggerConfiguration());
+            } catch (Throwable) {
+                // Fehler ignorieren - arbeiten ohne Logger
+            }
         }
     }
 
@@ -117,9 +128,6 @@ class Session implements SessionInterface
         return $this->started;
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function isStarted(): bool
     {
         return $this->started; // oder entsprechender Status

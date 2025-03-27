@@ -1,6 +1,5 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Presentation\Actions\Tests;
@@ -30,7 +29,7 @@ final class ValidationTestAction
     #[Get('/test/validation', 'test.validation')]
     public function showForm(RequestInterface $request): ResponseInterface
     {
-        // Render das HTML-Formular
+        // Render das HTML-Formular ohne Fehlermeldungen und ohne Eingabedaten
         $html = $this->renderFormHtml();
         return $this->responseFactory->createHtml($html);
     }
@@ -45,24 +44,35 @@ final class ValidationTestAction
             'age' => 'required|numeric'
         ];
 
+        // Daten erfassen
+        $postData = $request->getPostData();
+
+        // Für die Validierung sicherstellen, dass alle Felder existieren
+        foreach (array_keys($rules) as $field) {
+            if (!isset($postData[$field])) {
+                $postData[$field] = '';
+            }
+        }
+
         try {
-            // Validierung durchführen (wirft ValidationException bei Fehler)
-            $this->validator->validate($request, $rules, true);
+            // Validierung mit expliziten Parametern durchführen
+            $validator = $this->validator->getValidator();
+            $isValid = $validator->validate($postData, $rules);
+
+            if (!$isValid) {
+                throw ValidationException::withErrors(
+                    'Die Validierung ist fehlgeschlagen.',
+                    $validator->getErrors()
+                );
+            }
 
             // Wenn die Validierung erfolgreich ist
-            $data = array_merge(
-                $request->getPostData(),
-                $request->getJsonBody() ?? []
-            );
-
-            // Erfolgsantwort
-            $successHtml = $this->renderSuccessHtml($data);
+            $successHtml = $this->renderSuccessHtml($postData);
             return $this->responseFactory->createHtml($successHtml);
-
         } catch (ValidationException $e) {
             // Bei Validierungsfehlern das Formular mit Fehlermeldungen anzeigen
             $errors = $e->getErrors();
-            $html = $this->renderFormHtml($request->getPostData(), $errors);
+            $html = $this->renderFormHtml($postData, $errors);
             return $this->responseFactory->createHtml($html, 422);
         }
     }
@@ -174,5 +184,17 @@ HTML;
 </body>
 </html>
 HTML;
+    }
+
+    /**
+     * Gibt die Validierungsregeln für diesen Request zurück
+     */
+    public function getValidationRules(): array
+    {
+        return [
+            'name' => 'required',
+            'email' => 'required|email',
+            'age' => 'required|numeric'
+        ];
     }
 }

@@ -247,11 +247,31 @@ class Application
      * @param RequestInterface $request
      * @return bool
      */
+// src/Infrastructure/Application/Application.php
+
+    /**
+     * Prüft, ob der Request validiert werden sollte
+     *
+     * @param RequestInterface $request
+     * @return bool
+     */
     protected function shouldValidateRequest(RequestInterface $request): bool
     {
-        // Implementiere Logik, um zu entscheiden, ob der Request validiert werden soll
-        // Beispiel: Nur POST, PUT, PATCH Requests validieren
-        return in_array($request->getMethod(), ['POST', 'PUT', 'PATCH']);
+        // Nur POST, PUT, PATCH Requests validieren, aber nur wenn es
+        // einen entsprechenden Route-Handler gibt
+        if (!in_array($request->getMethod(), ['POST', 'PUT', 'PATCH'])) {
+            return false;
+        }
+
+        // Match-Informationen über die Route holen
+        $match = $this->router->match($request);
+        if (!$match || !isset($match['route']['handler'])) {
+            return false;
+        }
+
+        // Validation nur durchführen, wenn Regeln vorhanden
+        $rules = $this->getValidationRules($request);
+        return !empty($rules);
     }
 
     /**
@@ -293,18 +313,45 @@ class Application
      * @param RequestInterface $request
      * @return array<string, string|array<string>>
      */
+    // src/Infrastructure/Application/Application.php
+// Korrigieren wir die getValidationRules-Methode, Zeile ~306
+
     protected function getValidationRules(RequestInterface $request): array
     {
-        // Hier könnten Regeln aus verschiedenen Quellen kommen:
-        // - Route-Attribute
-        // - Controller-Methoden
-        // - Konfigurationsdateien
-
-        // Beispiel-Implementierung:
         $route = $this->router->match($request);
-        if ($route && isset($route['route']['handler']) &&
-            method_exists($route['route']['handler'], 'getValidationRules')) {
-            return $route['route']['handler']->getValidationRules();
+        if ($route && isset($route['route']['handler'])) {
+            $handler = $route['route']['handler'];
+
+            // Prüfe, ob der Handler ein Objekt oder eine Klasse ist
+            if (is_object($handler) && method_exists($handler, 'getValidationRules')) {
+                return $handler->getValidationRules();
+            }
+
+            // Prüfe, ob der Handler ein Array [Controller, Methode] ist
+            if (is_array($handler) && count($handler) === 2) {
+                if (is_object($handler[0]) && method_exists($handler[0], 'getValidationRules')) {
+                    return $handler[0]->getValidationRules();
+                } else if (is_string($handler[0]) && method_exists($handler[0], 'getValidationRules')) {
+                    try {
+                        $controller = $this->container->get($handler[0]);
+                        if (method_exists($controller, 'getValidationRules')) {
+                            return $controller->getValidationRules();
+                        }
+                    } catch (Throwable) {
+                        // Ignore resolution errors
+                    }
+                }
+            }
+
+            // Prüfe, ob der Handler ein String (Klassenname) ist
+            if (is_string($handler) && class_exists($handler) && method_exists($handler, 'getValidationRules')) {
+                try {
+                    $instance = $this->container->get($handler);
+                    return $instance->getValidationRules();
+                } catch (Throwable) {
+                    // Ignore resolution errors
+                }
+            }
         }
 
         return [];

@@ -46,12 +46,23 @@ class Validator implements ValidatorInterface
     /**
      * {@inheritdoc}
      */
+    // src/Infrastructure/Validation/Validator.php
+// Verbessern wir die validate-Methode, um sicherzustellen, dass leere Felder erkannt werden
+
+    // src/Infrastructure/Validation/Validator.php
+// Stellen wir sicher, dass die validate-Methode mit leeren Werten richtig umgeht
+
     public function validate(array $data, array $rules): bool
     {
         $this->errors = [];
 
+        // Debug: Ausgabe der zu validierenden Daten
+        error_log("Validator data: " . json_encode($data));
+        error_log("Validator rules: " . json_encode($rules));
+
         foreach ($rules as $field => $fieldRules) {
-            $value = $data[$field] ?? null;
+            // Stelle sicher, dass der Wert existiert, auch wenn er leer ist
+            $value = array_key_exists($field, $data) ? $data[$field] : '';
 
             // Konvertiere String-Regeln in ein Array
             if (is_string($fieldRules)) {
@@ -72,17 +83,28 @@ class Validator implements ValidatorInterface
                     $ruleName = $rule['rule'];
                 }
 
-                if (!$this->validateSingle($value, $ruleName, $params, $field)) {
-                    // Füge die Fehlermeldung hinzu
-                    $this->addError($field, $this->getErrorMessage($field, $ruleName, $params, $value));
+                // Validierung durchführen und Ergebnis protokollieren
+                $isValid = $this->validateSingle($value, $ruleName, $params, $field);
+                error_log("Validating $field with rule $ruleName: " . ($isValid ? "PASS" : "FAIL"));
 
-                    // Bei 'required' Validierungen, breche weitere Validierungen für dieses Feld ab,
-                    // wenn es leer ist und die required-Validierung fehlschlägt
-                    if ($ruleName === 'required' && ($value === null || $value === '' || (is_array($value) && count($value) === 0))) {
+                if (!$isValid) {
+                    // Füge die Fehlermeldung hinzu
+                    $errorMessage = $this->getErrorMessage($field, $ruleName, $params, $value);
+                    $this->addError($field, $errorMessage);
+                    error_log("Added error for $field: $errorMessage");
+
+                    // Bei 'required' Validierungen weitere Validierungen für dieses Feld abbrechen
+                    if ($ruleName === 'required') {
                         break;
                     }
                 }
             }
+        }
+
+        // Logge das Ergebnis
+        error_log("Validation result: " . (empty($this->errors) ? "PASS" : "FAIL"));
+        if (!empty($this->errors)) {
+            error_log("Validation errors: " . json_encode($this->errors));
         }
 
         return empty($this->errors);
