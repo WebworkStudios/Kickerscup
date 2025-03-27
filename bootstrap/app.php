@@ -38,6 +38,10 @@ $sessionProvider->register($container);
 $validationProvider = new App\Infrastructure\Validation\ValidationServiceProvider();
 $validationProvider->register($container);
 
+// Lazy Loading Service Provider registrieren
+$lazyLoadingProvider = new App\Infrastructure\Container\LazyLoadingServiceProvider;
+$lazyLoadingProvider->register($container);
+
 // Kern-Factories registrieren
 $container->singleton(App\Infrastructure\Http\Contracts\RequestFactoryInterface::class, RequestFactory::class);
 $container->singleton(App\Infrastructure\Http\Contracts\ResponseFactoryInterface::class, ResponseFactory::class);

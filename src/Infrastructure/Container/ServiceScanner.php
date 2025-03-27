@@ -1,6 +1,5 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Infrastructure\Container;
@@ -8,13 +7,15 @@ namespace App\Infrastructure\Container;
 use App\Infrastructure\Container\Attributes\Injectable;
 use App\Infrastructure\Container\Attributes\Scoped;
 use App\Infrastructure\Container\Attributes\Singleton;
-use App\Infrastructure\Container\Attributes\Transient;
+use App\Infrastructure\Container\Config\LazyLoadingConfig;
 use App\Infrastructure\Container\Contracts\ContainerInterface;
 use App\Infrastructure\Container\Enums\LifecycleType;
+use App\Infrastructure\Logging\Contracts\LoggerInterface;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use ReflectionClass;
 use ReflectionException;
+use Throwable;
 
 /**
  * Scanner für automatische Service-Registrierung
@@ -27,11 +28,30 @@ class ServiceScanner
     protected ContainerInterface $container;
 
     /**
+     * Konfiguration für Lazy Loading
+     */
+    protected LazyLoadingConfig $lazyLoadingConfig;
+
+    /**
+     * Logger für Benachrichtigungen
+     */
+    protected LoggerInterface $logger;
+
+    /**
      * Konstruktor.
      */
-    public function __construct(ContainerInterface $container)
-    {
+    public function __construct(
+        ContainerInterface $container,
+        ?LazyLoadingConfig $lazyLoadingConfig = null,
+        ?LoggerInterface $logger = null
+    ) {
         $this->container = $container;
+        $this->lazyLoadingConfig = $lazyLoadingConfig ?? new LazyLoadingConfig();
+        try {
+            $this->logger = $logger ?? $container->get(LoggerInterface::class);
+        } catch (Exceptions\NotFoundException|Exceptions\ContainerException) {
+
+        }
     }
 
     /**
@@ -43,9 +63,16 @@ class ServiceScanner
      */
     public function scan(array $directories, string $namespace = ''): void
     {
+        $this->logger->info('ServiceScanner: Starting scan', [
+            'directories' => $directories,
+            'namespace' => $namespace
+        ]);
+
         foreach ($directories as $directory) {
             $this->scanDirectory($directory, $namespace);
         }
+
+        $this->logger->info('ServiceScanner: Scan completed');
     }
 
     /**
@@ -58,26 +85,40 @@ class ServiceScanner
     protected function scanDirectory(string $directory, string $namespace): void
     {
         if (!is_dir($directory)) {
+            $this->logger->warning('ServiceScanner: Directory not found', ['directory' => $directory]);
             return;
         }
+
+        $this->logger->debug('ServiceScanner: Scanning directory', ['directory' => $directory]);
 
         $iterator = new RecursiveIteratorIterator(
             new RecursiveDirectoryIterator($directory)
         );
 
+        $scannedFiles = 0;
+        $registeredServices = 0;
+
         foreach ($iterator as $file) {
             if ($file->isFile() && $file->getExtension() === 'php') {
+                $scannedFiles++;
                 $className = $this->getClassNameFromFile($file->getPathname(), $namespace);
 
                 if ($className) {
                     $this->registerClassIfInjectable($className);
+                    $registeredServices++;
                 }
             }
         }
+
+        $this->logger->info('ServiceScanner: Directory scan completed', [
+            'directory' => $directory,
+            'scanned_files' => $scannedFiles,
+            'registered_services' => $registeredServices
+        ]);
     }
 
     /**
-     * Ermittelt den Klassennamen aus einem Dateipfad.
+     * Ermittelt den Klassennamen aus einem Dateipfad
      *
      * @param string $filePath Der Dateipfad
      * @param string $namespace Der Basis-Namespace
@@ -85,38 +126,55 @@ class ServiceScanner
      */
     protected function getClassNameFromFile(string $filePath, string $namespace): ?string
     {
-        // Extrahiere den Dateinamen ohne .php-Endung
-        $filename = pathinfo($filePath, PATHINFO_FILENAME);
+        $filename = basename($filePath, '.php');
 
-        // Bestimme das Verzeichnis relativ zum Basisverzeichnis
-        $directory = dirname($filePath);
-        $baseDir = dirname($directory) . DIRECTORY_SEPARATOR;
+        // Spezielle Behandlung für den Namespace
+        if ($namespace === 'App\\Presentation' && (
+                str_contains($filePath, '/Presentation/Actions') ||
+                str_contains($filePath, '\\Presentation\\Actions')
+            )) {
+            $path = $filePath;
+            $pathFragments = ['/Actions/Users/', '\\Actions\\Users\\'];
 
-        // Extrahiere den relativen Pfad und normalisiere Pfadtrenner
-        $relativePath = str_replace($baseDir, '', $directory);
+            if (array_any($pathFragments, fn($fragment) => str_contains($path, $fragment))) {
+                $fullClassName = 'App\\Presentation\\Actions\\Users\\' . $filename;
+            } else {
+                $fullClassName = 'App\\Presentation\\Actions\\' . $filename;
+            }
 
-        // Normalisiere alle Pfadtrenner zu PHP-Namespace-Trennern
-        $namespacePath = str_replace([DIRECTORY_SEPARATOR, '/'], '\\', $relativePath);
-
-        // Füge den Pfad zum Namespace hinzu, falls vorhanden
-        $fullNamespace = $namespace;
-        if (!empty($namespacePath)) {
-            $fullNamespace .= '\\' . $namespacePath;
+            if (class_exists($fullClassName)) {
+                return $fullClassName;
+            }
         }
 
-        // Konstruiere den vollständigen Klassennamen
-        $className = $fullNamespace . '\\' . $filename;
+        // Versuche alternativen Ansatz mit PSR-4-Konventionen
+        $srcPos = stripos($filePath, 'src');
+        if ($srcPos !== false) {
+            $pathAfterSrc = substr($filePath, $srcPos + 4);
+            $pathAfterSrc = str_replace(['\\', '/'], '\\', $pathAfterSrc);
+            $pathParts = explode('\\', trim($pathAfterSrc, '\\'));
 
-        // Prüfe, ob die Klasse existiert
-        if (class_exists($className)) {
-            return $className;
+            $lastIndex = count($pathParts) - 1;
+            $pathParts[$lastIndex] = basename($pathParts[$lastIndex], '.php');
+
+            $psr4Namespace = 'App\\' . implode('\\', $pathParts);
+
+            if (class_exists($psr4Namespace)) {
+                return $psr4Namespace;
+            }
+        }
+
+        // Fallback mit ursprünglichem Namespace
+        $classToTry = $namespace . '\\' . $filename;
+        if (class_exists($classToTry)) {
+            return $classToTry;
         }
 
         return null;
     }
 
     /**
-     * Registriert eine Klasse im Container, wenn sie injizierbar ist.
+     * Registriert eine Klasse, wenn sie injizierbar ist
      *
      * @param string $className Der Klassenname
      * @return void
@@ -147,6 +205,10 @@ class ServiceScanner
 
             if ($isHeavyService) {
                 $this->registerLazyService($abstract, $className, $lifecycleType);
+                $this->logger->info('Registered lazy service', [
+                    'service' => $abstract,
+                    'reason' => 'Heavy service detection'
+                ]);
                 return;
             }
 
@@ -156,13 +218,16 @@ class ServiceScanner
                 LifecycleType::Scoped => $this->container->scoped($abstract, $className),
                 LifecycleType::Transient => $this->container->bind($abstract, $className),
             };
-        } catch (ReflectionException) {
-            // Ignoriere Reflection-Fehler und mache mit dem nächsten weiter
+        } catch (ReflectionException $e) {
+            $this->logger->warning('Reflection error during service registration', [
+                'class' => $className,
+                'error' => $e->getMessage()
+            ]);
         }
     }
 
     /**
-     * Ermittelt den Lifecycle-Typ einer Klasse basierend auf ihren Attributen.
+     * Ermittelt den Lifecycle-Typ einer Klasse basierend auf ihren Attributen
      *
      * @param ReflectionClass $reflector
      * @return LifecycleType
@@ -177,33 +242,109 @@ class ServiceScanner
             return LifecycleType::Scoped;
         }
 
-        if (!empty($reflector->getAttributes(Transient::class))) {
-            return LifecycleType::Transient;
-        }
+        return LifecycleType::Transient;
 
         // Standard ist Transient
-        return LifecycleType::Transient;
     }
 
-    // Neue Methode: Erkennt "schwere" Services
+    /**
+     * Prüft, ob ein Service als "schwer" eingestuft werden soll
+     *
+     * @param string $className Der zu prüfende Klassenname
+     * @return bool
+     */
     private function isHeavyService(string $className): bool
     {
-        // Liste von Services, die besonders ressourcenintensiv sind
-        $heavyServices = [
-            // Beispiele für ressourcenintensive Services
-            'App\\Domain\\Services\\StatisticsService',
-            'App\\Infrastructure\\Database\\QueryBuilder',
-            'App\\Infrastructure\\File\\FileManager',
-            // Ergänzen Sie weitere Services nach Bedarf
-        ];
+        // Vorregistrierte schwere Services
+        if (in_array($className, $this->lazyLoadingConfig->heavyServices)) {
+            return true;
+        }
 
-        return in_array($className, $heavyServices);
+        // Optionale automatische Erkennung
+        if (!$this->lazyLoadingConfig->autoDetectHeavyServices) {
+            return false;
+        }
+
+        try {
+            return $this->hasComplexConstructor($className) ||
+                $this->hasHighMemoryFootprint($className) ||
+                $this->hasLongExecutionTime($className);
+        } catch (Throwable $e) {
+            $this->logger->warning('Error detecting heavy service', [
+                'class' => $className,
+                'error' => $e->getMessage()
+            ]);
+            return false;
+        }
     }
 
-// Neue Methode: Registriert einen Lazy-Loading Service
+    /**
+     * Prüft die Komplexität des Konstruktors
+     *
+     * @param string $className Der zu prüfende Klassenname
+     * @return bool
+     */
+    private function hasComplexConstructor(string $className): bool
+    {
+        try {
+            $reflector = new ReflectionClass($className);
+            $constructor = $reflector->getConstructor();
+
+            return $constructor &&
+                $constructor->getNumberOfParameters() > $this->lazyLoadingConfig->constructorParameterThreshold;
+        } catch (ReflectionException) {
+            return false;
+        }
+    }
+
+    /**
+     * Prüft den Speicherbedarf der Klasse
+     *
+     * @param string $className Der zu prüfende Klassenname
+     * @return bool
+     */
+    private function hasHighMemoryFootprint(string $className): bool
+    {
+        $memoryBefore = memory_get_usage();
+        try {
+            $instance = new $className();
+            $memoryAfter = memory_get_usage();
+
+            return ($memoryAfter - $memoryBefore) > $this->lazyLoadingConfig->memoryThreshold;
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * Prüft die Ausführungszeit der Klasse
+     *
+     * @param string $className Der zu prüfende Klassenname
+     * @return bool
+     */
+    private function hasLongExecutionTime(string $className): bool
+    {
+        $startTime = microtime(true);
+        try {
+            $instance = new $className();
+            $duration = microtime(true) - $startTime;
+
+            return $duration > $this->lazyLoadingConfig->executionTimeThreshold;
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * Registriert einen Service für Lazy Loading
+     *
+     * @param string $abstract Abstraktion/Alias des Services
+     * @param string $concrete Konkrete Implementierung
+     * @param LifecycleType $lifecycleType Lifecycle-Typ
+     * @return void
+     */
     private function registerLazyService(string $abstract, string $concrete, LifecycleType $lifecycleType): void
     {
-        // Verwende Closures für Lazy-Loading
         $factory = function ($container) use ($concrete) {
             return $container->makeWith($concrete);
         };
