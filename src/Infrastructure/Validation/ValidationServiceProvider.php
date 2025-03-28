@@ -30,15 +30,20 @@ class ValidationServiceProvider extends ServiceProvider
         $container->singleton(EmailRule::class);
         $container->singleton(NumericRule::class);
 
-        // Erstelle eine Validator-Instanz mit null für die Datenbank
-        $ruleRegistry = $container->get(ValidationRuleRegistry::class);
-        $validator = new Validator($ruleRegistry, $container, null);
+        // Hier kommt die wichtige Änderung:
+        // Statt direkt eine Validator-Instanz zu erstellen,
+        // registrieren wir die Klasse mit einer Closure
+        $container->bind(ValidatorInterface::class, function(ContainerInterface $c) {
+            $ruleRegistry = $c->get(ValidationRuleRegistry::class);
+            return new Validator($ruleRegistry, $c, null);
+        });
 
-        // Binde den Validator direkt als Instanz
-        $container->bind(ValidatorInterface::class, $validator);
-        $container->bind(Validator::class, $validator);
+        // Gleiche Bindung für die konkrete Klasse
+        $container->bind(Validator::class, function(ContainerInterface $c) {
+            return $c->get(ValidatorInterface::class);
+        });
 
-        // Registriere den RequestValidator
+        // Registriere den RequestValidator als Singleton
         $container->singleton(RequestValidator::class);
 
         // Initialisiere das Rule Registry mit Standardregeln
