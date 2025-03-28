@@ -65,8 +65,6 @@ class LazyProxyGenerator
         $reflector = new ReflectionClass($className);
 
         if ($reflector->isInterface() || $reflector->isAbstract()) {
-            // Anstatt eine Exception zu werfen, protokollieren wir die Situation
-            // und werfen eine spezifischere Exception
             throw new RuntimeException(
                 "Kann keinen Proxy für Interface oder abstrakte Klasse erstellen: $className. " .
                 "Verwenden Sie eine konkrete Implementierung."
@@ -74,100 +72,99 @@ class LazyProxyGenerator
         }
 
         $proxyClassName = $this->getProxyClassName($className);
-        $namespacePart = '';
-
-        // Namespace-Code generieren, falls nötig
         $namespace = $reflector->getNamespaceName();
+
+        // Generiere den Code ohne PHP-Tags, um eval() einfacher zu machen
+        $code = "";
+
+        // Namespace und Imports
         if (!empty($namespace)) {
-            $namespacePart = "namespace {$namespace}\\LazyProxies;\n\nuse {$className};\n";
+            $code .= "namespace {$namespace}\\LazyProxies;\n\n";
+            $code .= "use {$className};\n";
         }
 
-        // Methoden des Originals sammeln
-        $methods = [];
-        foreach ($reflector->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
-            if ($method->isConstructor() || $method->isDestructor() || $method->isStatic()) {
-                continue; // Konstruktor/Destruktor/Statische Methoden überspringen
-            }
+        $code .= "use App\\Infrastructure\\Container\\Contracts\\ContainerInterface;\n\n";
 
-            $paramStr = $this->buildMethodParameters($method);
-            $returnType = $method->hasReturnType() ? ': ' . $this->getReturnTypeString($method) : '';
-            $methodName = $method->getName();
+        // Klassendefinition beginnen
+        $code .= "class {$proxyClassName} {\n";
 
-            $methods[] = <<<METHOD
-    public function {$methodName}({$paramStr}){$returnType}
-    {
-        \$this->loadRealInstance();
-        return \$this->realInstance->{$methodName}(...func_get_args());
-    }
-METHOD;
-        }
+        // Properties
+        $code .= "    private ?\$realInstance = null;\n";
+        $code .= "    private string \$className;\n";
+        $code .= "    private ContainerInterface \$container;\n\n";
 
-        // Property-Zugriffe implementieren
-        $properties = [];
+        // Konstruktor
+        $code .= "    public function __construct(ContainerInterface \$container, string \$className) {\n";
+        $code .= "        \$this->container = \$container;\n";
+        $code .= "        \$this->className = \$className;\n";
+        $code .= "    }\n\n";
+
+        // loadRealInstance Methode
+        $code .= "    protected function loadRealInstance(): void {\n";
+        $code .= "        if (\$this->realInstance === null) {\n";
+        $code .= "            \$this->realInstance = \$this->container->get(\$this->className);\n";
+        $code .= "        }\n";
+        $code .= "    }\n\n";
+
+        // Public Properties mit __get und __set Methoden
+        $publicProperties = [];
         foreach ($reflector->getProperties(\ReflectionProperty::IS_PUBLIC) as $property) {
             if ($property->isStatic()) {
                 continue;
             }
 
             $propertyName = $property->getName();
-            $type = $property->hasType() ? $this->getPropertyTypeString($property) : '';
+            $publicProperties[] = $propertyName;
 
-            $properties[] = <<<PROPERTY
-    public {$type} \${$propertyName} {
-        get {
-            \$this->loadRealInstance();
-            return \$this->realInstance->{$propertyName};
-        }
-        set (\$value) {
-            \$this->loadRealInstance();
-            \$this->realInstance->{$propertyName} = \$value;
-        }
-    }
-PROPERTY;
+            $code .= "    private \${$propertyName};\n";
         }
 
-        // Klassen-Code zusammenstellen
-        $proxyCode = <<<CODE
-<?php
+        if (!empty($publicProperties)) {
+            // __get Methode
+            $code .= "\n    public function __get(string \$name) {\n";
+            $code .= "        \$this->loadRealInstance();\n";
+            $code .= "        return \$this->realInstance->{\$name};\n";
+            $code .= "    }\n\n";
 
-{$namespacePart}
-
-use App\Infrastructure\Container\Contracts\ContainerInterface;
-
-/**
- * Auto-generierter Lazy-Loading-Proxy für {$className}
- * @generated
- */
-class {$proxyClassName}
-{
-    private ?object \$realInstance = null;
-    private string \$className;
-    private ContainerInterface \$container;
-
-    public function __construct(ContainerInterface \$container, string \$className)
-    {
-        \$this->container = \$container;
-        \$this->className = \$className;
-    }
-
-    protected function loadRealInstance(): void
-    {
-        if (\$this->realInstance === null) {
-            \$this->realInstance = \$this->container->get(\$this->className);
+            // __set Methode
+            $code .= "    public function __set(string \$name, mixed \$value): void {\n";
+            $code .= "        \$this->loadRealInstance();\n";
+            $code .= "        \$this->realInstance->{\$name} = \$value;\n";
+            $code .= "    }\n\n";
         }
-    }
 
-{$this->indentCode(implode("\n\n", $properties), 4)}
+        // Methoden
+        foreach ($reflector->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
+            if ($method->isConstructor() || $method->isDestructor() || $method->isStatic()) {
+                continue;
+            }
 
-{$this->indentCode(implode("\n\n", $methods), 4)}
-}
-CODE;
+            $methodName = $method->getName();
+            $paramStr = $this->buildMethodParameters($method);
+            $returnType = $method->hasReturnType() ? ': ' . $this->getReturnTypeString($method) : '';
 
-        // Klasse dynamisch definieren
-        eval($proxyCode);
+            $code .= "    public function {$methodName}({$paramStr}){$returnType} {\n";
+            $code .= "        \$this->loadRealInstance();\n";
+            $code .= "        return \$this->realInstance->{$methodName}(...func_get_args());\n";
+            $code .= "    }\n\n";
+        }
 
-        // Code für Debugging-Zwecke speichern
-        $this->proxyCache[$className] = $proxyCode;
+        // Klasse abschließen
+        $code .= "}\n";
+
+        // Jetzt den kompletten Code mit Namespace-Block für eval vorbereiten
+        $fullCode = "<?php\n";
+        if (!empty($namespace)) {
+            $fullCode .= $code;
+        } else {
+            $fullCode .= $code;
+        }
+
+        // Code for debugging
+        $this->proxyCache[$className] = $fullCode;
+        file_put_contents('generated_proxy_debug.php', $fullCode);
+        // Eval the code
+        eval($fullCode);
     }
 
     /**
@@ -245,6 +242,10 @@ CODE;
         }
 
         if ($type instanceof \ReflectionNamedType) {
+            // Vermeidung von ?mixed
+            if ($type->getName() === 'mixed') {
+                return 'mixed';
+            }
             return ($type->allowsNull() ? '?' : '') . $type->getName();
         } elseif ($type instanceof \ReflectionUnionType) {
             $types = [];
@@ -274,6 +275,10 @@ CODE;
         }
 
         if ($returnType instanceof \ReflectionNamedType) {
+            // Hier ist der Fix: Wenn der Typ 'mixed' ist, brauchen wir kein '?'
+            if ($returnType->getName() === 'mixed') {
+                return 'mixed';
+            }
             return ($returnType->allowsNull() ? '?' : '') . $returnType->getName();
         } elseif ($returnType instanceof \ReflectionUnionType) {
             $types = [];
@@ -292,6 +297,7 @@ CODE;
         return '';
     }
 
+
     /**
      * Gibt den Typ-String für eine Property zurück
      */
@@ -303,6 +309,10 @@ CODE;
         }
 
         if ($type instanceof \ReflectionNamedType) {
+            // Vermeidung von ?mixed
+            if ($type->getName() === 'mixed') {
+                return 'mixed';
+            }
             return ($type->allowsNull() ? '?' : '') . $type->getName();
         } elseif ($type instanceof \ReflectionUnionType) {
             $types = [];
