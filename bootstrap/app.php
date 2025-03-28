@@ -38,6 +38,10 @@ $sessionProvider->register($container);
 $validationProvider = new App\Infrastructure\Validation\ValidationServiceProvider();
 $validationProvider->register($container);
 
+// CSRF Service Provider registrieren
+$csrfProvider = new App\Infrastructure\Security\Csrf\CsrfServiceProvider();
+$csrfProvider->register($container);
+
 // Lazy Loading Service Provider registrieren
 $lazyLoadingProvider = new App\Infrastructure\Container\LazyLoadingServiceProvider;
 $lazyLoadingProvider->register($container);

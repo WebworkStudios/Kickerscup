@@ -172,16 +172,23 @@ class Router implements RouterInterface
      * @param string $path Der Pfad mit Parametern
      * @return array Ein Array mit Pattern und Parameter-Informationen
      */
-    protected function extractParameterInfo(string $path): array
+    /**
+     * Extrahiert Parameter-Informationen aus einem Pfad oder einer Domain
+     *
+     * @param string $pattern Der Pfad oder die Domain mit Parametern
+     * @param bool $isDomain Ob es sich um eine Domain handelt
+     * @return array{pattern: string, parameters: array} Ein Array mit Pattern und Parameter-Informationen
+     */
+    protected function extractParameterInfo(string $pattern, bool $isDomain = false): array
     {
         $parameters = [];
-        $pattern = $path;
+        $result = $pattern;
 
         // Parameter im Format {name} oder {name: regex} erkennen
-        if (preg_match_all('#{([^:}]+)(?::([^}]+))?}#', $path, $matches, PREG_SET_ORDER)) {
+        if (preg_match_all('#{([^:}]+)(?::([^}]+))?}#', $pattern, $matches, PREG_SET_ORDER)) {
             foreach ($matches as $match) {
                 $name = $match[1];
-                $regex = $match[2] ?? '[^/]+';
+                $regex = $match[2] ?? ($isDomain ? '[^.]+' : '[^/]+');
 
                 // Speichere Parameter-Informationen
                 $parameters[$name] = [
@@ -190,19 +197,24 @@ class Router implements RouterInterface
                 ];
 
                 // Ersetze Parameter im Pattern mit regulärem Ausdruck
-                $pattern = str_replace(
+                $result = str_replace(
                     $match[0],
                     '(?<' . $name . '>' . $regex . ')',
-                    $pattern
+                    $result
                 );
             }
         }
 
         // Konvertiere den Pfad in ein reguläres Ausdrucksmuster
-        $pattern = '#^' . $pattern . '$#';
+        if ($isDomain) {
+            // Escape Punkten in der Domain und füge Anker hinzu
+            $result = str_replace('.', '\.', $result);
+        }
+
+        $result = '#^' . $result . '$#';
 
         return [
-            'pattern' => $pattern,
+            'pattern' => $result,
             'parameters' => $parameters
         ];
     }
@@ -505,6 +517,10 @@ class Router implements RouterInterface
      * {@inheritdoc}
      * @throws MethodNotAllowedException
      */
+    /**
+     * {@inheritdoc}
+     * @throws MethodNotAllowedException
+     */
     public function match(RequestInterface $request): array|false
     {
         $method = $request->getMethod();
@@ -536,8 +552,8 @@ class Router implements RouterInterface
                         }
 
                         if (str_contains($domainPattern, '{')) {
-                            $domainRegex = $this->createDomainRegex($domainPattern);
-                            if (preg_match($domainRegex, $host) && $this->matchPath($path, $domainRoutes) !== false) {
+                            $domainInfo = $this->extractParameterInfo($domainPattern, true);
+                            if (preg_match($domainInfo['pattern'], $host) && $this->matchPath($path, $domainRoutes) !== false) {
                                 $allowedMethods[] = $routeMethod;
                                 $domainMatched = true;
                                 break;
@@ -594,8 +610,8 @@ class Router implements RouterInterface
             });
 
             foreach ($domainPatterns as $domainPattern) {
-                $domainRegex = $this->createDomainRegex($domainPattern);
-                if (preg_match($domainRegex, $host, $domainMatches)) {
+                $domainInfo = $this->extractParameterInfo($domainPattern, true);
+                if (preg_match($domainInfo['pattern'], $host, $domainMatches)) {
                     $match = $this->matchPath($path, $this->routes[$method][$domainPattern]);
                     if ($match !== false) {
                         // Extrahiere benannte Parameter aus den Domain-Matches
@@ -673,29 +689,6 @@ class Router implements RouterInterface
         );
     }
 
-    /**
-     * Erstellt ein reguläres Ausdrucksmuster für eine Domain-Pattern
-     *
-     * @param string $domainPattern Das Domain-Pattern
-     * @return string Das reguläre Ausdrucksmuster
-     */
-    protected function createDomainRegex(string $domainPattern): string
-    {
-        // Konvertiere das Pattern in einen regulären Ausdruck
-        $pattern = preg_replace_callback(
-            '#{([^:}]+)(?::([^}]+))?}#',
-            function ($matches) {
-                $name = $matches[1];
-                $regex = $matches[2] ?? '[^.]+';
-                return '(?<' . $name . '>' . $regex . ')';
-            },
-            $domainPattern
-        );
-
-        // Escape Punkten in der Domain und füge Anker hinzu
-        $pattern = str_replace('.', '\.', $pattern);
-        return '#^' . $pattern . '$#';
-    }
 
     /**
      * Findet die CSRF-Konfiguration für einen Pfad

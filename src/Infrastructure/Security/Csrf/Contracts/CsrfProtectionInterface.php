@@ -1,52 +1,62 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Infrastructure\Security\Csrf\Contracts;
 
+use App\Infrastructure\Http\Contracts\RequestInterface;
+
+/**
+ * Interface für den CSRF-Schutz
+ */
 interface CsrfProtectionInterface
 {
     /**
-     * Generiert ein CSRF-Token für den angegebenen Verwendungszweck
+     * Generiert ein neues CSRF-Token
      *
-     * @param string $key Schlüssel/Identifikator für das Token (z.B. Formular-ID oder Aktionsname)
-     * @param int|null $lifetime Gültigkeitsdauer in Sekunden (null = kein Timeout)
+     * @param string $key Optionaler Schlüssel zur Identifikation des Tokens
      * @return string Das generierte Token
      */
-    public function generateToken(string $key = 'default', ?int $lifetime = null): string;
+    public function generateToken(string $key = 'default'): string;
 
     /**
      * Validiert ein CSRF-Token
      *
      * @param string $token Das zu validierende Token
-     * @param string $key Schlüssel/Identifikator für das Token
-     * @param bool $removeAfterValidation Ob das Token nach der Validierung entfernt werden soll
-     * @return bool True wenn das Token gültig ist
+     * @param string $key Der Schlüssel des Tokens
+     * @return bool True, wenn das Token gültig ist
      */
-    public function validateToken(string $token, string $key = 'default', bool $removeAfterValidation = true): bool;
+    public function validateToken(string $token, string $key = 'default'): bool;
 
     /**
-     * Generiert ein Token und HTML-Formularfeld
+     * Löscht ein CSRF-Token
      *
-     * @param string $key Schlüssel/Identifikator für das Token
-     * @param int|null $lifetime Gültigkeitsdauer in Sekunden
-     * @return string HTML-Input-Element mit dem Token
+     * @param string $key Der Schlüssel des zu löschenden Tokens
+     * @return bool True, wenn das Token gelöscht wurde
      */
-    public function tokenField(string $key = 'default', ?int $lifetime = null): string;
+    public function removeToken(string $key = 'default'): bool;
 
     /**
-     * Validiert den Ursprung einer Anfrage (Origin/Referer)
+     * Prüft, ob ein Request durch CSRF geschützt werden sollte
      *
-     * @param string|array $allowedOrigins Erlaubte Ursprünge oder Muster
-     * @return bool True wenn der Ursprung gültig ist
+     * @param RequestInterface $request Der zu prüfende Request
+     * @return bool True, wenn der Request geschützt werden sollte
      */
-    public function validateOrigin(string|array $allowedOrigins): bool;
+    public function shouldProtectRequest(RequestInterface $request): bool;
 
     /**
-     * Prüft, ob der aktuelle Request CSRF-geschützt werden sollte
+     * Validiert den Origin-Header des Requests
      *
-     * @return bool
+     * @param array $allowedOrigins Erlaubte Origins (leer = nur die aktuelle Domain)
+     * @return bool True, wenn der Origin gültig ist
      */
-    public function shouldProtectRequest(): bool;
+    public function validateOrigin(array $allowedOrigins = []): bool;
+
+    /**
+     * Gibt ein Input-Feld für das CSRF-Token zurück
+     *
+     * @param string $key Optionaler Schlüssel zur Identifikation des Tokens
+     * @return string HTML-Input-Feld
+     */
+    public function getTokenField(string $key = 'default'): string;
 }

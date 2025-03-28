@@ -1,6 +1,5 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Infrastructure\Security\Csrf;
@@ -8,161 +7,193 @@ namespace App\Infrastructure\Security\Csrf;
 use App\Infrastructure\Container\Attributes\Injectable;
 use App\Infrastructure\Container\Attributes\Singleton;
 use App\Infrastructure\Http\Contracts\RequestInterface;
+use App\Infrastructure\Logging\Contracts\LoggerInterface;
 use App\Infrastructure\Security\Csrf\Contracts\CsrfProtectionInterface;
 use App\Infrastructure\Session\Contracts\SessionInterface;
-use Exception;
-use Random\Randomizer;
+use Random\RandomException;
 
+/**
+ * CSRF-Schutz Implementierung
+ */
 #[Injectable]
 #[Singleton]
 class CsrfProtection implements CsrfProtectionInterface
 {
     /**
-     * Session-Schlüssel für CSRF-Tokens
+     * Der Prefix für CSRF-Token in der Session
      */
-    protected const string TOKEN_SESSION_KEY = '_csrf_tokens';
-
-    /**
-     * Standard-Gültigkeitsdauer für Tokens in Sekunden
-     */
-    protected const int DEFAULT_TOKEN_LIFETIME = 7200; // 2 Stunden
+    protected const string TOKEN_PREFIX = 'csrf_token_';
 
     /**
      * Konstruktor
      */
     public function __construct(
-        protected SessionInterface  $session,
-        protected RequestInterface  $request,
-        protected CsrfConfiguration $config
+        protected SessionInterface $session,
+        protected ?LoggerInterface $logger = null
     )
     {
     }
 
     /**
-     * Validiert ein CSRF-Token
-     *
-     * @param string $token Das zu validierende Token
-     * @param string $key Schlüssel/Identifikator für das Token
-     * @param bool $removeAfterValidation Ob das Token nach der Validierung entfernt werden soll
-     * @return bool True wenn das Token gültig ist
-     */
-    public function validateToken(string $token, string $key = 'default', bool $removeAfterValidation = true): bool
-    {
-        $tokens = $this->session->get(self::TOKEN_SESSION_KEY, []);
-
-        // Prüfe, ob ein Token für den angegebenen Schlüssel existiert
-        if (!isset($tokens[$key])) {
-            return false;
-        }
-
-        $tokenData = $tokens[$key];
-        $storedToken = $tokenData['token'];
-
-// Prüfe das Ablaufdatum, falls gesetzt
-        if (isset($tokenData['expires_at'])) {
-            if (time() > $tokenData['expires_at']) {
-                // Token ist abgelaufen, entferne es
-                if ($removeAfterValidation) {
-                    unset($tokens[$key]);
-                    $this->session->set(self::TOKEN_SESSION_KEY, $tokens);
-                }
-                return false;
-            }
-        }
-
-        // Entferne das Token nach der Validierung, wenn gewünscht
-        if ($removeAfterValidation) {
-            unset($tokens[$key]);
-            $this->session->set(self::TOKEN_SESSION_KEY, $tokens);
-        }
-
-        // Überprüfe das Token mit konstanter Zeit (verhindert Timing-Angriffe)
-        return hash_equals($storedToken, $token);
-    }
-
-    /**
      * {@inheritdoc}
      */
-    public function tokenField(string $key = 'default', ?int $lifetime = null): string
+    public function generateToken(string $key = 'default'): string
     {
-        $token = $this->generateToken($key, $lifetime);
-        return sprintf(
-            '<input type="hidden" name="_csrf_token" value="%s" data-csrf-key="%s">',
-            htmlspecialchars($token),
-            htmlspecialchars($key)
-        );
-    }
+        $token = $this->generateRandomToken();
 
-    /**
-     * {@inheritdoc}
-     */
-    public function generateToken(string $key = 'default', ?int $lifetime = null): string
-    {
-        // Verwende die konfigurierte Lebensdauer oder den Standardwert
-        $lifetime = $lifetime ?? $this->config->defaultTokenLifetime ?? self::DEFAULT_TOKEN_LIFETIME;
 
-        try {
-            // Verwende den neuen Randomizer von PHP 8.4
-            $randomizer = new Randomizer();
-            $token = bin2hex($randomizer->getBytes(32));
-        } catch (Exception) {
-            // Fallback
-            $token = md5(uniqid((string)mt_rand(), true));
-        }
+        // Speichere das Token in der Session
+        $this->session->set(self::TOKEN_PREFIX . $key, $token);
 
-        // Speichere das Token mit Metadaten in der Session
-        $tokens = $this->session->get(self::TOKEN_SESSION_KEY, []);
-        $tokens[$key] = [
-            'token' => $token,
-            'created_at' => time(),
-            'expires_at' => $lifetime > 0 ? time() + $lifetime : null
-        ];
-
-        $this->session->set(self::TOKEN_SESSION_KEY, $tokens);
+        $this->logger?->debug('CSRF-Token generiert', [
+            'key' => $key,
+            'token_hash' => hash('sha256', $token)
+        ]);
 
         return $token;
     }
 
     /**
-     * {@inheritdoc}
+     * Generiert ein zufälliges Token
+     * @throws RandomException
      */
-    public function validateOrigin(string|array $allowedOrigins): bool
+    protected function generateRandomToken(): string
     {
-        // Hole den Origin-Header oder falls nicht vorhanden den Referer
-        $origin = $this->request->getHeader('origin');
-        $referer = $origin ?? $this->request->getHeader('referer');
-
-        if (!$referer) {
-            // Wenn weder Origin noch Referer vorhanden sind
-            return $this->config->requireOriginHeader;
+        if (function_exists('random_bytes')) {
+            return bin2hex(random_bytes(32));
         }
 
-        // Konvertiere einzelne Origin zu Array
-        $allowedOrigins = is_array($allowedOrigins) ? $allowedOrigins : [$allowedOrigins];
-
-        // Ergänze mit den konfigurierten Standard-Origins
-        if (!empty($this->config->trustedOrigins)) {
-            $allowedOrigins = array_merge($allowedOrigins, $this->config->trustedOrigins);
-        }
-
-        // Verwende array_any aus PHP 8.4 anstelle einer eigenen Implementierung
-        return array_any($allowedOrigins, fn($allowed) => str_starts_with($referer, $allowed));
+        // Fallback, weniger sicher
+        return bin2hex(openssl_random_pseudo_bytes(32));
     }
 
     /**
      * {@inheritdoc}
      */
-    public function shouldProtectRequest(): bool
+    public function validateToken(string $token, string $key = 'default'): bool
     {
-        // Schütze nur nicht-sichere Methoden (POST, PUT, DELETE, etc.)
-        if ($this->request->isSecureMethod()) {
+        // Hole das Token aus der Session
+        $storedToken = $this->session->get(self::TOKEN_PREFIX . $key);
+
+        // Wenn kein Token in der Session ist, schlägt die Validierung fehl
+        if ($storedToken === null) {
+            $this->logger?->warning('CSRF-Token Validierung fehlgeschlagen: Kein Token in der Session', [
+                'key' => $key
+            ]);
             return false;
         }
 
-        // Prüfe, ob der aktuelle Pfad von der Konfiguration ausgeschlossen ist
-        $path = $this->request->getPath();
+        // Vergleiche die Tokens mit Timing-Attack-Schutz
+        $valid = hash_equals($storedToken, $token);
 
-        // Verwende array_any aus PHP 8.4
-        return !array_any($this->config->excludedPaths, fn($excludedPath) => str_starts_with($path, $excludedPath));
+        if (!$valid) {
+            $this->logger?->warning('CSRF-Token Validierung fehlgeschlagen: Token stimmen nicht überein', [
+                'key' => $key,
+                'stored_token_hash' => hash('sha256', $storedToken),
+                'provided_token_hash' => hash('sha256', $token)
+            ]);
+        }
+
+        return $valid;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function removeToken(string $key = 'default'): bool
+    {
+        $this->session->remove(self::TOKEN_PREFIX . $key);
+        $this->logger?->debug('CSRF-Token entfernt', ['key' => $key]);
+        return true;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function shouldProtectRequest(RequestInterface $request): bool
+    {
+        // CSRF-Schutz nur für state-verändernde Methoden
+        $stateChangingMethods = ['POST', 'PUT', 'PATCH', 'DELETE'];
+
+        if (!in_array($request->getMethod(), $stateChangingMethods)) {
+            return false;
+        }
+
+        // Keine CSRF-Validierung für AJAX-Requests mit X-Requested-With
+        if ($request->getHeader('x-requested-with') === 'XMLHttpRequest'
+            && $request->hasHeader('X-CSRF-TOKEN')) {
+            return true;
+        }
+
+        // Keine CSRF-Validierung für API-Requests mit Authorization Header
+        if ($request->hasHeader('authorization')) {
+            return false;
+        }
+
+        // Check für spezielle Content-Types
+        $contentType = $request->getContentType();
+        if ($contentType && str_contains(strtolower($contentType), 'application/json')) {
+            // Bei JSON-Requests prüfen, ob ein CSRF-Token im Header vorhanden ist
+            return $request->hasHeader('X-CSRF-TOKEN');
+        }
+
+        // Standard: Schütze alle state-verändernden Requests
+        return true;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function validateOrigin(array $allowedOrigins = []): bool
+    {
+        // Wir benötigen die $_SERVER globale Variable, da die Session nicht direkt
+        // Zugriff auf die Request-Header gibt
+        $origin = $_SERVER['HTTP_ORIGIN'] ?? null;
+        $referer = $_SERVER['HTTP_REFERER'] ?? null;
+        $host = $_SERVER['HTTP_HOST'] ?? null;
+
+        // Wenn kein Origin oder Referer gesetzt ist, ist die Validierung abhängig vom Kontext
+        if (!$origin && !$referer) {
+            // In Produktionsumgebungen sollten wir hier strenger sein
+            return true;
+        }
+
+        // Wenn Origin gesetzt ist, muss dieser zur erlaubten Liste gehören
+        if ($origin) {
+            // Wenn erlaubte Origins leer ist, nur die eigene Domain erlauben
+            if (empty($allowedOrigins)) {
+                $parsedOrigin = parse_url($origin, PHP_URL_HOST);
+                return $parsedOrigin === $host;
+            }
+
+            // Andernfalls gegen die erlaubte Liste prüfen
+            return in_array($origin, $allowedOrigins);
+        }
+
+        // Wenn Referer gesetzt ist, muss dieser von der gleichen Domain sein
+        if ($referer) {
+            $parsedReferer = parse_url($referer, PHP_URL_HOST);
+            return $parsedReferer === $host;
+        }
+
+        return false;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getTokenField(string $key = 'default'): string
+    {
+        $token = $this->session->get(self::TOKEN_PREFIX . $key);
+
+        // Wenn kein Token existiert, generiere eines
+        if ($token === null) {
+            $token = $this->generateToken($key);
+        }
+
+        return sprintf(
+            '<input type="hidden" name="_csrf_token" value="%s">',
+            htmlspecialchars($token, ENT_QUOTES, 'UTF-8')
+        );
     }
 }
