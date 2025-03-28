@@ -6,6 +6,7 @@ namespace App\Infrastructure\Container;
 
 use App\Infrastructure\Container\Config\LazyLoadingConfig;
 use App\Infrastructure\Container\Contracts\ContainerInterface;
+use App\Infrastructure\Container\LazyLoading\LazyProxyGenerator;
 
 class LazyLoadingServiceProvider extends ServiceProvider
 {
@@ -27,6 +28,11 @@ class LazyLoadingServiceProvider extends ServiceProvider
             $config->executionTimeThreshold = 0.1; // 100 Millisekunden
 
             return $config;
+        });
+
+        // Registriere den Proxy-Generator als Singleton
+        $container->singleton(LazyProxyGenerator::class, function(ContainerInterface $c) {
+            return new LazyProxyGenerator($c);
         });
     }
 }

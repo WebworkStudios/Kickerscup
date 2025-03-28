@@ -125,9 +125,10 @@ class RequestValidator
     }
 
     /**
-     * Gibt die Validierungsfehler zurück
+     * Gibt die Validierungsfehler vom letzten Validierungsvorgang zurück
+     * Delegiert direkt an den internen Validator
      *
-     * @return array<string, array<string>>
+     * @return array<string, array<string>> Fehler nach Feld gruppiert
      */
     public function getErrors(): array
     {

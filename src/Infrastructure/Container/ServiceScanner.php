@@ -353,14 +353,40 @@ class ServiceScanner
      */
     private function registerLazyService(string $abstract, string $concrete, LifecycleType $lifecycleType): void
     {
-        $factory = function ($container) use ($concrete) {
-            return $container->makeWith($concrete);
-        };
+        try {
+            // Proxy-Generator verwenden, wenn verfügbar
+            $proxyGenerator = $this->container->get(LazyLoading\LazyProxyGenerator::class);
 
-        match ($lifecycleType) {
-            LifecycleType::Singleton => $this->container->singleton($abstract, $factory),
-            LifecycleType::Scoped => $this->container->scoped($abstract, $factory),
-            LifecycleType::Transient => $this->container->bind($abstract, $factory),
-        };
+            $factory = function ($container) use ($concrete, $proxyGenerator) {
+                return $proxyGenerator->createProxy($concrete);
+            };
+
+            match ($lifecycleType) {
+                LifecycleType::Singleton => $this->container->singleton($abstract, $factory),
+                LifecycleType::Scoped => $this->container->scoped($abstract, $factory),
+                LifecycleType::Transient => $this->container->bind($abstract, $factory),
+            };
+
+            $this->logger->info('Registered lazy service with proxy', [
+                'service' => $abstract,
+                'implementation' => $concrete
+            ]);
+        } catch (Throwable $e) {
+            // Fallback, wenn Proxy-Generator nicht verfügbar ist
+            $this->logger->warning('Failed to create lazy proxy, falling back to closure', [
+                'service' => $abstract,
+                'error' => $e->getMessage()
+            ]);
+
+            $factory = function ($container) use ($concrete) {
+                return $container->makeWith($concrete);
+            };
+
+            match ($lifecycleType) {
+                LifecycleType::Singleton => $this->container->singleton($abstract, $factory),
+                LifecycleType::Scoped => $this->container->scoped($abstract, $factory),
+                LifecycleType::Transient => $this->container->bind($abstract, $factory),
+            };
+        }
     }
 }
