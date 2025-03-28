@@ -91,17 +91,20 @@ class Validator implements ValidatorInterface
         return empty($this->errors);
     }
 
-// Hilfsmethode zur besseren Lesbarkeit
+    /**
+     * @param array $rules
+     * @return bool
+     */
     private function isRulePresent(array $rules): bool
     {
-        foreach ($rules as $rule) {
-            if (is_string($rule) && ($rule === 'required' || str_starts_with($rule, 'required' . ':'))) {
-                return true;
-            } else if (is_array($rule) && ($rule['rule'] ?? '') === 'required') {
-                return true;
+        return array_any($rules, function($rule) {
+            if (is_string($rule)) {
+                return $rule === 'required' || str_starts_with($rule, 'required:');
+            } else if (is_array($rule)) {
+                return ($rule['rule'] ?? '') === 'required';
             }
-        }
-        return false;
+            return false;
+        });
     }
 
 // Hilfsmethode für leere Wertprüfung

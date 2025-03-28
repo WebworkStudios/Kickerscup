@@ -513,14 +513,8 @@ class Router implements RouterInterface
         }
     }
 
-    /**
-     * {@inheritdoc}
-     * @throws MethodNotAllowedException
-     */
-    /**
-     * {@inheritdoc}
-     * @throws MethodNotAllowedException
-     */
+    // src/Infrastructure/Routing/Router.php
+
     public function match(RequestInterface $request): array|false
     {
         $method = $request->getMethod();
@@ -529,46 +523,11 @@ class Router implements RouterInterface
 
         // Prüfe, ob die HTTP-Methode überhaupt registrierte Routen hat
         if (!isset($this->routes[$method])) {
-            // Prüfe, ob der Pfad für andere Methoden existiert
-            $allowedMethods = [];
-
-            foreach (array_keys($this->routes) as $routeMethod) {
-                // Prüfe Domain-spezifische und allgemeine Routen
-                $domainMatched = false;
-
-                // Exakte Domain-Prüfung
-                if ($host !== null && isset($this->routes[$routeMethod][$host])) {
-                    if ($this->matchPath($path, $this->routes[$routeMethod][$host]) !== false) {
-                        $allowedMethods[] = $routeMethod;
-                        $domainMatched = true;
-                    }
-                }
-
-                // Dynamische Domain-Prüfung
-                if ($host !== null && !$domainMatched) {
-                    foreach ($this->routes[$routeMethod] as $domainPattern => $domainRoutes) {
-                        if ($domainPattern === null || $domainPattern === $host) {
-                            continue;
-                        }
-
-                        if (str_contains($domainPattern, '{')) {
-                            $domainInfo = $this->extractParameterInfo($domainPattern, true);
-                            if (preg_match($domainInfo['pattern'], $host) && $this->matchPath($path, $domainRoutes) !== false) {
-                                $allowedMethods[] = $routeMethod;
-                                $domainMatched = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                // Allgemeine Routen-Prüfung (null domain)
-                if (!$domainMatched && isset($this->routes[$routeMethod][null])) {
-                    if ($this->matchPath($path, $this->routes[$routeMethod][null]) !== false) {
-                        $allowedMethods[] = $routeMethod;
-                    }
-                }
-            }
+            // Nutzen von array_keys() und array_any() für effizientere Implementation
+            $allowedMethods = array_filter(
+                array_keys($this->routes),
+                fn($routeMethod) => $this->methodHasMatchingRoute($routeMethod, $path, $host)
+            );
 
             if (!empty($allowedMethods)) {
                 $exception = new MethodNotAllowedException(
@@ -581,12 +540,7 @@ class Router implements RouterInterface
             return false;
         }
 
-        // Strategie für Domain-Matching mit Prioritäten:
-        // 1. Exakte Domain-Übereinstimmung
-        // 2. Dynamische Domain mit Parametern
-        // 3. Domain-unabhängige Routen (null domain)
-
-        // 1. Exakte Domain-Übereinstimmung
+        // Versuche exakte Domain-Übereinstimmung
         if ($host !== null && isset($this->routes[$method][$host])) {
             $match = $this->matchPath($path, $this->routes[$method][$host]);
             if ($match !== false) {
@@ -594,34 +548,28 @@ class Router implements RouterInterface
             }
         }
 
-        // 2. Dynamische Domain-Übereinstimmung
+        // Versuche dynamische Domain-Übereinstimmung
         if ($host !== null) {
-            // Sortiere Domain-Patterns nach Spezifität
             $domainPatterns = array_filter(
                 array_keys($this->routes[$method] ?? []),
-                fn($pattern) => $pattern !== null && $pattern !== $host && str_contains($pattern, '{') !== false
+                fn($pattern) => $pattern !== null && $pattern !== $host && str_contains($pattern, '{')
             );
 
-            // Priorisiere Patterns mit weniger Parametern (spezifischere zuerst)
-            usort($domainPatterns, function ($a, $b) {
-                $aCount = substr_count($a, '{');
-                $bCount = substr_count($b, '{');
-                return $aCount <=> $bCount;
-            });
+            // Sortiere nach Spezifität (weniger Parameter = spezifischer)
+            usort($domainPatterns, fn($a, $b) => substr_count($a, '{') <=> substr_count($b, '{'));
 
             foreach ($domainPatterns as $domainPattern) {
                 $domainInfo = $this->extractParameterInfo($domainPattern, true);
                 if (preg_match($domainInfo['pattern'], $host, $domainMatches)) {
                     $match = $this->matchPath($path, $this->routes[$method][$domainPattern]);
                     if ($match !== false) {
-                        // Extrahiere benannte Parameter aus den Domain-Matches
+                        // Extrahiere benannte Parameter
                         foreach ($domainMatches as $key => $value) {
                             if (is_string($key)) {
                                 $match['parameters'][$key] = $value;
                             }
                         }
 
-                        // Füge die Domain-Informationen zum Match hinzu
                         $match['domain'] = [
                             'pattern' => $domainPattern,
                             'matched' => $host
@@ -633,7 +581,7 @@ class Router implements RouterInterface
             }
         }
 
-        // 3. Domain-unabhängige Routen (null domain)
+        // Domain-unabhängige Routen (null domain)
         if (isset($this->routes[$method][null])) {
             $match = $this->matchPath($path, $this->routes[$method][null]);
             if ($match !== false) {
@@ -642,6 +590,46 @@ class Router implements RouterInterface
         }
 
         return false;
+    }
+
+// Neue Hilfsmethode zur Prüfung, ob eine Methode eine passende Route hat
+    private function methodHasMatchingRoute(string $routeMethod, string $path, ?string $host): bool
+    {
+        // Exakte Domain-Prüfung
+        if ($host !== null && isset($this->routes[$routeMethod][$host])) {
+            if ($this->matchPath($path, $this->routes[$routeMethod][$host]) !== false) {
+                return true;
+            }
+        }
+
+        // Dynamische Domain-Prüfung
+        if ($host !== null) {
+            $hasDynamicMatch = array_any(
+                $this->routes[$routeMethod] ?? [],
+                function($domainRoutes, $domainPattern) use ($host, $path) {
+                    if ($domainPattern === null || $domainPattern === $host) {
+                        return false;
+                    }
+
+                    if (str_contains($domainPattern, '{')) {
+                        $domainInfo = $this->extractParameterInfo($domainPattern, true);
+                        return preg_match($domainInfo['pattern'], $host) &&
+                            $this->matchPath($path, $domainRoutes) !== false;
+                    }
+
+                    return false;
+                },
+                true
+            );
+
+            if ($hasDynamicMatch) {
+                return true;
+            }
+        }
+
+        // Allgemeine Routen-Prüfung (null domain)
+        return isset($this->routes[$routeMethod][null]) &&
+            $this->matchPath($path, $this->routes[$routeMethod][null]) !== false;
     }
 
     /**

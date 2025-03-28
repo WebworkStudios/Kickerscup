@@ -98,6 +98,15 @@ class ReflectionResolver
         }
     }
 
+
+    /**
+     * @param array $parameters
+     * @param array $primitives
+     * @return array
+     * @throws BindingResolutionException
+     * @throws ContainerException
+     * @throws NotFoundException
+     */
     protected function resolveDependencies(array $parameters, array $primitives): array
     {
         $dependencies = [];
@@ -116,52 +125,45 @@ class ReflectionResolver
 
         try {
             foreach ($parameters as $parameter) {
-                // Wenn der Parameter in den übergebenen Parametern enthalten ist, verwende diesen
                 $paramName = $parameter->getName();
+
+                // Verwende direkt array_key_exists statt isset für potentielle NULL-Werte
                 if (array_key_exists($paramName, $primitives)) {
                     $dependencies[] = $primitives[$paramName];
                     continue;
                 }
 
-                // Wenn der Parameter einen Typ hat und dieser ein Klassenname ist
                 $paramType = $parameter->getType();
 
                 if ($paramType !== null && !$paramType->isBuiltin()) {
                     $typeName = $paramType->getName();
-                    // Löse die Abhängigkeit über den Container auf
                     try {
                         $dependencies[] = $this->container->get($typeName);
                         continue;
                     } catch (BindingResolutionException $e) {
-                        // Wenn die Abhängigkeit nicht aufgelöst werden kann und der Parameter optional ist
                         if ($parameter->isDefaultValueAvailable()) {
                             $dependencies[] = $parameter->getDefaultValue();
                             continue;
                         }
-
                         throw $e;
                     }
                 }
 
-                // Wenn der Parameter einen Standardwert hat
                 if ($parameter->isDefaultValueAvailable()) {
                     $dependencies[] = $parameter->getDefaultValue();
                     continue;
                 }
 
-                // Wenn nichts davon zutrifft und der Parameter erlaubt null
                 if ($paramType !== null && $paramType->allowsNull()) {
                     $dependencies[] = null;
                     continue;
                 }
 
-                // Sonst können wir den Parameter nicht auflösen
                 throw new BindingResolutionException(
                     "Konnte Parameter $paramName für Klasse nicht auflösen."
                 );
             }
         } finally {
-            // Stelle sicher, dass die Rekursionstiefe in jedem Fall reduziert wird
             $recursionDepth--;
         }
 

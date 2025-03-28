@@ -241,6 +241,8 @@ class Session implements SessionInterface
     /**
      * {@inheritdoc}
      */
+    // src/Infrastructure/Session/Session.php
+
     public function isValid(): bool
     {
         // Schnelle Prüfungen zuerst
@@ -260,8 +262,38 @@ class Session implements SessionInterface
 
         // Benutzer-Session-Prüfungen nur wenn vorhanden
         if ($this->has(self::USER_SESSION_KEY)) {
-            if (!$this->isUserSessionValid()) {
+            $sessionData = $this->get(self::USER_SESSION_KEY);
+
+            // Prüfe, ob die gespeicherten Daten plausibel sind
+            if (!isset($sessionData['user_id']) || !isset($sessionData['bound_at'])) {
                 return false;
+            }
+
+            // Benutzer-Agent-Prüfung
+            $currentUserAgent = $this->getUserAgent();
+            $storedUserAgent = $sessionData['user_agent'] ?? null;
+
+            if ($storedUserAgent !== null && $currentUserAgent !== null && $storedUserAgent !== $currentUserAgent) {
+                return false;
+            }
+
+            // IP-Prüfung nur wenn konfiguriert
+            if ($this->config->strictIpCheck && isset($sessionData['client_ip'])) {
+                $currentIp = $_SERVER['REMOTE_ADDR'] ?? '';
+                $storedIp = $sessionData['client_ip'];
+
+                // IPv4-Vergleich
+                $currentIpParts = explode('.', $currentIp);
+                $storedIpParts = explode('.', $storedIp);
+
+                if (count($currentIpParts) >= 2 && count($storedIpParts) >= 2) {
+                    if ($currentIpParts[0] !== $storedIpParts[0] || $currentIpParts[1] !== $storedIpParts[1]) {
+                        return false;
+                    }
+                } else {
+                    // IPv6 oder nicht vergleichbar
+                    return false;
+                }
             }
         }
 
