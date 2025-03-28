@@ -258,6 +258,24 @@ class ServiceScanner
      */
     private function isHeavyService(string $className): bool
     {
+        if (in_array($className, $this->lazyLoadingConfig->excludedServices)) {
+            return false;
+        }
+
+        // Überprüfe zuerst, ob es sich um ein Interface oder eine abstrakte Klasse handelt
+        try {
+            $reflector = new ReflectionClass($className);
+            if ($reflector->isInterface() || $reflector->isAbstract()) {
+                return false; // Keine Lazy-Loading für Interfaces oder abstrakte Klassen
+            }
+        } catch (ReflectionException $e) {
+            $this->logger->warning('Error examining class', [
+                'class' => $className,
+                'error' => $e->getMessage()
+            ]);
+            return false;
+        }
+
         // Vorregistrierte schwere Services - schnellster Check zuerst
         if (in_array($className, $this->lazyLoadingConfig->heavyServices)) {
             return true;
@@ -354,6 +372,22 @@ class ServiceScanner
     private function registerLazyService(string $abstract, string $concrete, LifecycleType $lifecycleType): void
     {
         try {
+            // Überprüfe zuerst, ob es sich um ein Interface oder eine abstrakte Klasse handelt
+            $reflector = new ReflectionClass($concrete);
+            if ($reflector->isInterface() || $reflector->isAbstract()) {
+                // Für Interfaces oder abstrakte Klassen direkte Bindung verwenden
+                $this->logger->info('Skipping lazy loading for interface/abstract class', [
+                    'service' => $abstract
+                ]);
+
+                match ($lifecycleType) {
+                    LifecycleType::Singleton => $this->container->singleton($abstract, $concrete),
+                    LifecycleType::Scoped => $this->container->scoped($abstract, $concrete),
+                    LifecycleType::Transient => $this->container->bind($abstract, $concrete),
+                };
+                return;
+            }
+
             // Proxy-Generator verwenden, wenn verfügbar
             $proxyGenerator = $this->container->get(LazyLoading\LazyProxyGenerator::class);
 

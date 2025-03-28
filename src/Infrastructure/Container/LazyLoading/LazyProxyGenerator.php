@@ -65,7 +65,12 @@ class LazyProxyGenerator
         $reflector = new ReflectionClass($className);
 
         if ($reflector->isInterface() || $reflector->isAbstract()) {
-            throw new RuntimeException("Kann keinen Proxy für Interface oder abstrakte Klasse erstellen: $className");
+            // Anstatt eine Exception zu werfen, protokollieren wir die Situation
+            // und werfen eine spezifischere Exception
+            throw new RuntimeException(
+                "Kann keinen Proxy für Interface oder abstrakte Klasse erstellen: $className. " .
+                "Verwenden Sie eine konkrete Implementierung."
+            );
         }
 
         $proxyClassName = $this->getProxyClassName($className);

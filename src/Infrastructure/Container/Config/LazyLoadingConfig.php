@@ -17,6 +17,15 @@ class LazyLoadingConfig
     ];
 
     /**
+     * Liste von Services, die niemals lazy geladen werden sollen
+     *
+     * @var array<string>
+     */
+    public array $excludedServices = [
+        'App\\Infrastructure\\Session\\Contracts\\SessionInterface',
+    ];
+
+    /**
      * Schwellenwert für Speicherbedarf (in Bytes)
      *
      * @var int
