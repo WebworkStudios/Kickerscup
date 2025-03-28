@@ -38,7 +38,6 @@ class Application
         protected ResponseFactoryInterface $responseFactory,
         protected RouterInterface          $router,
         protected ?SessionInterface        $session = null,
-        protected ?LoggerInterface         $logger = null
     )
     {
         // Entferne die direkte Auflösung im Konstruktor, um zirkuläre Abhängigkeiten zu vermeiden
@@ -113,14 +112,21 @@ class Application
      */
     protected function shouldStartSession(RequestInterface $request): bool
     {
-        // Keine Session für API-Anfragen starten
-        if ($request->isJson() || $request->hasHeader('X-Requested-With') === 'XMLHttpRequest') {
+        // Statische Assets nie mit Session belasten
+        $path = $request->getPath();
+        if (preg_match('~^/(assets|images|css|js|favicon\.ico|robots\.txt)~', $path)) {
             return false;
         }
 
-        // Keine Session für bestimmte Pfade starten (z.B. Assets)
-        $path = $request->getPath();
-        if (preg_match('~^/(assets|images|css|js|favicon\.ico)~', $path)) {
+        // API-Anfragen typisicherweise keine Session
+        if ($request->isJson() ||
+            $request->hasHeader('X-Requested-With') === 'XMLHttpRequest' ||
+            $request->hasHeader('X-API-Key')) {
+            return false;
+        }
+
+        // Options-Anfragen (CORS preflight) benötigen keine Session
+        if ($request->getMethod() === 'OPTIONS') {
             return false;
         }
 
@@ -415,13 +421,16 @@ class Application
      */
     private function getLoggerIfNeeded(): ?LoggerInterface
     {
-        if ($this->logger === null && $this->container->has(LoggerInterface::class)) {
+        static $logger = null;
+
+        if ($logger === null && $this->container->has(LoggerInterface::class)) {
             try {
-                $this->logger = $this->container->get(LoggerInterface::class);
+                $logger = $this->container->get(LoggerInterface::class);
             } catch (Throwable) {
-                // Ignoriere Fehler, um zirkuläre Abhängigkeiten zu vermeiden
+                // Fallback auf null
             }
         }
-        return $this->logger;
+
+        return $logger;
     }
 }

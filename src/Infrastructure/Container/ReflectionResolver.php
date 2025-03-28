@@ -101,7 +101,7 @@ class ReflectionResolver
     protected function resolveDependencies(array $parameters, array $primitives): array
     {
         $dependencies = [];
-        $maxRecursionDepth = 50; // Füge eine maximale Rekursionstiefe hinzu
+        $maxRecursionDepth = 50;
 
         static $recursionDepth = 0; // Zähler für Rekursionstiefe
         $recursionDepth++;

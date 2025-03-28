@@ -243,12 +243,12 @@ class Session implements SessionInterface
      */
     public function isValid(): bool
     {
-        // Prüfe, ob die Session gestartet wurde
-        if (!$this->started) {
+        // Schnelle Prüfungen zuerst
+        if (!$this->started || $this->hasAbsoluteLifetimeExpired()) {
             return false;
         }
 
-        // Prüfe den Fingerprint, falls aktiviert
+        // Fingerprint-Prüfung nur wenn aktiviert
         if ($this->config->fingerprintCheck && !$this->validateFingerprint()) {
             return false;
         }
@@ -258,49 +258,57 @@ class Session implements SessionInterface
             return false;
         }
 
-        // Prüfe die absolute Lebensdauer
-        if ($this->hasAbsoluteLifetimeExpired()) {
-            return false;
-        }
-
-        // Prüfe Benutzer-Session
+        // Benutzer-Session-Prüfungen nur wenn vorhanden
         if ($this->has(self::USER_SESSION_KEY)) {
-            // Wenn an einen Benutzer gebunden, führe zusätzliche Validierungen durch
-            $sessionData = $this->get(self::USER_SESSION_KEY);
-
-            // Prüfe, ob die gespeicherten Daten plausibel sind
-            if (!isset($sessionData['user_id']) || !isset($sessionData['bound_at'])) {
+            if (!$this->isUserSessionValid()) {
                 return false;
-            }
-
-            // Prüfe, ob der User-Agent konsistent ist
-            $currentUserAgent = $this->getUserAgent();
-            $storedUserAgent = $sessionData['user_agent'] ?? null;
-
-            if ($storedUserAgent !== null && $currentUserAgent !== null && $storedUserAgent !== $currentUserAgent) {
-                // User-Agent hat sich geändert - potenzielles Sicherheitsrisiko
-                return false;
-            }
-
-            // Optional: IP-Bereichsverifizierung
-            // Hinweis: Dies könnte Probleme für mobile Benutzer verursachen, die zwischen Netzen wechseln
-            if ($this->config->strictIpCheck && isset($sessionData['client_ip'])) {
-                $currentIp = $_SERVER['REMOTE_ADDR'] ?? '';
-                $storedIp = $sessionData['client_ip'];
-
-                // Vergleiche die ersten 2 Oktette für IPv4-Adressen
-                $currentIpParts = explode('.', $currentIp);
-                $storedIpParts = explode('.', $storedIp);
-
-                if (count($currentIpParts) >= 2 && count($storedIpParts) >= 2) {
-                    if ($currentIpParts[0] !== $storedIpParts[0] || $currentIpParts[1] !== $storedIpParts[1]) {
-                        return false;
-                    }
-                }
             }
         }
 
         return true;
+    }
+
+// Neue Methode zur Auslagerung der Benutzer-Session-Prüfung
+    private function isUserSessionValid(): bool
+    {
+        $sessionData = $this->get(self::USER_SESSION_KEY);
+
+        // Prüfe, ob die gespeicherten Daten plausibel sind
+        if (!isset($sessionData['user_id']) || !isset($sessionData['bound_at'])) {
+            return false;
+        }
+
+        // Benutzer-Agent-Prüfung
+        $currentUserAgent = $this->getUserAgent();
+        $storedUserAgent = $sessionData['user_agent'] ?? null;
+
+        if ($storedUserAgent !== null && $currentUserAgent !== null && $storedUserAgent !== $currentUserAgent) {
+            return false;
+        }
+
+        // IP-Prüfung nur wenn konfiguriert
+        if ($this->config->strictIpCheck && isset($sessionData['client_ip'])) {
+            return $this->validateIpAddress($sessionData['client_ip']);
+        }
+
+        return true;
+    }
+
+    private function validateIpAddress(string $storedIp): bool
+    {
+        $currentIp = $_SERVER['REMOTE_ADDR'] ?? '';
+
+        // IPv4-Vergleich
+        $currentIpParts = explode('.', $currentIp);
+        $storedIpParts = explode('.', $storedIp);
+
+        if (count($currentIpParts) >= 2 && count($storedIpParts) >= 2) {
+            return $currentIpParts[0] === $storedIpParts[0] &&
+                $currentIpParts[1] === $storedIpParts[1];
+        }
+
+        // IPv6 oder nicht vergleichbar
+        return false;
     }
 
     /**

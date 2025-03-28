@@ -665,15 +665,12 @@ class Router implements RouterInterface
      */
     protected function extractParameterValues(array $matches, array $parameterInfo): array
     {
-        $parameters = [];
-
-        foreach ($parameterInfo as $name => $info) {
-            if (isset($matches[$name])) {
-                $parameters[$name] = $matches[$name];
-            }
-        }
-
-        return $parameters;
+        // Nutze array_filter für eine effizientere Implementation
+        return array_filter(
+            $matches,
+            fn($key) => is_string($key) && isset($parameterInfo[$key]),
+            ARRAY_FILTER_USE_KEY
+        );
     }
 
     /**

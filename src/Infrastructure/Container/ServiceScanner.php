@@ -258,20 +258,25 @@ class ServiceScanner
      */
     private function isHeavyService(string $className): bool
     {
-        // Vorregistrierte schwere Services
+        // Vorregistrierte schwere Services - schnellster Check zuerst
         if (in_array($className, $this->lazyLoadingConfig->heavyServices)) {
             return true;
         }
 
-        // Optionale automatische Erkennung
+        // Komplexitätsüberprüfung nur ausführen, wenn Auto-Detection aktiviert ist
         if (!$this->lazyLoadingConfig->autoDetectHeavyServices) {
             return false;
         }
 
         try {
-            return $this->hasComplexConstructor($className) ||
-                $this->hasHighMemoryFootprint($className) ||
-                $this->hasLongExecutionTime($className);
+            // Prüfe zuerst Konstruktorkomplexität, da dies am wenigsten Ressourcen benötigt
+            if ($this->hasComplexConstructor($className)) {
+                return true;
+            }
+
+            // Teurere Überprüfungen nur durchführen, wenn notwendig
+            return $this->hasLongExecutionTime($className) ||
+                $this->hasHighMemoryFootprint($className);
         } catch (Throwable $e) {
             $this->logger->warning('Error detecting heavy service', [
                 'class' => $className,

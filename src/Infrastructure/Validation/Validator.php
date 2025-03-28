@@ -53,44 +53,34 @@ class Validator implements ValidatorInterface
     {
         $this->errors = [];
 
-        // Debug: Ausgabe der zu validierenden Daten
-        error_log("Validator data: " . json_encode($data));
-        error_log("Validator rules: " . json_encode($rules));
-
         foreach ($rules as $field => $fieldRules) {
-            // Stelle sicher, dass der Wert existiert, auch wenn er leer ist
-            $value = array_key_exists($field, $data) ? $data[$field] : '';
+            // Ermittle den Feldwert (mit null als Standardwert)
+            $value = $data[$field] ?? null;
 
             // Konvertiere String-Regeln in ein Array
             if (is_string($fieldRules)) {
                 $fieldRules = explode('|', $fieldRules);
             }
 
+            // Prüfe zuerst 'required'-Regel
+            $isRequired = $this->isRulePresent($fieldRules);
+
+            // Wenn nicht required und Wert leer, überspringe weitere Validierungen
+            if (!$isRequired && $this->isEmpty($value)) {
+                continue;
+            }
+
+            // Validiere alle Regeln
             foreach ($fieldRules as $rule) {
-                $ruleName = $rule;
-                $params = [];
+                $ruleName = $this->parseRuleName($rule);
+                $params = $this->parseRuleParams($rule);
 
-                // Behandle Regeln mit Parametern (z.B. max:255)
-                if (is_string($rule) && str_contains($rule, ':')) {
-                    [$ruleName, $paramStr] = explode(':', $rule, 2);
-                    $params = explode(',', $paramStr);
-                } elseif (is_array($rule)) {
-                    // Array-Format: ['rule' => 'max', 'params' => [255]]
-                    $params = $rule['params'] ?? [];
-                    $ruleName = $rule['rule'];
-                }
-
-                // Validierung durchführen und Ergebnis protokollieren
-                $isValid = $this->validateSingle($value, $ruleName, $params, $field);
-                error_log("Validating $field with rule $ruleName: " . ($isValid ? "PASS" : "FAIL"));
-
-                if (!$isValid) {
-                    // Füge die Fehlermeldung hinzu
+                // Wenn Validierung fehlschlägt
+                if (!$this->validateSingle($value, $ruleName, $params, $field)) {
                     $errorMessage = $this->getErrorMessage($field, $ruleName, $params, $value);
                     $this->addError($field, $errorMessage);
-                    error_log("Added error for $field: $errorMessage");
 
-                    // Bei 'required' Validierungen weitere Validierungen für dieses Feld abbrechen
+                    // Bei "required" weitere Regeln überspringen
                     if ($ruleName === 'required') {
                         break;
                     }
@@ -98,13 +88,52 @@ class Validator implements ValidatorInterface
             }
         }
 
-        // Logge das Ergebnis
-        error_log("Validation result: " . (empty($this->errors) ? "PASS" : "FAIL"));
-        if (!empty($this->errors)) {
-            error_log("Validation errors: " . json_encode($this->errors));
-        }
-
         return empty($this->errors);
+    }
+
+// Hilfsmethode zur besseren Lesbarkeit
+    private function isRulePresent(array $rules): bool
+    {
+        foreach ($rules as $rule) {
+            if (is_string($rule) && ($rule === 'required' || str_starts_with($rule, 'required' . ':'))) {
+                return true;
+            } else if (is_array($rule) && ($rule['rule'] ?? '') === 'required') {
+                return true;
+            }
+        }
+        return false;
+    }
+
+// Hilfsmethode für leere Wertprüfung
+    private function isEmpty($value): bool
+    {
+        return $value === null || $value === '' ||
+            (is_string($value) && trim($value) === '') ||
+            (is_array($value) && empty($value));
+    }
+
+// Parst den Regelnamen
+    private function parseRuleName($rule): string
+    {
+        if (is_string($rule)) {
+            return str_contains($rule, ':') ?
+                substr($rule, 0, strpos($rule, ':')) : $rule;
+        } else if (is_array($rule)) {
+            return $rule['rule'] ?? '';
+        }
+        return '';
+    }
+
+// Parst die Regelparameter
+    private function parseRuleParams($rule): array
+    {
+        if (is_string($rule) && str_contains($rule, ':')) {
+            $paramStr = substr($rule, strpos($rule, ':') + 1);
+            return explode(',', $paramStr);
+        } else if (is_array($rule)) {
+            return $rule['params'] ?? [];
+        }
+        return [];
     }
 
     /**
@@ -114,15 +143,13 @@ class Validator implements ValidatorInterface
     {
         // Prüfen, ob es sich um eine benutzerdefinierte Regel handelt
         if (isset($this->customRules[$rule])) {
-            $result = call_user_func($this->customRules[$rule]['callback'], $value, $params, $field);
-            return $result;
+            return call_user_func($this->customRules[$rule]['callback'], $value, $params, $field);
         }
         
         // Prüfen, ob eine interne Validierungsmethode existiert
         $methodName = 'validate' . ucfirst($rule);
         if (method_exists($this, $methodName)) {
-            $result = $this->$methodName($value, $params, $field);
-            return $result;
+            return $this->$methodName($value, $params, $field);
         }
 
         // Versuche, die Regel aus dem Registry zu holen
@@ -155,7 +182,7 @@ class Validator implements ValidatorInterface
             
             // Fallback, falls keine Nachricht gefunden wurde
             if (empty($message)) {
-                $message = "Die Validierung für das Feld :field mit der Regel '{$rule}' ist fehlgeschlagen.";
+                $message = "Die Validierung für das Feld :field mit der Regel '$rule' ist fehlgeschlagen.";
             }
         }
 
@@ -228,7 +255,7 @@ class Validator implements ValidatorInterface
     /**
      * Überprüft, ob der Wert dem angegebenen Format entspricht
      */
-    protected function validateFormat(mixed $value, array $params, string $field): bool
+    protected function validateFormat(mixed $value, array $params): bool
     {
         if (empty($params[0]) || !is_string($value)) {
             return false;
@@ -242,7 +269,7 @@ class Validator implements ValidatorInterface
      * 
      * @throws ValidationException Wenn die Datenbankverbindung nicht verfügbar ist oder Parameter fehlen
      */
-    protected function validateExists(mixed $value, array $params, string $field): bool
+    protected function validateExists(mixed $value, array $params): bool
     {
         if ($this->database === null) {
             throw new ValidationException("Datenbankverbindung für 'exists'-Validierung nicht verfügbar");
@@ -272,7 +299,7 @@ class Validator implements ValidatorInterface
      * 
      * @throws ValidationException Wenn die Datenbankverbindung nicht verfügbar ist oder Parameter fehlen
      */
-    protected function validateUnique(mixed $value, array $params, string $field): bool
+    protected function validateUnique(mixed $value, array $params): bool
     {
         if ($this->database === null) {
             throw new ValidationException("Datenbankverbindung für 'unique'-Validierung nicht verfügbar");

@@ -69,12 +69,15 @@ class FileLogger implements LoggerInterface
         $logLevel = LogLevel::fromString($level);
         $channelLevel = LogLevel::fromString($this->getChannelMinLevel());
 
-        // Prüfe, ob das Log-Level mindestens so hoch ist wie das konfigurierte Minimum für den Kanal
+        // Früher Ausstieg, wenn Log-Level unter dem Minimum
         if (!$logLevel->isAtLeast($channelLevel)) {
             return;
         }
 
+        // Nur einen Pfad-Lookup pro Log-Aufruf durchführen
         $logPath = $this->getChannelLogPath();
+
+        // Formatierung nur durchführen, wenn tatsächlich geloggt wird
         $logEntry = $this->formatLogEntry($level, $message, $context);
 
         $this->writeLogEntry($logPath, $logEntry);
@@ -187,38 +190,29 @@ class FileLogger implements LoggerInterface
      */
     protected function rotateLogFiles(string $logFile): void
     {
-        // Maximale Dateigröße für die Rotation (1 MB)
-        $maxSize = 1024 * 1024;
-
-        if (!file_exists($logFile) || filesize($logFile) < $maxSize) {
+        // Früher Ausstieg, wenn keine Rotation nötig
+        if (!file_exists($logFile) || filesize($logFile) < 1024 * 1024) {
             return;
         }
 
         $maxFiles = $this->config->maxFiles;
 
-        // Entferne die älteste Datei, wenn die maximale Anzahl erreicht ist
-        $oldestLogFile = $logFile . '.' . $maxFiles;
-        if (file_exists($oldestLogFile)) {
-            unlink($oldestLogFile);
-        }
+        // Führe Rotation in einer einzigen Operation durch
+        for ($i = $maxFiles; $i >= 1; $i--) {
+            $currentFile = $i === 1 ? $logFile : $logFile . '.' . ($i - 1);
+            $newFile = $logFile . '.' . $i;
 
-        // Verschiebe vorhandene Logdateien
-        for ($i = $maxFiles - 1; $i >= 1; $i--) {
-            $oldFile = $logFile . '.' . $i;
-            $newFile = $logFile . '.' . ($i + 1);
+            if ($i === $maxFiles && file_exists($newFile)) {
+                unlink($newFile); // Älteste Datei entfernen
+            }
 
-            if (file_exists($oldFile)) {
-                rename($oldFile, $newFile);
+            if (file_exists($currentFile)) {
+                rename($currentFile, $newFile);
             }
         }
 
-        // Verschiebe aktuelle Logdatei
-        rename($logFile, $logFile . '.1');
-
-        // Erstelle neue leere Logdatei
+        // Erstelle neue leere Logdatei mit korrekten Berechtigungen
         touch($logFile);
-
-        // Setze Berechtigungen
         chmod($logFile, $this->getFilePermissions());
     }
 
