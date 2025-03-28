@@ -5,27 +5,29 @@ declare(strict_types=1);
 namespace App\Presentation\Actions;
 
 use App\Infrastructure\Container\Attributes\Injectable;
-use App\Infrastructure\Container\Contracts\ContainerInterface;
 use App\Infrastructure\Http\Contracts\RequestInterface;
 use App\Infrastructure\Http\Contracts\ResponseFactoryInterface;
 use App\Infrastructure\Http\Contracts\ResponseInterface;
 use App\Infrastructure\Routing\Attributes\Get;
 use App\Infrastructure\Routing\Attributes\Post;
-use App\Infrastructure\Security\Csrf\Contracts\CsrfProtectionInterface;
-use App\Infrastructure\Session\Contracts\FlashMessageInterface;
-use App\Infrastructure\Session\Contracts\SessionInterface;
-use App\Infrastructure\Validation\RequestValidator;
 use App\Infrastructure\Validation\ValidationException;
 
 #[Injectable]
 class TestFormAction
 {
+    // Konstanten für Session-Keys
+    private const string CSRF_TOKEN = 'manual_csrf_token';
+    private const string ERRORS_KEY = 'manual_form_errors';
+    private const string SUCCESS_KEY = 'manual_form_success';
+    private const string OLD_INPUT_KEY = 'manual_form_input';
+
     public function __construct(
-        protected ResponseFactoryInterface $responseFactory,
-        protected SessionInterface $session,
-        protected RequestValidator $validator,
-        protected ContainerInterface $container
+        private readonly ResponseFactoryInterface $responseFactory
     ) {
+        // Starten Sie die Session, falls noch nicht gestartet
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            session_start();
+        }
     }
 
     /**
@@ -34,16 +36,21 @@ class TestFormAction
     #[Get('/test/form', 'test.form')]
     public function showForm(RequestInterface $request): ResponseInterface
     {
-        // CSRF-Service aus dem Container holen
-        $csrfService = $this->container->get(CsrfProtectionInterface::class);
+        // CSRF-Token manuell generieren und in der Session speichern
+        if (!isset($_SESSION[self::CSRF_TOKEN])) {
+            $_SESSION[self::CSRF_TOKEN] = bin2hex(random_bytes(32));
+        }
+        $csrfToken = $_SESSION[self::CSRF_TOKEN];
 
-        // Token generieren
-        $csrfToken = $csrfService->generateToken();
+        // Daten aus der Session lesen
+        $errors = $_SESSION[self::ERRORS_KEY] ?? [];
+        $success = $_SESSION[self::SUCCESS_KEY] ?? null;
+        $oldInput = $_SESSION[self::OLD_INPUT_KEY] ?? [];
 
-        // Flash-Nachrichten holen
-        $errors = $flashMessage->get('errors', []);
-        $success = $flashMessage->get('success');
-        $oldInput = $flashMessage->get('old', []);
+        // Nach dem Lesen aus der Session löschen
+        unset($_SESSION[self::ERRORS_KEY]);
+        unset($_SESSION[self::SUCCESS_KEY]);
+        unset($_SESSION[self::OLD_INPUT_KEY]);
 
         // HTML für das Formular generieren
         $html = $this->renderForm($oldInput, $errors, $success, $csrfToken);
@@ -57,49 +64,58 @@ class TestFormAction
     #[Post('/test/form', 'test.form.submit')]
     public function handleForm(RequestInterface $request): ResponseInterface
     {
-        // Validierungsregeln definieren
-        $rules = [
-            'name' => 'required',
-            'email' => 'required|email',
-            'age' => 'numeric'
-        ];
+        // CSRF-Token überprüfen
+        $submittedToken = $request->getPostParam('_csrf_token');
+        $storedToken = $_SESSION[self::CSRF_TOKEN] ?? '';
 
-        // FlashMessage direkt aus dem Container holen
-        $flashMessage = $this->container->get(FlashMessageInterface::class);
-
-        try {
-            // Validierung durchführen
-            $isValid = $this->validator->validate($request, $rules, true);
-
-            // Wenn die Validierung erfolgreich ist
-            $name = $request->getPostParam('name', 'Besucher');
-            $message = "Formular erfolgreich gesendet! Hallo $name!";
-
-            // Flash-Nachricht direkt über FlashMessage setzen
-            $flashMessage->add('success', $message);
-
-            // Session-Daten sichern
-            $this->session->flush();
-
-            // Redirect zurück zum Formular
-            return $this->responseFactory->createRedirect('/test/form');
-
-        } catch (ValidationException $e) {
-            // Flash-Nachrichten direkt über FlashMessage setzen
-            $flashMessage->add('errors', $e->getErrors());
-
-            // Eingabedaten speichern
-            $flashMessage->add('old', array_merge(
-                $request->getQueryParams(),
-                $request->getPostData()
-            ));
-
-            // Session-Daten sichern
-            $this->session->flush();
-
-            // Redirect zurück zum Formular
+        if (empty($submittedToken) || $submittedToken !== $storedToken) {
+            $_SESSION[self::ERRORS_KEY] = ['global' => ['CSRF-Token ist ungültig. Bitte laden Sie die Seite neu.']];
             return $this->responseFactory->createRedirect('/test/form');
         }
+
+        // Manuelle Validierung durchführen
+        $name = $request->getPostParam('name', '');
+        $email = $request->getPostParam('email', '');
+        $age = $request->getPostParam('age', '');
+
+        $errors = [];
+
+        // Name validieren
+        if (empty($name)) {
+            $errors['name'] = ['Name ist erforderlich.'];
+        }
+
+        // Email validieren
+        if (empty($email)) {
+            $errors['email'] = ['E-Mail ist erforderlich.'];
+        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $errors['email'] = ['Bitte geben Sie eine gültige E-Mail-Adresse ein.'];
+        }
+
+        // Age validieren (falls vorhanden)
+        if (!empty($age) && !is_numeric($age)) {
+            $errors['age'] = ['Alter muss eine Zahl sein.'];
+        }
+
+        // Eingabedaten für den Fall eines Fehlers speichern
+        $inputData = [
+            'name' => $name,
+            'email' => $email,
+            'age' => $age
+        ];
+
+        // Bei Fehlern
+        if (!empty($errors)) {
+            $_SESSION[self::ERRORS_KEY] = $errors;
+            $_SESSION[self::OLD_INPUT_KEY] = $inputData;
+            return $this->responseFactory->createRedirect('/test/form');
+        }
+
+        // Bei erfolgreicher Validierung
+        $_SESSION[self::SUCCESS_KEY] = "Formular erfolgreich gesendet! Hallo $name!";
+
+        // Redirect zurück zum Formular
+        return $this->responseFactory->createRedirect('/test/form');
     }
 
     /**
@@ -124,18 +140,15 @@ class TestFormAction
         }
 
         // Globale Fehler anzeigen
-        if (!empty($errors) && is_array($errors)) {
+        if (!empty($errors)) {
             $alertHtml .= '<div style="background-color: #f8d7da; color: #721c24; padding: 10px; border-radius: 5px; margin-bottom: 15px;">
                 <strong>Fehler im Formular:</strong>
                 <ul style="margin-top: 5px; margin-bottom: 0;">';
 
-            foreach ($errors as $field => $fieldErrors) {
-                if (is_array($fieldErrors)) {
-                    foreach ($fieldErrors as $error) {
-                        $alertHtml .= '<li>' . htmlspecialchars($error) . '</li>';
-                    }
-                } else {
-                    $alertHtml .= '<li>' . htmlspecialchars((string)$fieldErrors) . '</li>';
+            // Zeige globale Fehler
+            if (isset($errors['global'])) {
+                foreach ($errors['global'] as $error) {
+                    $alertHtml .= '<li>' . htmlspecialchars($error) . '</li>';
                 }
             }
 
@@ -147,10 +160,10 @@ class TestFormAction
         $emailValue = isset($oldInput['email']) ? htmlspecialchars($oldInput['email']) : '';
         $ageValue = isset($oldInput['age']) ? htmlspecialchars($oldInput['age']) : '';
 
-        // Fehlermeldungen für die Felder rendern
-        $nameErrors = $this->renderErrors($errors, 'name');
-        $emailErrors = $this->renderErrors($errors, 'email');
-        $ageErrors = $this->renderErrors($errors, 'age');
+        // Fehlermeldungen für die Felder
+        $nameErrors = isset($errors['name']) ? $this->renderFieldErrors($errors['name']) : '';
+        $emailErrors = isset($errors['email']) ? $this->renderFieldErrors($errors['email']) : '';
+        $ageErrors = isset($errors['age']) ? $this->renderFieldErrors($errors['age']) : '';
 
         // Formular HTML
         $html = '<!DOCTYPE html>
@@ -246,9 +259,9 @@ class TestFormAction
                 <h3>Session-Inhalt:</h3>
                 <pre>' . htmlspecialchars(print_r($_SESSION ?? [], true)) . '</pre>
                 
-                <h3>Flash-Nachrichten in der Session:</h3>
+                <h3>Aktuelle Formular-Werte:</h3>
                 <pre>Errors: ' . htmlspecialchars(print_r($errors, true)) . '</pre>
-                <pre>Success: ' . htmlspecialchars(print_r($success, true)) . '</pre>
+                <pre>Success: ' . htmlspecialchars($success ?? '') . '</pre>
                 <pre>Old Input: ' . htmlspecialchars(print_r($oldInput, true)) . '</pre>
                 
                 <h3>Request-Daten:</h3>
@@ -263,17 +276,12 @@ class TestFormAction
     /**
      * Rendert Fehlermeldungen für ein Feld
      */
-    private function renderErrors(array $errors, string $field): string
+    private function renderFieldErrors(array $errors): string
     {
-        if (!isset($errors[$field])) {
-            return '';
+        $html = '';
+        foreach ($errors as $error) {
+            $html .= '<div class="error">' . htmlspecialchars($error) . '</div>';
         }
-
-        $errorHtml = '';
-        foreach ($errors[$field] as $error) {
-            $errorHtml .= '<div class="error">' . htmlspecialchars($error) . '</div>';
-        }
-
-        return $errorHtml;
+        return $html;
     }
 }
