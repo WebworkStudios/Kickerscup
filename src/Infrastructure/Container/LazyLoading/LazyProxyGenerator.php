@@ -7,8 +7,6 @@ namespace App\Infrastructure\Container\LazyLoading;
 use App\Infrastructure\Container\Contracts\ContainerInterface;
 use App\Infrastructure\Logging\Contracts\LoggerInterface;
 use ReflectionClass;
-use ReflectionMethod;
-use ReflectionParameter;
 use RuntimeException;
 
 /**
@@ -33,8 +31,9 @@ class LazyProxyGenerator
      */
     public function __construct(
         private readonly ContainerInterface $container,
-        private readonly ?LoggerInterface $logger = null
-    ) {
+        private readonly ?LoggerInterface   $logger = null
+    )
+    {
     }
 
     /**
@@ -68,7 +67,7 @@ class LazyProxyGenerator
         }
 
         // Erstelle Factory-Closure
-        $this->proxyFactories[$className] = function(ContainerInterface $container, string $targetClass) use ($className) {
+        $this->proxyFactories[$className] = function (ContainerInterface $container, string $targetClass) use ($className) {
             return new LazyProxyBase($container, $targetClass);
         };
 

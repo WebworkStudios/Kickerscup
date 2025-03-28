@@ -18,7 +18,7 @@ class LazyLoadingServiceProvider extends ServiceProvider
     public function register(ContainerInterface $container): void
     {
         // Registriere die Standard-Lazy-Loading-Konfiguration
-        $container->singleton(LazyLoadingConfig::class, function() {
+        $container->singleton(LazyLoadingConfig::class, function () {
             $config = new LazyLoadingConfig();
 
             // Statische Konfiguration ohne Umgebungsvariablen
@@ -31,7 +31,7 @@ class LazyLoadingServiceProvider extends ServiceProvider
         });
 
         // Registriere den Proxy-Generator als Singleton
-        $container->singleton(LazyProxyGenerator::class, function(ContainerInterface $c) {
+        $container->singleton(LazyProxyGenerator::class, function (ContainerInterface $c) {
             return new LazyProxyGenerator($c);
         });
     }

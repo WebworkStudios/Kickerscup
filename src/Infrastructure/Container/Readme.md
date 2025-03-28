@@ -2,7 +2,9 @@
 
 ## Übersicht
 
-Diese Implementierung bietet einen leistungsfähigen, flexiblen Dependency Injection Container für PHP 8.4 Anwendungen. Der Container ermöglicht die Verwaltung von Abhängigkeiten, automatische Auflösung von Typen sowie verschiedene Lebensdauer-Optionen für Services.
+Diese Implementierung bietet einen leistungsfähigen, flexiblen Dependency Injection Container für PHP 8.4 Anwendungen.
+Der Container ermöglicht die Verwaltung von Abhängigkeiten, automatische Auflösung von Typen sowie verschiedene
+Lebensdauer-Optionen für Services.
 
 ## Funktionen
 
@@ -18,7 +20,8 @@ Diese Implementierung bietet einen leistungsfähigen, flexiblen Dependency Injec
 
 ## Installation
 
-Um den Container in deinem Projekt zu verwenden, kopiere den Code in dein Projekt und stelle sicher, dass PHP 8.4 oder höher verfügbar ist.
+Um den Container in deinem Projekt zu verwenden, kopiere den Code in dein Projekt und stelle sicher, dass PHP 8.4 oder
+höher verfügbar ist.
 
 ## Grundlegende Verwendung
 

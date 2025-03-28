@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace App\Presentation\Actions;
 
 use App\Infrastructure\Container\Attributes\Injectable;
+use App\Infrastructure\Container\Contracts\ContainerInterface;
 use App\Infrastructure\Http\Contracts\RequestInterface;
 use App\Infrastructure\Http\Contracts\ResponseFactoryInterface;
 use App\Infrastructure\Http\Contracts\ResponseInterface;
 use App\Infrastructure\Routing\Attributes\Get;
 use App\Infrastructure\Routing\Attributes\Post;
+use App\Infrastructure\Security\Csrf\Contracts\CsrfProtectionInterface;
+use App\Infrastructure\Session\Contracts\FlashMessageInterface;
 use App\Infrastructure\Session\Contracts\SessionInterface;
 use App\Infrastructure\Validation\RequestValidator;
 use App\Infrastructure\Validation\ValidationException;
@@ -20,7 +23,8 @@ class TestFormAction
     public function __construct(
         protected ResponseFactoryInterface $responseFactory,
         protected SessionInterface $session,
-        protected RequestValidator $validator
+        protected RequestValidator $validator,
+        protected ContainerInterface $container
     ) {
     }
 
@@ -30,13 +34,19 @@ class TestFormAction
     #[Get('/test/form', 'test.form')]
     public function showForm(RequestInterface $request): ResponseInterface
     {
-        // Flash-Nachrichten für Fehler oder Erfolg aus der Session holen
-        $errors = $this->session->getFlash('errors', []);
-        $success = $this->session->getFlash('success');
-        $oldInput = $this->session->getFlash('old', []);
+        // CSRF-Service aus dem Container holen
+        $csrfService = $this->container->get(CsrfProtectionInterface::class);
+
+        // Token generieren
+        $csrfToken = $csrfService->generateToken();
+
+        // Flash-Nachrichten holen
+        $errors = $flashMessage->get('errors', []);
+        $success = $flashMessage->get('success');
+        $oldInput = $flashMessage->get('old', []);
 
         // HTML für das Formular generieren
-        $html = $this->renderForm($oldInput, $errors, $success);
+        $html = $this->renderForm($oldInput, $errors, $success, $csrfToken);
 
         return $this->responseFactory->createHtml($html);
     }
@@ -54,28 +64,38 @@ class TestFormAction
             'age' => 'numeric'
         ];
 
+        // FlashMessage direkt aus dem Container holen
+        $flashMessage = $this->container->get(FlashMessageInterface::class);
+
         try {
             // Validierung durchführen
             $isValid = $this->validator->validate($request, $rules, true);
 
-            // Wenn die Validierung erfolgreich ist (Exception würde geworfen werden, wenn nicht)
-            $this->session->flash('success', 'Das Formular wurde erfolgreich validiert!');
+            // Wenn die Validierung erfolgreich ist
+            $name = $request->getPostParam('name', 'Besucher');
+            $message = "Formular erfolgreich gesendet! Hallo $name!";
 
-            // Hier könnte man weitere Verarbeitung der Daten durchführen
-            // z.B. Speichern in einer Datenbank
+            // Flash-Nachricht direkt über FlashMessage setzen
+            $flashMessage->add('success', $message);
+
+            // Session-Daten sichern
+            $this->session->flush();
 
             // Redirect zurück zum Formular
             return $this->responseFactory->createRedirect('/test/form');
 
         } catch (ValidationException $e) {
-            // Fehler in die Session für die nächste Anfrage speichern
-            $this->session->flash('errors', $e->getErrors());
+            // Flash-Nachrichten direkt über FlashMessage setzen
+            $flashMessage->add('errors', $e->getErrors());
 
-            // Eingabedaten in die Session für die nächste Anfrage speichern
-            $this->session->flash('old', array_merge(
+            // Eingabedaten speichern
+            $flashMessage->add('old', array_merge(
                 $request->getQueryParams(),
                 $request->getPostData()
             ));
+
+            // Session-Daten sichern
+            $this->session->flush();
 
             // Redirect zurück zum Formular
             return $this->responseFactory->createRedirect('/test/form');
@@ -85,17 +105,41 @@ class TestFormAction
     /**
      * Rendert das HTML-Formular
      */
-    private function renderForm(array $oldInput = [], array $errors = [], ?string $success = null): string
+    private function renderForm(array $oldInput = [], array $errors = [], ?string $success = null, string $csrfToken = ''): string
     {
-        // Token für CSRF-Schutz
-        $csrfToken = $this->session->get('_csrf_token', '');
+        // Session-Status überprüfen
+        $sessionStatus = '';
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $sessionStatus = '<p style="color: green;">Session aktiv (ID: ' . session_id() . ')</p>';
+        } else {
+            $sessionStatus = '<p style="color: red;">Keine aktive Session!</p>';
+        }
 
         // Erfolgs- oder Fehlermeldungen anzeigen
         $alertHtml = '';
         if ($success) {
-            $alertHtml = '<div style="background-color: #d4edda; color: #155724; padding: 10px; border-radius: 5px; margin-bottom: 15px;">' .
-                $success .
+            $alertHtml .= '<div style="background-color: #d4edda; color: #155724; padding: 10px; border-radius: 5px; margin-bottom: 15px;">' .
+                htmlspecialchars($success) .
                 '</div>';
+        }
+
+        // Globale Fehler anzeigen
+        if (!empty($errors) && is_array($errors)) {
+            $alertHtml .= '<div style="background-color: #f8d7da; color: #721c24; padding: 10px; border-radius: 5px; margin-bottom: 15px;">
+                <strong>Fehler im Formular:</strong>
+                <ul style="margin-top: 5px; margin-bottom: 0;">';
+
+            foreach ($errors as $field => $fieldErrors) {
+                if (is_array($fieldErrors)) {
+                    foreach ($fieldErrors as $error) {
+                        $alertHtml .= '<li>' . htmlspecialchars($error) . '</li>';
+                    }
+                } else {
+                    $alertHtml .= '<li>' . htmlspecialchars((string)$fieldErrors) . '</li>';
+                }
+            }
+
+            $alertHtml .= '</ul></div>';
         }
 
         // Formularfeld-Werte vorbereiten
@@ -109,8 +153,8 @@ class TestFormAction
         $ageErrors = $this->renderErrors($errors, 'age');
 
         // Formular HTML
-        return '<!DOCTYPE html>
-        <html lang="">
+        $html = '<!DOCTYPE html>
+        <html lang="de">
         <head>
             <title>Test Formular</title>
             <meta charset="UTF-8">
@@ -153,6 +197,17 @@ class TestFormAction
                 button:hover {
                     background-color: #45a049;
                 }
+                .debug-panel {
+                    margin-top: 30px;
+                    border-top: 1px solid #ddd;
+                    padding-top: 15px;
+                }
+                .debug-panel pre {
+                    background-color: #f8f9fa;
+                    padding: 10px;
+                    border-radius: 4px;
+                    overflow: auto;
+                }
             </style>
         </head>
         <body>
@@ -184,8 +239,25 @@ class TestFormAction
                 
                 <button type="submit">Absenden</button>
             </form>
+            
+            <div class="debug-panel">
+                <h2>Debug-Informationen</h2>
+                ' . $sessionStatus . '
+                <h3>Session-Inhalt:</h3>
+                <pre>' . htmlspecialchars(print_r($_SESSION ?? [], true)) . '</pre>
+                
+                <h3>Flash-Nachrichten in der Session:</h3>
+                <pre>Errors: ' . htmlspecialchars(print_r($errors, true)) . '</pre>
+                <pre>Success: ' . htmlspecialchars(print_r($success, true)) . '</pre>
+                <pre>Old Input: ' . htmlspecialchars(print_r($oldInput, true)) . '</pre>
+                
+                <h3>Request-Daten:</h3>
+                <pre>POST: ' . htmlspecialchars(print_r($_POST, true)) . '</pre>
+            </div>
         </body>
         </html>';
+
+        return $html;
     }
 
     /**

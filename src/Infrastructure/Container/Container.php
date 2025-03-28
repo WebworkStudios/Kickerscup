@@ -153,21 +153,6 @@ class Container implements ContainerInterface
 
         return $this->addBinding($abstract, $concrete, shared: false, scoped: false);
     }
-    /**
-     * {@inheritdoc}
-     */
-    public function singleton(string $abstract, mixed $concrete = null): static
-    {
-        return $this->addBinding($abstract, $concrete, shared: true, scoped: false);
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function scoped(string $abstract, mixed $concrete = null): static
-    {
-        return $this->addBinding($abstract, $concrete, shared: false, scoped: true);
-    }
 
     /**
      * Fügt eine Bindung zum Container hinzu.
@@ -187,6 +172,22 @@ class Container implements ContainerInterface
         ];
 
         return $this;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function singleton(string $abstract, mixed $concrete = null): static
+    {
+        return $this->addBinding($abstract, $concrete, shared: true, scoped: false);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function scoped(string $abstract, mixed $concrete = null): static
+    {
+        return $this->addBinding($abstract, $concrete, shared: false, scoped: true);
     }
 
     /**
@@ -306,6 +307,24 @@ class Container implements ContainerInterface
     }
 
     /**
+     * Loggt eine erkannte zirkuläre Abhängigkeit
+     *
+     * @param string $abstract Der Typ, der die zirkuläre Abhängigkeit verursacht
+     * @return void
+     */
+    protected function logCircularDependency(string $abstract): void
+    {
+        try {
+            $this->logger?->error('Circular dependency detected', [
+                'stack' => $this->resolutionStack,
+                'current' => $abstract
+            ]);
+        } catch (Throwable) {
+            error_log('Circular dependency: ' . implode(' -> ', $this->resolutionStack) . " -> $abstract");
+        }
+    }
+
+    /**
      * Versucht, eine Instanz für den gegebenen Typ zu erhalten oder zu erstellen.
      *
      * @param string $abstract Typ oder Identifier
@@ -367,7 +386,7 @@ class Container implements ContainerInterface
     {
         // Prüfe auf Bindung
         $binding = $this->bindings[$abstract] ?? null;
-        
+
         // Wenn keine Bindung existiert, versuche, den Typ direkt aufzulösen
         if ($binding === null) {
             if (class_exists($abstract)) {
@@ -382,33 +401,15 @@ class Container implements ContainerInterface
         // Wenn die konkrete Implementierung ein Closure ist, führe es aus
         if ($concrete instanceof Closure) {
             return $concrete($this, $parameters);
-        } 
-        
+        }
+
         // Wenn die konkrete Implementierung ein anderer Typ ist, löse diesen rekursiv auf
         if (is_string($concrete) && $concrete !== $abstract) {
             return $this->resolve($concrete, $parameters);
-        } 
-        
+        }
+
         // Sonst versuche, den Typ via Reflection aufzulösen
         return $this->reflectionResolver->resolve($concrete, $parameters);
-    }
-
-    /**
-     * Loggt eine erkannte zirkuläre Abhängigkeit
-     *
-     * @param string $abstract Der Typ, der die zirkuläre Abhängigkeit verursacht
-     * @return void
-     */
-    protected function logCircularDependency(string $abstract): void
-    {
-        try {
-            $this->logger?->error('Circular dependency detected', [
-                'stack' => $this->resolutionStack,
-                'current' => $abstract
-            ]);
-        } catch (Throwable) {
-            error_log('Circular dependency: ' . implode(' -> ', $this->resolutionStack) . " -> $abstract");
-        }
     }
 
     /**

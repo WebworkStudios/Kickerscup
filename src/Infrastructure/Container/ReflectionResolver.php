@@ -11,7 +11,6 @@ use App\Infrastructure\Container\Exceptions\ContainerException;
 use App\Infrastructure\Container\Exceptions\NotFoundException;
 use ReflectionClass;
 use ReflectionException;
-use ReflectionParameter;
 
 /**
  * Resolver für Dependency Injection mittels Reflection
@@ -25,7 +24,6 @@ class ReflectionResolver
 
     protected array $reflectionCache = [];
     protected array $parameterCache = [];
-
 
 
     /**

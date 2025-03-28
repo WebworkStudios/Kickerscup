@@ -21,10 +21,10 @@ readonly class CsrfProtection
      * @param array $allowedOrigins Erlaubte Origins (leer = nur die aktuelle Domain)
      */
     public function __construct(
-        public bool $enabled = true,
+        public bool   $enabled = true,
         public string $tokenKey = 'default',
-        public bool $validateOrigin = true,
-        public array $allowedOrigins = [],
+        public bool   $validateOrigin = true,
+        public array  $allowedOrigins = [],
     )
     {
     }

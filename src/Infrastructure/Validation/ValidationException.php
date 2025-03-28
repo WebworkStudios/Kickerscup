@@ -29,31 +29,10 @@ class ValidationException extends RuntimeException
         int        $code = 0,
         ?Throwable $previous = null,
         array      $errors = []
-    ) {
+    )
+    {
         parent::__construct($message, $code, $previous);
         $this->errors = $errors;
-    }
-
-    /**
-     * Setzt die Validierungsfehler
-     *
-     * @param array<string, array<string>> $errors Die Validierungsfehler
-     * @return $this
-     */
-    public function setErrors(array $errors): self
-    {
-        $this->errors = $errors;
-        return $this;
-    }
-
-    /**
-     * Gibt die Validierungsfehler zurück
-     *
-     * @return array<string, array<string>> Die Validierungsfehler
-     */
-    public function getErrors(): array
-    {
-        return $this->errors;
     }
 
     /**
@@ -68,5 +47,27 @@ class ValidationException extends RuntimeException
         $exception = new self($message);
         $exception->setErrors($errors);
         return $exception;
+    }
+
+    /**
+     * Gibt die Validierungsfehler zurück
+     *
+     * @return array<string, array<string>> Die Validierungsfehler
+     */
+    public function getErrors(): array
+    {
+        return $this->errors;
+    }
+
+    /**
+     * Setzt die Validierungsfehler
+     *
+     * @param array<string, array<string>> $errors Die Validierungsfehler
+     * @return $this
+     */
+    public function setErrors(array $errors): self
+    {
+        $this->errors = $errors;
+        return $this;
     }
 }

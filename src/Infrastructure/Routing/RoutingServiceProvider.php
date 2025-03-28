@@ -61,6 +61,7 @@ class RoutingServiceProvider extends ServiceProvider
         // Beispielhafte Konfiguration von Standard-Fehler-Handlern
         $this->configureDefaultErrorHandlers($router, $container);
     }
+
     /**
      * Konfiguriert Standard-Fehler-Handler für den Router
      *

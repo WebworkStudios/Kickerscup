@@ -43,8 +43,9 @@ class ServiceScanner
     public function __construct(
         ContainerInterface $container,
         ?LazyLoadingConfig $lazyLoadingConfig = null,
-        ?LoggerInterface $logger = null
-    ) {
+        ?LoggerInterface   $logger = null
+    )
+    {
         $this->container = $container;
         $this->lazyLoadingConfig = $lazyLoadingConfig ?? new LazyLoadingConfig();
         try {
@@ -324,25 +325,6 @@ class ServiceScanner
     }
 
     /**
-     * Prüft den Speicherbedarf der Klasse
-     *
-     * @param string $className Der zu prüfende Klassenname
-     * @return bool
-     */
-    private function hasHighMemoryFootprint(string $className): bool
-    {
-        $memoryBefore = memory_get_usage();
-        try {
-            $instance = new $className();
-            $memoryAfter = memory_get_usage();
-
-            return ($memoryAfter - $memoryBefore) > $this->lazyLoadingConfig->memoryThreshold;
-        } catch (Throwable) {
-            return false;
-        }
-    }
-
-    /**
      * Prüft die Ausführungszeit der Klasse
      *
      * @param string $className Der zu prüfende Klassenname
@@ -356,6 +338,25 @@ class ServiceScanner
             $duration = microtime(true) - $startTime;
 
             return $duration > $this->lazyLoadingConfig->executionTimeThreshold;
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * Prüft den Speicherbedarf der Klasse
+     *
+     * @param string $className Der zu prüfende Klassenname
+     * @return bool
+     */
+    private function hasHighMemoryFootprint(string $className): bool
+    {
+        $memoryBefore = memory_get_usage();
+        try {
+            $instance = new $className();
+            $memoryAfter = memory_get_usage();
+
+            return ($memoryAfter - $memoryBefore) > $this->lazyLoadingConfig->memoryThreshold;
         } catch (Throwable) {
             return false;
         }

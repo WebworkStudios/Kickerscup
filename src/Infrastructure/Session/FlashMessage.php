@@ -28,6 +28,7 @@ class FlashMessage implements FlashMessageInterface
     {
         $_SESSION[self::FLASH_KEY] ??= [];
         $_SESSION[self::FLASH_NEW] ??= [];
+        $this->load();
     }
 
     /**

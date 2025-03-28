@@ -23,6 +23,14 @@ class LazyProxyBase
     }
 
     /**
+     * Leitet alle Methodenaufrufe an die echte Instanz weiter
+     */
+    public function __call(string $name, array $arguments): mixed
+    {
+        return $this->loadRealInstance()->$name(...$arguments);
+    }
+
+    /**
      * Lädt die echte Instanz, falls nötig
      */
     private function loadRealInstance(): object
@@ -32,14 +40,6 @@ class LazyProxyBase
         }
 
         return $this->realInstance;
-    }
-
-    /**
-     * Leitet alle Methodenaufrufe an die echte Instanz weiter
-     */
-    public function __call(string $name, array $arguments): mixed
-    {
-        return $this->loadRealInstance()->$name(...$arguments);
     }
 
     /**

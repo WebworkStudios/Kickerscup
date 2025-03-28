@@ -38,8 +38,8 @@ class ValidationRuleRegistry
     protected function registerDefaultRules(): void
     {
         $this->registerRule('required', RequiredRule::class)
-             ->registerRule('email', EmailRule::class)
-             ->registerRule('numeric', NumericRule::class);
+            ->registerRule('email', EmailRule::class)
+            ->registerRule('numeric', NumericRule::class);
         // ... weitere Regeln
     }
 
@@ -74,17 +74,6 @@ class ValidationRuleRegistry
     }
 
     /**
-     * Gibt eine Instanz einer Regel zurück
-     *
-     * @param string $name Name der Regel
-     * @return ValidationRuleInterface|null Die Regelinstanz oder null
-     */
-    public function getRule(string $name): ?ValidationRuleInterface
-    {
-        return $this->rules[$name] ?? null;
-    }
-
-    /**
      * Prüft, ob eine Regel existiert
      *
      * @param string $name Name der Regel
@@ -97,7 +86,7 @@ class ValidationRuleRegistry
 
     /**
      * Gibt alle registrierten Regeln zurück
-     * 
+     *
      * @return array<string, ValidationRuleInterface>
      */
     public function getAllRules(): array
@@ -120,5 +109,16 @@ class ValidationRuleRegistry
         }
 
         return "Das Feld :field hat die Validierung '$name' nicht bestanden.";
+    }
+
+    /**
+     * Gibt eine Instanz einer Regel zurück
+     *
+     * @param string $name Name der Regel
+     * @return ValidationRuleInterface|null Die Regelinstanz oder null
+     */
+    public function getRule(string $name): ?ValidationRuleInterface
+    {
+        return $this->rules[$name] ?? null;
     }
 }

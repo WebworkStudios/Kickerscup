@@ -23,8 +23,8 @@ class LazyLoadingConfig
      */
     public array $excludedServices = [
         'App\\Infrastructure\\Session\\Contracts\\SessionInterface',
+        'App\\Infrastructure\\Session\\Session',
     ];
-
     /**
      * Schwellenwert für Speicherbedarf (in Bytes)
      *

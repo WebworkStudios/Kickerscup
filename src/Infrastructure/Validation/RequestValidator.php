@@ -115,27 +115,6 @@ class RequestValidator
     }
 
     /**
-     * Gibt den Validator zurück
-     *
-     * @return ValidatorInterface
-     */
-    public function getValidator(): ValidatorInterface
-    {
-        return $this->validator;
-    }
-
-    /**
-     * Gibt die Validierungsfehler vom letzten Validierungsvorgang zurück
-     * Delegiert direkt an den internen Validator
-     *
-     * @return array<string, array<string>> Fehler nach Feld gruppiert
-     */
-    public function getErrors(): array
-    {
-        return $this->validator->getErrors();
-    }
-
-    /**
      * Extrahiert das CSRF-Token aus dem Request
      *
      * @param RequestInterface $request Der HTTP-Request
@@ -162,5 +141,26 @@ class RequestValidator
         }
 
         return null;
+    }
+
+    /**
+     * Gibt die Validierungsfehler vom letzten Validierungsvorgang zurück
+     * Delegiert direkt an den internen Validator
+     *
+     * @return array<string, array<string>> Fehler nach Feld gruppiert
+     */
+    public function getErrors(): array
+    {
+        return $this->validator->getErrors();
+    }
+
+    /**
+     * Gibt den Validator zurück
+     *
+     * @return ValidatorInterface
+     */
+    public function getValidator(): ValidatorInterface
+    {
+        return $this->validator;
     }
 }

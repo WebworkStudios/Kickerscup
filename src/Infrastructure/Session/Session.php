@@ -128,11 +128,6 @@ class Session implements SessionInterface
         return $this->started;
     }
 
-    public function isStarted(): bool
-    {
-        return $this->started; // oder entsprechender Status
-    }
-
     /**
      * Konfiguriert die PHP-Session mit den Einstellungen aus der Konfiguration
      */
@@ -238,10 +233,7 @@ class Session implements SessionInterface
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    // src/Infrastructure/Session/Session.php
+
 
     public function isValid(): bool
     {
@@ -300,49 +292,10 @@ class Session implements SessionInterface
         return true;
     }
 
-// Neue Methode zur Auslagerung der Benutzer-Session-Prüfung
-    private function isUserSessionValid(): bool
-    {
-        $sessionData = $this->get(self::USER_SESSION_KEY);
-
-        // Prüfe, ob die gespeicherten Daten plausibel sind
-        if (!isset($sessionData['user_id']) || !isset($sessionData['bound_at'])) {
-            return false;
-        }
-
-        // Benutzer-Agent-Prüfung
-        $currentUserAgent = $this->getUserAgent();
-        $storedUserAgent = $sessionData['user_agent'] ?? null;
-
-        if ($storedUserAgent !== null && $currentUserAgent !== null && $storedUserAgent !== $currentUserAgent) {
-            return false;
-        }
-
-        // IP-Prüfung nur wenn konfiguriert
-        if ($this->config->strictIpCheck && isset($sessionData['client_ip'])) {
-            return $this->validateIpAddress($sessionData['client_ip']);
-        }
-
-        return true;
-    }
-
-    private function validateIpAddress(string $storedIp): bool
-    {
-        $currentIp = $_SERVER['REMOTE_ADDR'] ?? '';
-
-        // IPv4-Vergleich
-        $currentIpParts = explode('.', $currentIp);
-        $storedIpParts = explode('.', $storedIp);
-
-        if (count($currentIpParts) >= 2 && count($storedIpParts) >= 2) {
-            return $currentIpParts[0] === $storedIpParts[0] &&
-                $currentIpParts[1] === $storedIpParts[1];
-        }
-
-        // IPv6 oder nicht vergleichbar
-        return false;
-    }
-
+    /**
+     * {@inheritdoc}
+     */
+    // src/Infrastructure/Session/Session.php
     /**
      * {@inheritdoc}
      */
@@ -357,6 +310,8 @@ class Session implements SessionInterface
 
         return hash_equals($storedFingerprint, $currentFingerprint);
     }
+
+// Neue Methode zur Auslagerung der Benutzer-Session-Prüfung
 
     /**
      * {@inheritdoc}
@@ -500,6 +455,11 @@ class Session implements SessionInterface
         return session_regenerate_id($deleteOldSession);
     }
 
+    public function isStarted(): bool
+    {
+        return $this->started; // oder entsprechender Status
+    }
+
     /**
      * {@inheritdoc}
      */
@@ -580,8 +540,6 @@ class Session implements SessionInterface
         return $_SESSION;
     }
 
-    // Neue Methode zum Überprüfen der absoluten Lebensdauer
-
     /**
      * @return bool
      */
@@ -630,6 +588,8 @@ class Session implements SessionInterface
 
         return $this;
     }
+
+    // Neue Methode zum Überprüfen der absoluten Lebensdauer
 
     /**
      * {@inheritdoc}
@@ -701,5 +661,47 @@ class Session implements SessionInterface
         }
 
         return [];
+    }
+
+    private function isUserSessionValid(): bool
+    {
+        $sessionData = $this->get(self::USER_SESSION_KEY);
+
+        // Prüfe, ob die gespeicherten Daten plausibel sind
+        if (!isset($sessionData['user_id']) || !isset($sessionData['bound_at'])) {
+            return false;
+        }
+
+        // Benutzer-Agent-Prüfung
+        $currentUserAgent = $this->getUserAgent();
+        $storedUserAgent = $sessionData['user_agent'] ?? null;
+
+        if ($storedUserAgent !== null && $currentUserAgent !== null && $storedUserAgent !== $currentUserAgent) {
+            return false;
+        }
+
+        // IP-Prüfung nur wenn konfiguriert
+        if ($this->config->strictIpCheck && isset($sessionData['client_ip'])) {
+            return $this->validateIpAddress($sessionData['client_ip']);
+        }
+
+        return true;
+    }
+
+    private function validateIpAddress(string $storedIp): bool
+    {
+        $currentIp = $_SERVER['REMOTE_ADDR'] ?? '';
+
+        // IPv4-Vergleich
+        $currentIpParts = explode('.', $currentIp);
+        $storedIpParts = explode('.', $storedIp);
+
+        if (count($currentIpParts) >= 2 && count($storedIpParts) >= 2) {
+            return $currentIpParts[0] === $storedIpParts[0] &&
+                $currentIpParts[1] === $storedIpParts[1];
+        }
+
+        // IPv6 oder nicht vergleichbar
+        return false;
     }
 }

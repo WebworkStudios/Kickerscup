@@ -606,7 +606,7 @@ class Router implements RouterInterface
         if ($host !== null) {
             $hasDynamicMatch = array_any(
                 $this->routes[$routeMethod] ?? [],
-                function($domainRoutes, $domainPattern) use ($host, $path) {
+                function ($domainRoutes, $domainPattern) use ($host, $path) {
                     if ($domainPattern === null || $domainPattern === $host) {
                         return false;
                     }

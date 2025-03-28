@@ -105,6 +105,26 @@ class Application
     }
 
     /**
+     * Lädt den Logger bei Bedarf
+     *
+     * @return LoggerInterface|null
+     */
+    private function getLoggerIfNeeded(): ?LoggerInterface
+    {
+        static $logger = null;
+
+        if ($logger === null && $this->container->has(LoggerInterface::class)) {
+            try {
+                $logger = $this->container->get(LoggerInterface::class);
+            } catch (Throwable) {
+                // Fallback auf null
+            }
+        }
+
+        return $logger;
+    }
+
+    /**
      * Bestimmt, ob die Session für diesen Request gestartet werden soll
      *
      * @param RequestInterface $request
@@ -134,6 +154,132 @@ class Application
     }
 
     /**
+     * Lädt die Session bei Bedarf
+     *
+     * @return SessionInterface|null
+     */
+    private function getSessionIfNeeded(): ?SessionInterface
+    {
+        if ($this->session === null && $this->container->has(SessionInterface::class)) {
+            try {
+                $this->session = $this->container->get(SessionInterface::class);
+            } catch (Throwable) {
+                // Ignoriere Fehler, um zirkuläre Abhängigkeiten zu vermeiden
+            }
+        }
+        return $this->session;
+    }
+
+    /**
+     * Prüft, ob der Request validiert werden sollte
+     *
+     * @param RequestInterface $request
+     * @return bool
+     */
+    protected function shouldValidateRequest(RequestInterface $request): bool
+    {
+        // Nur POST, PUT, PATCH Requests validieren, aber nur wenn es
+        // einen entsprechenden Route-Handler gibt
+        if (!in_array($request->getMethod(), ['POST', 'PUT', 'PATCH'])) {
+            return false;
+        }
+
+        // Match-Informationen über die Route holen
+        $match = $this->router->match($request);
+        if (!$match || !isset($match['route']['handler'])) {
+            return false;
+        }
+
+        // Validation nur durchführen, wenn Regeln vorhanden
+        $rules = $this->getValidationRules($request);
+        return !empty($rules);
+    }
+
+
+
+    protected function getValidationRules(RequestInterface $request): array
+    {
+        $route = $this->router->match($request);
+        if ($route && isset($route['route']['handler'])) {
+            $handler = $route['route']['handler'];
+
+            // Prüfe, ob der Handler ein Objekt oder eine Klasse ist
+            if (is_object($handler) && method_exists($handler, 'getValidationRules')) {
+                return $handler->getValidationRules();
+            }
+
+            // Prüfe, ob der Handler ein Array [Controller, Methode] ist
+            if (is_array($handler) && count($handler) === 2) {
+                if (is_object($handler[0]) && method_exists($handler[0], 'getValidationRules')) {
+                    return $handler[0]->getValidationRules();
+                } else if (is_string($handler[0]) && method_exists($handler[0], 'getValidationRules')) {
+                    try {
+                        $controller = $this->container->get($handler[0]);
+                        if (method_exists($controller, 'getValidationRules')) {
+                            return $controller->getValidationRules();
+                        }
+                    } catch (Throwable) {
+                        // Ignore resolution errors
+                    }
+                }
+            }
+
+            // Prüfe, ob der Handler ein String (Klassenname) ist
+            if (is_string($handler) && class_exists($handler) && method_exists($handler, 'getValidationRules')) {
+                try {
+                    $instance = $this->container->get($handler);
+                    return $instance->getValidationRules();
+                } catch (Throwable) {
+                    // Ignore resolution errors
+                }
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * Prüft, ob der Request validiert werden sollte
+     *
+     * @param RequestInterface $request
+     * @return bool
+     */
+// src/Infrastructure/Application/Application.php
+
+    /**
+     * Validiert den Request
+     *
+     * @param RequestInterface $request
+     * @throws ContainerException
+     * @throws NotFoundException
+     */
+    protected function validateRequest(RequestInterface $request): void
+    {
+        // Validator aus dem Container holen
+        $validator = $this->container->get(ValidatorInterface::class);
+
+        // Validierungsregeln basierend auf Route oder Controller ermitteln
+        $rules = $this->getValidationRules($request);
+
+        if (empty($rules)) {
+            return; // Keine Regeln, keine Validierung notwendig
+        }
+
+        // Daten für die Validierung sammeln
+        $data = array_merge(
+            $request->getQueryParams(),
+            $request->getPostData()
+        );
+
+        // Daten validieren
+        $isValid = $validator->validate($data, $rules);
+
+        if (!$isValid) {
+            throw new ValidationException('Validation failed', 0, null, $validator->getErrors());
+        }
+    }
+
+    /**
      * Behandelt Ausnahmen, die während der Verarbeitung auftreten
      *
      * @param Throwable $e Die aufgetretene Ausnahme
@@ -160,6 +306,14 @@ class Application
         return $this->createExceptionResponse($e, $request);
     }
 
+    /**
+     * Ermittelt die Validierungsregeln für den Request
+     *
+     * @param RequestInterface $request
+     * @return array<string, string|array<string>>
+     */
+    // src/Infrastructure/Application/Application.php
+// Korrigieren wir die getValidationRules-Methode, Zeile ~306
     /**
      * Verarbeitet eine eingehende Anfrage mit einem benutzerdefinierten Request-Objekt
      *
@@ -227,143 +381,6 @@ class Application
     }
 
     /**
-     * Liefert eine sichere Fehlermeldung basierend auf der Umgebung
-     *
-     * @param Throwable $e Die Exception
-     * @return string Die sichere Fehlermeldung
-     * @throws ContainerException
-     * @throws NotFoundException
-     */
-    protected function getSafeExceptionMessage(Throwable $e): string
-    {
-        // In der Produktionsumgebung nur generische Fehlermeldungen anzeigen
-        $isProduction = $this->container->get('config')->get('app.env') === 'production';
-
-        if ($isProduction) {
-            return 'Ein unerwarteter Fehler ist aufgetreten.';
-        }
-
-        // In anderen Umgebungen die tatsächliche Fehlermeldung zurückgeben
-        return $e->getMessage();
-    }
-
-    /**
-     * Prüft, ob der Request validiert werden sollte
-     *
-     * @param RequestInterface $request
-     * @return bool
-     */
-// src/Infrastructure/Application/Application.php
-
-    /**
-     * Prüft, ob der Request validiert werden sollte
-     *
-     * @param RequestInterface $request
-     * @return bool
-     */
-    protected function shouldValidateRequest(RequestInterface $request): bool
-    {
-        // Nur POST, PUT, PATCH Requests validieren, aber nur wenn es
-        // einen entsprechenden Route-Handler gibt
-        if (!in_array($request->getMethod(), ['POST', 'PUT', 'PATCH'])) {
-            return false;
-        }
-
-        // Match-Informationen über die Route holen
-        $match = $this->router->match($request);
-        if (!$match || !isset($match['route']['handler'])) {
-            return false;
-        }
-
-        // Validation nur durchführen, wenn Regeln vorhanden
-        $rules = $this->getValidationRules($request);
-        return !empty($rules);
-    }
-
-    /**
-     * Validiert den Request
-     *
-     * @param RequestInterface $request
-     * @throws ContainerException
-     * @throws NotFoundException
-     */
-    protected function validateRequest(RequestInterface $request): void
-    {
-        // Validator aus dem Container holen
-        $validator = $this->container->get(ValidatorInterface::class);
-
-        // Validierungsregeln basierend auf Route oder Controller ermitteln
-        $rules = $this->getValidationRules($request);
-
-        if (empty($rules)) {
-            return; // Keine Regeln, keine Validierung notwendig
-        }
-
-        // Daten für die Validierung sammeln
-        $data = array_merge(
-            $request->getQueryParams(),
-            $request->getPostData()
-        );
-
-        // Daten validieren
-        $isValid = $validator->validate($data, $rules);
-
-        if (!$isValid) {
-            throw new ValidationException('Validation failed', 0, null, $validator->getErrors());
-        }
-    }
-
-    /**
-     * Ermittelt die Validierungsregeln für den Request
-     *
-     * @param RequestInterface $request
-     * @return array<string, string|array<string>>
-     */
-    // src/Infrastructure/Application/Application.php
-// Korrigieren wir die getValidationRules-Methode, Zeile ~306
-
-    protected function getValidationRules(RequestInterface $request): array
-    {
-        $route = $this->router->match($request);
-        if ($route && isset($route['route']['handler'])) {
-            $handler = $route['route']['handler'];
-
-            // Prüfe, ob der Handler ein Objekt oder eine Klasse ist
-            if (is_object($handler) && method_exists($handler, 'getValidationRules')) {
-                return $handler->getValidationRules();
-            }
-
-            // Prüfe, ob der Handler ein Array [Controller, Methode] ist
-            if (is_array($handler) && count($handler) === 2) {
-                if (is_object($handler[0]) && method_exists($handler[0], 'getValidationRules')) {
-                    return $handler[0]->getValidationRules();
-                } else if (is_string($handler[0]) && method_exists($handler[0], 'getValidationRules')) {
-                    try {
-                        $controller = $this->container->get($handler[0]);
-                        if (method_exists($controller, 'getValidationRules')) {
-                            return $controller->getValidationRules();
-                        }
-                    } catch (Throwable) {
-                        // Ignore resolution errors
-                    }
-                }
-            }
-
-            // Prüfe, ob der Handler ein String (Klassenname) ist
-            if (is_string($handler) && class_exists($handler) && method_exists($handler, 'getValidationRules')) {
-                try {
-                    $instance = $this->container->get($handler);
-                    return $instance->getValidationRules();
-                } catch (Throwable) {
-                    // Ignore resolution errors
-                }
-            }
-        }
-
-        return [];
-    }
-
-    /**
      * Behandelt Validierungsfehler
      *
      * @param ValidationException $exception
@@ -398,39 +415,23 @@ class Application
     }
 
     /**
-     * Lädt die Session bei Bedarf
+     * Liefert eine sichere Fehlermeldung basierend auf der Umgebung
      *
-     * @return SessionInterface|null
+     * @param Throwable $e Die Exception
+     * @return string Die sichere Fehlermeldung
+     * @throws ContainerException
+     * @throws NotFoundException
      */
-    private function getSessionIfNeeded(): ?SessionInterface
+    protected function getSafeExceptionMessage(Throwable $e): string
     {
-        if ($this->session === null && $this->container->has(SessionInterface::class)) {
-            try {
-                $this->session = $this->container->get(SessionInterface::class);
-            } catch (Throwable) {
-                // Ignoriere Fehler, um zirkuläre Abhängigkeiten zu vermeiden
-            }
-        }
-        return $this->session;
-    }
+        // In der Produktionsumgebung nur generische Fehlermeldungen anzeigen
+        $isProduction = $this->container->get('config')->get('app.env') === 'production';
 
-    /**
-     * Lädt den Logger bei Bedarf
-     *
-     * @return LoggerInterface|null
-     */
-    private function getLoggerIfNeeded(): ?LoggerInterface
-    {
-        static $logger = null;
-
-        if ($logger === null && $this->container->has(LoggerInterface::class)) {
-            try {
-                $logger = $this->container->get(LoggerInterface::class);
-            } catch (Throwable) {
-                // Fallback auf null
-            }
+        if ($isProduction) {
+            return 'Ein unerwarteter Fehler ist aufgetreten.';
         }
 
-        return $logger;
+        // In anderen Umgebungen die tatsächliche Fehlermeldung zurückgeben
+        return $e->getMessage();
     }
 }

@@ -176,7 +176,13 @@ class Validator implements ValidatorInterface
     }
 
     /**
-     * {@inheritdoc}
+     * Validiert einen Wert gegen die Regel
+     *
+     * @param mixed $value Der zu validierende Wert
+     * @param string $rule Die anzuwendende Regel
+     * @param array $params Parameter für die Regel
+     * @param string $field Name des Feldes (für Fehlermeldungen)
+     * @return bool True, wenn die Validierung erfolgreich ist
      */
     public function validateSingle(mixed $value, string $rule, array $params = [], string $field = ''): bool
     {
@@ -200,6 +206,13 @@ class Validator implements ValidatorInterface
         // Prüfe, ob eine interne Validierungsmethode existiert
         $methodName = 'validate' . ucfirst($rule);
         if (method_exists($this, $methodName)) {
+            if ($rule === 'exists' || $rule === 'unique') {
+                // Bei Datenbankregeln prüfen, ob die Datenbank verfügbar ist
+                if ($this->database === null) {
+                    throw new ValidationException("Datenbankverbindung für '$rule'-Validierung nicht verfügbar");
+                }
+            }
+
             return $this->$methodName($value, $params, $field);
         }
 

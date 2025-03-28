@@ -37,39 +37,6 @@ class CsrfProtection implements CsrfProtectionInterface
     /**
      * {@inheritdoc}
      */
-    public function generateToken(string $key = 'default'): string
-    {
-        $token = $this->generateRandomToken();
-
-
-        // Speichere das Token in der Session
-        $this->session->set(self::TOKEN_PREFIX . $key, $token);
-
-        $this->logger?->debug('CSRF-Token generiert', [
-            'key' => $key,
-            'token_hash' => hash('sha256', $token)
-        ]);
-
-        return $token;
-    }
-
-    /**
-     * Generiert ein zufälliges Token
-     * @throws RandomException
-     */
-    protected function generateRandomToken(): string
-    {
-        if (function_exists('random_bytes')) {
-            return bin2hex(random_bytes(32));
-        }
-
-        // Fallback, weniger sicher
-        return bin2hex(openssl_random_pseudo_bytes(32));
-    }
-
-    /**
-     * {@inheritdoc}
-     */
     public function validateToken(string $token, string $key = 'default'): bool
     {
         // Hole das Token aus der Session
@@ -195,5 +162,38 @@ class CsrfProtection implements CsrfProtectionInterface
             '<input type="hidden" name="_csrf_token" value="%s">',
             htmlspecialchars($token, ENT_QUOTES, 'UTF-8')
         );
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function generateToken(string $key = 'default'): string
+    {
+        $token = $this->generateRandomToken();
+
+
+        // Speichere das Token in der Session
+        $this->session->set(self::TOKEN_PREFIX . $key, $token);
+
+        $this->logger?->debug('CSRF-Token generiert', [
+            'key' => $key,
+            'token_hash' => hash('sha256', $token)
+        ]);
+
+        return $token;
+    }
+
+    /**
+     * Generiert ein zufälliges Token
+     * @throws RandomException
+     */
+    protected function generateRandomToken(): string
+    {
+        if (function_exists('random_bytes')) {
+            return bin2hex(random_bytes(32));
+        }
+
+        // Fallback, weniger sicher
+        return bin2hex(openssl_random_pseudo_bytes(32));
     }
 }

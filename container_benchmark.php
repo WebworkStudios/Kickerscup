@@ -7,13 +7,14 @@ require_once __DIR__ . '/vendor/autoload.php';
 use App\Infrastructure\Container\Container;
 
 // Einfache Testfunktion
-function testContainer() {
+function testContainer()
+{
     $container = new Container();
 
     echo "Container erstellt." . PHP_EOL;
 
     // Einfachen Service registrieren
-    $container->bind('test.service', function() {
+    $container->bind('test.service', function () {
         return new stdClass();
     });
 

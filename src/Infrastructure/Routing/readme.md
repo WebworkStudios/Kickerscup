@@ -2,7 +2,9 @@
 
 ## Überblick
 
-Der Router ist ein leistungsfähiges Routing-System in der PHP-Anwendung, das flexible und moderne Routing-Funktionen bietet. Er unterstützt fortschrittliche Funktionen wie attributbasiertes Routing, Domain-Routing, Parameterextraktion, CORS-Konfiguration, CSRF-Schutz und vieles mehr.
+Der Router ist ein leistungsfähiges Routing-System in der PHP-Anwendung, das flexible und moderne Routing-Funktionen
+bietet. Er unterstützt fortschrittliche Funktionen wie attributbasiertes Routing, Domain-Routing, Parameterextraktion,
+CORS-Konfiguration, CSRF-Schutz und vieles mehr.
 
 ## Beispiel mit Actions
 
@@ -106,6 +108,7 @@ Routen können über Attribute auf Klassen und Methoden definiert werden:
 ### 3. Domain-Routing
 
 Unterstützt Domain-spezifisches Routing mit Parameterextraktion:
+
 - Subdomains
 - Dynamische Domain-Parameter
 - Flexible Konfigurationsmöglichkeiten
@@ -113,6 +116,7 @@ Unterstützt Domain-spezifisches Routing mit Parameterextraktion:
 ### 4. CORS-Konfiguration
 
 Konfigurierbare Cross-Origin Resource Sharing:
+
 - Herkunft (Origin) einschränken
 - Erlaubte Methoden definieren
 - Credentials-Handling
@@ -120,6 +124,7 @@ Konfigurierbare Cross-Origin Resource Sharing:
 ### 5. CSRF-Schutz
 
 Integrierte CSRF-Token-Validierung:
+
 - Aktivierung/Deaktivierung pro Route
 - Herkunfts-Validierung
 - Sichere Standardeinstellungen
@@ -127,6 +132,7 @@ Integrierte CSRF-Token-Validierung:
 ### 6. Weiterleitungen
 
 Einfache Routen-Weiterleitung:
+
 - Permanente und temporäre Umleitungen
 - Wildcard-Unterstützung
 - Beibehaltung von Query-Parametern
