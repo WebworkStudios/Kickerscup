@@ -8,12 +8,8 @@ namespace App\Infrastructure\Validation\Rules;
 use App\Infrastructure\Container\Attributes\Injectable;
 
 #[Injectable]
-class EmailRule extends AbstractRule
+class EmailRule implements ValidationRuleInterface
 {
-    /**
-     * {@inheritdoc}
-     */
-    protected string $message = 'Das Feld :field muss eine gültige E-Mail-Adresse sein.';
 
     /**
      * {@inheritdoc}
@@ -25,5 +21,13 @@ class EmailRule extends AbstractRule
         }
 
         return filter_var($value, FILTER_VALIDATE_EMAIL) !== false;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getMessage(): string
+    {
+        return "Das Feld :field muss eine gültige E-Mail-Adresse sein.";
     }
 }

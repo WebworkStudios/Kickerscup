@@ -8,12 +8,8 @@ namespace App\Infrastructure\Validation\Rules;
 use App\Infrastructure\Container\Attributes\Injectable;
 
 #[Injectable]
-class NumericRule extends AbstractRule
+class NumericRule implements ValidationRuleInterface
 {
-    /**
-     * {@inheritdoc}
-     */
-    protected string $message = 'Das Feld :field muss numerisch sein.';
 
     /**
      * {@inheritdoc}
@@ -21,5 +17,13 @@ class NumericRule extends AbstractRule
     public function validate(mixed $value, array $params, string $field): bool
     {
         return is_numeric($value);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getMessage(): string
+    {
+        return "Das Feld :field muss numerisch sein.";
     }
 }
