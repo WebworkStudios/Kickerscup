@@ -4,14 +4,12 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Validation;
 
-use App\Infrastructure\Validation\ValidationException;
-
 use App\Infrastructure\Container\Attributes\Injectable;
 use App\Infrastructure\Container\Attributes\Singleton;
 use App\Infrastructure\Container\Contracts\ContainerInterface;
 use App\Infrastructure\Database\Contracts\QueryBuilderInterface;
 use App\Infrastructure\Validation\Contracts\ValidatorInterface;
-use App\Infrastructure\Validation\Rules\ValidationRuleRegistry;
+use App\Infrastructure\Validation\Rules\ValidationRuleInterface;
 use Throwable;
 
 #[Injectable]
@@ -26,35 +24,68 @@ class Validator implements ValidatorInterface
     protected array $errors = [];
 
     /**
-     * Benutzerdefinierte Validierungsregeln
+     * Registrierte Validierungsregeln
      *
-     * @var array<string, array{callback: callable, message: string}>
+     * @var array<string, ValidationRuleInterface|callable>
      */
-    protected array $customRules = [];
+    protected array $rules = [];
+
+    /**
+     * Benutzerdefinierte Fehlermeldungen
+     *
+     * @var array<string, string>
+     */
+    protected array $customMessages = [];
 
     /**
      * Konstruktor
      */
     public function __construct(
-        protected ValidationRuleRegistry $ruleRegistry,
         protected ContainerInterface     $container,
         protected ?QueryBuilderInterface $database = null
     )
     {
+        // Standard-Regeln registrieren
+        $this->registerDefaultRules();
+    }
+
+    /**
+     * Registriert die Standard-Validierungsregeln
+     */
+    protected function registerDefaultRules(): void
+    {
+        try {
+            // Versuche Regeln über Container zu laden
+            $this->rules['required'] = $this->container->get('App\\Infrastructure\\Validation\\Rules\\RequiredRule');
+            $this->rules['email'] = $this->container->get('App\\Infrastructure\\Validation\\Rules\\EmailRule');
+            $this->rules['numeric'] = $this->container->get('App\\Infrastructure\\Validation\\Rules\\NumericRule');
+
+            // Direkte Callables für einfache Regeln
+            $this->rules['min'] = fn($value, $params) => is_string($value) ?
+                mb_strlen($value) >= ($params[0] ?? 0) :
+                (is_numeric($value) ? $value >= ($params[0] ?? 0) : false);
+
+            $this->rules['max'] = fn($value, $params) => is_string($value) ?
+                mb_strlen($value) <= ($params[0] ?? 0) :
+                (is_numeric($value) ? $value <= ($params[0] ?? 0) : false);
+
+            // Standard-Fehlermeldungen
+            $this->customMessages['min'] = 'Das Feld :field muss mindestens :param0 Zeichen haben.';
+            $this->customMessages['max'] = 'Das Feld :field darf maximal :param0 Zeichen haben.';
+        } catch (Throwable $e) {
+            // Fehler bei Regel-Registrierung protokollieren
+        }
     }
 
     /**
      * {@inheritdoc}
      */
-
-    // src/Infrastructure/Validation/Validator.php
-
     public function validate(array $data, array $rules): bool
     {
         $this->errors = [];
 
         foreach ($rules as $field => $fieldRules) {
-            // Ermittle den Feldwert (mit null als Standardwert)
+            // Ermittle den Feldwert
             $value = $data[$field] ?? null;
 
             // Konvertiere String-Regeln in ein Array
@@ -63,7 +94,7 @@ class Validator implements ValidatorInterface
             }
 
             // Prüfe zuerst 'required'-Regel
-            $isRequired = $this->isRulePresent($fieldRules);
+            $isRequired = $this->isFieldRequired($fieldRules);
 
             // Wenn nicht required und Wert leer, überspringe weitere Validierungen
             if (!$isRequired && $this->isEmpty($value)) {
@@ -92,12 +123,11 @@ class Validator implements ValidatorInterface
     }
 
     /**
-     * @param array $rules
-     * @return bool
+     * Prüft, ob ein Feld als 'required' markiert ist
      */
-    private function isRulePresent(array $rules): bool
+    private function isFieldRequired(array $rules): bool
     {
-        return array_any($rules, function($rule) {
+        return array_any($rules, function ($rule) {
             if (is_string($rule)) {
                 return $rule === 'required' || str_starts_with($rule, 'required:');
             } else if (is_array($rule)) {
@@ -107,7 +137,9 @@ class Validator implements ValidatorInterface
         });
     }
 
-// Hilfsmethode für leere Wertprüfung
+    /**
+     * Hilfsmethode für leere Wertprüfung
+     */
     private function isEmpty($value): bool
     {
         return $value === null || $value === '' ||
@@ -115,7 +147,9 @@ class Validator implements ValidatorInterface
             (is_array($value) && empty($value));
     }
 
-// Parst den Regelnamen
+    /**
+     * Parst den Regelnamen aus einer Regel
+     */
     private function parseRuleName($rule): string
     {
         if (is_string($rule)) {
@@ -127,7 +161,9 @@ class Validator implements ValidatorInterface
         return '';
     }
 
-// Parst die Regelparameter
+    /**
+     * Parst die Parameter aus einer Regel
+     */
     private function parseRuleParams($rule): array
     {
         if (is_string($rule) && str_contains($rule, ':')) {
@@ -144,49 +180,45 @@ class Validator implements ValidatorInterface
      */
     public function validateSingle(mixed $value, string $rule, array $params = [], string $field = ''): bool
     {
-        // Prüfen, ob es sich um eine benutzerdefinierte Regel handelt
-        if (isset($this->customRules[$rule])) {
-            return call_user_func($this->customRules[$rule]['callback'], $value, $params, $field);
+        // Finde die passende Regel
+        $ruleHandler = $this->rules[$rule] ?? null;
+
+        if ($ruleHandler === null) {
+            throw new ValidationException("Unbekannte Validierungsregel: $rule");
         }
-        
-        // Prüfen, ob eine interne Validierungsmethode existiert
+
+        // Wenn es sich um eine ValidationRuleInterface-Instanz handelt
+        if ($ruleHandler instanceof ValidationRuleInterface) {
+            return $ruleHandler->validate($value, $params, $field);
+        }
+
+        // Wenn es sich um einen Callable handelt
+        if (is_callable($ruleHandler)) {
+            return $ruleHandler($value, $params, $field);
+        }
+
+        // Prüfe, ob eine interne Validierungsmethode existiert
         $methodName = 'validate' . ucfirst($rule);
         if (method_exists($this, $methodName)) {
             return $this->$methodName($value, $params, $field);
         }
 
-        // Versuche, die Regel aus dem Registry zu holen
-        $ruleInstance = $this->ruleRegistry->getRule($rule);
-        if ($ruleInstance !== null) {
-            return $ruleInstance->validate($value, $params, $field);
-        }
-
-        // Wenn keine Regel gefunden wurde
-        throw new ValidationException("Unbekannte Validierungsregel: $rule");
+        throw new ValidationException("Keine gültige Implementierung für Regel: $rule");
     }
 
     /**
-     * Generiert eine Fehlermeldung für eine fehlgeschlagene Validierung
-     *
-     * @param string $field Das Feld, das validiert wurde
-     * @param string $rule Die angewendete Regel
-     * @param array<string, mixed> $params Die Parameter der Regel
-     * @param mixed $value Der validierte Wert
-     * @return string Die Fehlermeldung
+     * Erzeugt eine Fehlermeldung für eine fehlgeschlagene Validierung
      */
     protected function getErrorMessage(string $field, string $rule, array $params, mixed $value): string
     {
         // Zuerst prüfen, ob es eine benutzerdefinierte Meldung gibt
-        if (isset($this->customRules[$rule])) {
-            $message = $this->customRules[$rule]['message'];
+        if (isset($this->customMessages[$rule])) {
+            $message = $this->customMessages[$rule];
+        } else if (isset($this->rules[$rule]) && $this->rules[$rule] instanceof ValidationRuleInterface) {
+            $message = $this->rules[$rule]->getMessage();
         } else {
-            // Standardmeldungen aus dem Registry holen
-            $message = $this->ruleRegistry->getErrorMessage($rule);
-            
-            // Fallback, falls keine Nachricht gefunden wurde
-            if (empty($message)) {
-                $message = "Die Validierung für das Feld :field mit der Regel '$rule' ist fehlgeschlagen.";
-            }
+            // Fallback-Meldung
+            $message = "Die Validierung für das Feld $field mit der Regel '$rule' ist fehlgeschlagen.";
         }
 
         return $this->formatErrorMessage($message, $field, $rule, $params, $value);
@@ -194,13 +226,6 @@ class Validator implements ValidatorInterface
 
     /**
      * Formatiert eine Fehlermeldung mit Platzhaltern
-     *
-     * @param string $message Die Nachrichtenvorlage
-     * @param string $field Das Feld, das validiert wurde
-     * @param string $rule Die angewendete Regel
-     * @param array<string, mixed> $params Die Parameter der Regel
-     * @param mixed $value Der validierte Wert
-     * @return string Die formatierte Fehlermeldung
      */
     protected function formatErrorMessage(string $message, string $field, string $rule, array $params, mixed $value = null): string
     {
@@ -211,7 +236,7 @@ class Validator implements ValidatorInterface
             ':value' => is_scalar($value) ? (string)$value : gettype($value)
         ];
 
-        // Parameter als Platzhalter hinzufügen (: param0, : param1, etc.)
+        // Parameter als Platzhalter hinzufügen
         foreach ($params as $index => $param) {
             $replacements[':param' . $index] = is_scalar($param) ? (string)$param : gettype($param);
         }
@@ -221,16 +246,10 @@ class Validator implements ValidatorInterface
 
     /**
      * Fügt einen Fehler zur Fehlerliste hinzu
-     *
-     * @param string $field Das Feld mit dem Fehler
-     * @param string $message Die Fehlermeldung
      */
     protected function addError(string $field, string $message): void
     {
-        if (!isset($this->errors[$field])) {
-            $this->errors[$field] = [];
-        }
-        
+        $this->errors[$field] ??= [];
         $this->errors[$field][] = $message;
     }
 
@@ -247,11 +266,12 @@ class Validator implements ValidatorInterface
      */
     public function addRule(string $name, callable $callback, ?string $errorMessage = null): static
     {
-        $this->customRules[$name] = [
-            'callback' => $callback,
-            'message' => $errorMessage ?? "Das Feld :field erfüllt nicht die Regel '$name'."
-        ];
-        
+        $this->rules[$name] = $callback;
+
+        if ($errorMessage !== null) {
+            $this->customMessages[$name] = $errorMessage;
+        }
+
         return $this;
     }
 
@@ -269,7 +289,7 @@ class Validator implements ValidatorInterface
 
     /**
      * Überprüft, ob ein Wert in der Datenbank existiert
-     * 
+     *
      * @throws ValidationException Wenn die Datenbankverbindung nicht verfügbar ist oder Parameter fehlen
      */
     protected function validateExists(mixed $value, array $params): bool
@@ -299,7 +319,7 @@ class Validator implements ValidatorInterface
 
     /**
      * Überprüft, ob ein Wert in der Datenbank einzigartig ist
-     * 
+     *
      * @throws ValidationException Wenn die Datenbankverbindung nicht verfügbar ist oder Parameter fehlen
      */
     protected function validateUnique(mixed $value, array $params): bool

@@ -1,6 +1,5 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Infrastructure\Validation\Rules;
@@ -8,13 +7,8 @@ namespace App\Infrastructure\Validation\Rules;
 use App\Infrastructure\Container\Attributes\Injectable;
 
 #[Injectable]
-class RequiredRule extends AbstractRule
+class RequiredRule implements ValidationRuleInterface
 {
-    /**
-     * {@inheritdoc}
-     */
-    protected string $message = 'Das Feld :field ist erforderlich.';
-
     /**
      * {@inheritdoc}
      */
@@ -37,5 +31,13 @@ class RequiredRule extends AbstractRule
 
         // Prüfe auf null, leere Strings und false
         return $value !== null && $value !== false && $value !== '';
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getMessage(): string
+    {
+        return "Das Feld :field ist erforderlich.";
     }
 }
