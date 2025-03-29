@@ -39,7 +39,9 @@ class ValidationRuleRegistry
     {
         $this->registerRule('required', RequiredRule::class)
             ->registerRule('email', EmailRule::class)
-            ->registerRule('numeric', NumericRule::class);
+            ->registerRule('numeric', NumericRule::class)
+            ->registerRule('date', DateRule::class)
+            ->registerRule('string_length', StringLengthRule::class);
         // ... weitere Regeln
     }
 
