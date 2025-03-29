@@ -253,6 +253,7 @@ class Application
      * @throws ContainerException
      * @throws NotFoundException
      */
+
     protected function validateRequest(RequestInterface $request): void
     {
         // Validator aus dem Container holen
@@ -266,16 +267,41 @@ class Application
         }
 
         // Daten für die Validierung sammeln
-        $data = array_merge(
-            $request->getQueryParams(),
-            $request->getPostData()
-        );
+        $data = [];
+
+        // JSON-Body-Daten zuerst prüfen und mit höchster Priorität einfügen
+        if ($request->isJson()) {
+            $jsonData = $request->getJsonBody();
+            if (!empty($jsonData) && is_array($jsonData)) {
+                $data = $jsonData; // Ersetze $data komplett durch $jsonData
+            }
+        } else {
+            // POST-Daten hinzufügen, wenn keine JSON-Anfrage
+            $postData = $request->getPostData();
+            if (!empty($postData)) {
+                $data = $postData;
+            }
+
+            // Query-Parameter als Ergänzung für POST-Anfragen
+            $queryParams = $request->getQueryParams();
+            if (!empty($queryParams)) {
+                // Nur Felder hinzufügen, die noch nicht gesetzt sind
+                foreach ($queryParams as $key => $value) {
+                    if (!isset($data[$key])) {
+                        $data[$key] = $value;
+                    }
+                }
+            }
+        }
 
         // Daten validieren
         $isValid = $validator->validate($data, $rules);
 
         if (!$isValid) {
-            throw new ValidationException('Validation failed', 0, null, $validator->getErrors());
+            throw ValidationException::withErrors(
+                'Validation failed',
+                $validator->getErrors()
+            );
         }
     }
 
