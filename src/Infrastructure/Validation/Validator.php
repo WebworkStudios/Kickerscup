@@ -6,10 +6,9 @@ namespace App\Infrastructure\Validation;
 
 use App\Infrastructure\Container\Attributes\Injectable;
 use App\Infrastructure\Container\Attributes\Singleton;
-use App\Infrastructure\Container\Contracts\ContainerInterface;
-use App\Infrastructure\Database\Contracts\QueryBuilderInterface;
 use App\Infrastructure\Validation\Contracts\ValidatorInterface;
 use App\Infrastructure\Validation\Rules\ValidationRuleInterface;
+use App\Infrastructure\Validation\Rules\ValidationRuleRegistry;
 use Throwable;
 
 #[Injectable]
@@ -24,13 +23,6 @@ class Validator implements ValidatorInterface
     protected array $errors = [];
 
     /**
-     * Registrierte Validierungsregeln
-     *
-     * @var array<string, ValidationRuleInterface|callable>
-     */
-    protected array $rules = [];
-
-    /**
      * Benutzerdefinierte Fehlermeldungen
      *
      * @var array<string, string>
@@ -41,40 +33,12 @@ class Validator implements ValidatorInterface
      * Konstruktor
      */
     public function __construct(
-        protected ContainerInterface     $container,
-        protected ?QueryBuilderInterface $database = null
+        protected ValidationRuleRegistry $ruleRegistry
     )
     {
-        // Standard-Regeln registrieren
-        $this->registerDefaultRules();
-    }
-
-    /**
-     * Registriert die Standard-Validierungsregeln
-     */
-    protected function registerDefaultRules(): void
-    {
-        try {
-            // Versuche Regeln über Container zu laden
-            $this->rules['required'] = $this->container->get('App\\Infrastructure\\Validation\\Rules\\RequiredRule');
-            $this->rules['email'] = $this->container->get('App\\Infrastructure\\Validation\\Rules\\EmailRule');
-            $this->rules['numeric'] = $this->container->get('App\\Infrastructure\\Validation\\Rules\\NumericRule');
-
-            // Direkte Callables für einfache Regeln
-            $this->rules['min'] = fn($value, $params) => is_string($value) ?
-                mb_strlen($value) >= ($params[0] ?? 0) :
-                (is_numeric($value) ? $value >= ($params[0] ?? 0) : false);
-
-            $this->rules['max'] = fn($value, $params) => is_string($value) ?
-                mb_strlen($value) <= ($params[0] ?? 0) :
-                (is_numeric($value) ? $value <= ($params[0] ?? 0) : false);
-
-            // Standard-Fehlermeldungen
-            $this->customMessages['min'] = 'Das Feld :field muss mindestens :param0 Zeichen haben.';
-            $this->customMessages['max'] = 'Das Feld :field darf maximal :param0 Zeichen haben.';
-        } catch (Throwable $e) {
-            // Fehler bei Regel-Registrierung protokollieren
-        }
+        // Standard-Fehlermeldungen für einfache Regeln
+        $this->customMessages['min'] = 'Das Feld :field muss mindestens :param0 Zeichen haben.';
+        $this->customMessages['max'] = 'Das Feld :field darf maximal :param0 Zeichen haben.';
     }
 
     /**
@@ -206,37 +170,35 @@ class Validator implements ValidatorInterface
      */
     public function validateSingle(mixed $value, string $rule, array $params = [], string $field = ''): bool
     {
-        // Finde die passende Regel
-        $ruleHandler = $this->rules[$rule] ?? null;
+        try {
+            // Holen der Regel aus der Registry
+            $ruleInstance = $this->ruleRegistry->getRule($rule);
 
-        if ($ruleHandler === null) {
-            throw new ValidationException("Unbekannte Validierungsregel: $rule");
-        }
-
-        // Wenn es sich um eine ValidationRuleInterface-Instanz handelt
-        if ($ruleHandler instanceof ValidationRuleInterface) {
-            return $ruleHandler->validate($value, $params, $field);
-        }
-
-        // Wenn es sich um einen Callable handelt
-        if (is_callable($ruleHandler)) {
-            return $ruleHandler($value, $params, $field);
-        }
-
-        // Prüfe, ob eine interne Validierungsmethode existiert
-        $methodName = 'validate' . ucfirst($rule);
-        if (method_exists($this, $methodName)) {
-            if ($rule === 'exists' || $rule === 'unique') {
-                // Bei Datenbankregeln prüfen, ob die Datenbank verfügbar ist
-                if ($this->database === null) {
-                    throw new ValidationException("Datenbankverbindung für '$rule'-Validierung nicht verfügbar");
-                }
+            if ($ruleInstance !== null) {
+                return $ruleInstance->validate($value, $params, $field);
             }
 
-            return $this->$methodName($value, $params, $field);
-        }
+            // Spezielle Behandlung für min/max als Callable-Regeln
+            if ($rule === 'min') {
+                return is_string($value) ?
+                    mb_strlen($value) >= ($params[0] ?? 0) :
+                    (is_numeric($value) ? $value >= ($params[0] ?? 0) : false);
+            }
 
-        throw new ValidationException("Keine gültige Implementierung für Regel: $rule");
+            if ($rule === 'max') {
+                return is_string($value) ?
+                    mb_strlen($value) <= ($params[0] ?? 0) :
+                    (is_numeric($value) ? $value <= ($params[0] ?? 0) : false);
+            }
+
+            // Falls keine Regel gefunden wurde
+            throw new ValidationException("Unbekannte Validierungsregel: $rule");
+        } catch (Throwable $e) {
+            if ($e instanceof ValidationException) {
+                throw $e;
+            }
+            throw new ValidationException("Fehler bei der Validierung mit Regel '$rule': " . $e->getMessage());
+        }
     }
 
     /**
@@ -247,11 +209,9 @@ class Validator implements ValidatorInterface
         // Zuerst prüfen, ob es eine benutzerdefinierte Meldung gibt
         if (isset($this->customMessages[$rule])) {
             $message = $this->customMessages[$rule];
-        } else if (isset($this->rules[$rule]) && $this->rules[$rule] instanceof ValidationRuleInterface) {
-            $message = $this->rules[$rule]->getMessage();
         } else {
-            // Fallback-Meldung
-            $message = "Die Validierung für das Feld $field mit der Regel '$rule' ist fehlgeschlagen.";
+            // Holen der Meldung aus der Registry
+            $message = $this->ruleRegistry->getErrorMessage($rule);
         }
 
         return $this->formatErrorMessage($message, $field, $rule, $params, $value);
@@ -299,93 +259,31 @@ class Validator implements ValidatorInterface
      */
     public function addRule(string $name, callable $callback, ?string $errorMessage = null): static
     {
-        $this->rules[$name] = $callback;
+        // Bei Callable-Regeln verwenden wir einen speziellen Wrapper, um sie in der Registry zu registrieren
+        $rule = new class($callback, $errorMessage ?? "Validierung mit Regel '$name' fehlgeschlagen.") implements ValidationRuleInterface {
+            private $callback;
+            private $message;
+
+            public function __construct(callable $callback, string $message) {
+                $this->callback = $callback;
+                $this->message = $message;
+            }
+
+            public function validate(mixed $value, array $params, string $field): bool {
+                return ($this->callback)($value, $params, $field);
+            }
+
+            public function getMessage(): string {
+                return $this->message;
+            }
+        };
+
+        $this->ruleRegistry->registerRule($name, $rule);
 
         if ($errorMessage !== null) {
             $this->customMessages[$name] = $errorMessage;
         }
 
         return $this;
-    }
-
-    /**
-     * Überprüft, ob der Wert dem angegebenen Format entspricht
-     */
-    protected function validateFormat(mixed $value, array $params): bool
-    {
-        if (empty($params[0]) || !is_string($value)) {
-            return false;
-        }
-
-        return preg_match($params[0], $value) === 1;
-    }
-
-    /**
-     * Überprüft, ob ein Wert in der Datenbank existiert
-     *
-     * @throws ValidationException Wenn die Datenbankverbindung nicht verfügbar ist oder Parameter fehlen
-     */
-    protected function validateExists(mixed $value, array $params): bool
-    {
-        if ($this->database === null) {
-            throw new ValidationException("Datenbankverbindung für 'exists'-Validierung nicht verfügbar");
-        }
-
-        if (count($params) < 2) {
-            throw new ValidationException("Die 'exists'-Regel benötigt mindestens zwei Parameter: Tabelle und Spalte");
-        }
-
-        $table = $params[0];
-        $column = $params[1];
-
-        try {
-            $result = $this->database->table($table)
-                ->select('COUNT(*) as count')
-                ->where($column, '=', $value)
-                ->first();
-
-            return ($result['count'] ?? 0) > 0;
-        } catch (Throwable $e) {
-            throw new ValidationException("Datenbankfehler bei 'exists'-Validierung: " . $e->getMessage());
-        }
-    }
-
-    /**
-     * Überprüft, ob ein Wert in der Datenbank einzigartig ist
-     *
-     * @throws ValidationException Wenn die Datenbankverbindung nicht verfügbar ist oder Parameter fehlen
-     */
-    protected function validateUnique(mixed $value, array $params): bool
-    {
-        if ($this->database === null) {
-            throw new ValidationException("Datenbankverbindung für 'unique'-Validierung nicht verfügbar");
-        }
-
-        if (count($params) < 2) {
-            throw new ValidationException("Die 'unique'-Regel benötigt mindestens zwei Parameter: Tabelle und Spalte");
-        }
-
-        $table = $params[0];
-        $column = $params[1];
-
-        // Optionaler Ausschluss für Updates
-        $ignoreId = $params[2] ?? null;
-        $idColumn = $params[3] ?? 'id';
-
-        try {
-            $query = $this->database->table($table)
-                ->select('COUNT(*) as count')
-                ->where($column, '=', $value);
-
-            if ($ignoreId !== null) {
-                $query->where($idColumn, '!=', $ignoreId);
-            }
-
-            $result = $query->first();
-
-            return ($result['count'] ?? 0) === 0;
-        } catch (Throwable $e) {
-            throw new ValidationException("Datenbankfehler bei 'unique'-Validierung: " . $e->getMessage());
-        }
     }
 }

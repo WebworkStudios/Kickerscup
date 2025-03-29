@@ -1,6 +1,5 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Infrastructure\Validation\Rules;
@@ -41,8 +40,21 @@ class ValidationRuleRegistry
             ->registerRule('email', EmailRule::class)
             ->registerRule('numeric', NumericRule::class)
             ->registerRule('date', DateRule::class)
-            ->registerRule('string_length', StringLengthRule::class);
-        // ... weitere Regeln
+            ->registerRule('string_length', StringLengthRule::class)
+            ->registerRule('exists', ExistsRule::class)
+            ->registerRule('unique', UniqueRule::class)
+            ->registerRule('alpha', AlphaRule::class)
+            ->registerRule('alpha_numeric', AlphaNumericRule::class)
+            ->registerRule('boolean', BooleanRule::class)
+            ->registerRule('comparison', ComparisonRule::class)
+            ->registerRule('confirmation', ConfirmationRule::class)
+            ->registerRule('json', JsonRule::class)
+            ->registerRule('in', InRule::class)
+            ->registerRule('not_in', NotInRule::class)
+            ->registerRule('file_type', FileTypeRule::class)
+            ->registerRule('file_size', FileSizeRule::class)
+            ->registerRule('image_dimensions', ImageDimensionsRule::class)
+            ->registerRule('phone_number', PhoneNumberRule::class);
     }
 
     /**

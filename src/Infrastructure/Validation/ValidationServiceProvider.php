@@ -14,6 +14,7 @@ use App\Infrastructure\Validation\Rules\ComparisonRule;
 use App\Infrastructure\Validation\Rules\ConfirmationRule;
 use App\Infrastructure\Validation\Rules\DateRule;
 use App\Infrastructure\Validation\Rules\EmailRule;
+use App\Infrastructure\Validation\Rules\ExistsRule;
 use App\Infrastructure\Validation\Rules\FileTypeRule;
 use App\Infrastructure\Validation\Rules\FileSizeRule;
 use App\Infrastructure\Validation\Rules\ImageDimensionsRule;
@@ -24,8 +25,8 @@ use App\Infrastructure\Validation\Rules\NumericRule;
 use App\Infrastructure\Validation\Rules\PhoneNumberRule;
 use App\Infrastructure\Validation\Rules\RequiredRule;
 use App\Infrastructure\Validation\Rules\StringLengthRule;
+use App\Infrastructure\Validation\Rules\UniqueRule;
 use App\Infrastructure\Validation\Rules\ValidationRuleRegistry;
-use Throwable;
 
 class ValidationServiceProvider extends ServiceProvider
 {
@@ -47,7 +48,11 @@ class ValidationServiceProvider extends ServiceProvider
         $container->singleton(DateRule::class);
         $container->singleton(StringLengthRule::class);
 
-        // Registriere die neuen Validierungsregeln
+        // Registriere die neuen datenbankbezogenen Regeln
+        $container->singleton(ExistsRule::class);
+        $container->singleton(UniqueRule::class);
+
+        // Registriere die weiteren Validierungsregeln
         $container->singleton(AlphaNumericRule::class);
         $container->singleton(AlphaRule::class);
         $container->singleton(BooleanRule::class);
@@ -61,19 +66,9 @@ class ValidationServiceProvider extends ServiceProvider
         $container->singleton(ImageDimensionsRule::class);
         $container->singleton(PhoneNumberRule::class);
 
-        // Registriere den Validator als Singleton mit Closure für bedingte Datenbankabhängigkeit
-        $container->singleton(ValidatorInterface::class, function (ContainerInterface $c) {
-            $database = null;
-            if ($c->has('App\\Infrastructure\\Database\\Contracts\\QueryBuilderInterface')) {
-                try {
-                    $database = $c->get('App\\Infrastructure\\Database\\Contracts\\QueryBuilderInterface');
-                } catch (Throwable) {
-                    // Ignoriere den Fehler, Validator wird mit null-Datenbank erstellt
-                }
-            }
-
-            return new Validator($c, $database);
-        });
+        // Registriere den Validator als Singleton
+        // Wichtig: Der Validator benötigt jetzt die ValidationRuleRegistry
+        $container->singleton(ValidatorInterface::class, Validator::class);
         $container->singleton(Validator::class);
 
         // Registriere den RequestValidator als Singleton
