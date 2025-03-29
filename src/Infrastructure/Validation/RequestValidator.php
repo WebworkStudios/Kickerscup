@@ -10,6 +10,7 @@ use App\Infrastructure\Container\Contracts\ContainerInterface;
 use App\Infrastructure\Http\Contracts\RequestInterface;
 use App\Infrastructure\Security\Csrf\Contracts\CsrfProtectionInterface;
 use App\Infrastructure\Validation\Contracts\ValidatorInterface;
+use Throwable;
 
 #[Injectable]
 class RequestValidator
@@ -88,7 +89,7 @@ class RequestValidator
                         return false;
                     }
                 }
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 // Logger würde hier helfen, um das Problem zu diagnostizieren
                 if ($throwOnFailure) {
                     throw ValidationException::withErrors(

@@ -89,43 +89,54 @@ class Session implements SessionInterface
         $this->configureSession();
         session_name($this->config->name);
 
+        // Starte die Session
         $this->started = session_start();
 
         if ($this->started) {
-            $this->logger->debug('Session started', ['id' => $this->getId()]);
+            $this->logger?->debug('Session started', ['id' => $this->getId()]);
 
-            // Überprüfe absolute Lebensdauer
-            if ($this->hasAbsoluteLifetimeExpired()) {
-                // Session ist zu alt, erstelle eine neue
-                $this->destroy();
-                $this->started = session_start();
-                if ($this->started) {
-                    $this->set('_created_at', time());
-                }
+            // Initialisiere neue Session mit Zeitstempel und Fingerprint
+            if (!$this->has('_created_at')) {
+                $this->set('_created_at', time());
+                $this->saveFingerprint();
+                return true;
             }
 
-            // Vorhandene Session-Validierung
-            if (!$this->isValid()) {
-                $this->logger->warning('Invalid session detected', [
+            // Prüfe absolute Lebensdauer
+            if ($this->hasAbsoluteLifetimeExpired()) {
+                $this->logger?->debug('Session lifetime expired, creating new session', ['id' => $this->getId()]);
+                $this->destroy();
+                session_start();
+                $this->started = true;
+                $this->set('_created_at', time());
+                $this->saveFingerprint();
+                return true;
+            }
+
+            // Wichtig: Fingerprint-Validierung nur für etablierte Sessions durchführen,
+            // NICHT für die erste Anfrage einer neuen Session
+            if ($this->has('_fingerprint') && !$this->validateFingerprint()) {
+                $this->logger?->warning('Fingerprint validation failed', [
                     'id' => $this->getId(),
                     'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown'
                 ]);
                 $this->destroy();
-                $this->started = session_start();
+                session_start();
+                $this->started = true;
+                $this->set('_created_at', time());
                 $this->saveFingerprint();
+                return true;
             }
 
-            // Bestehender Code für Aktivitätsprüfung und Flash-Messages
+            // Aktualisiere letzte Aktivität und prüfe ob eine Rotation nötig ist
             $this->checkActivity();
-            $this->rotateId();
+            $this->rotateId(false); // keine erzwungene Rotation
 
-            // Hier gibt es keinen return, daher führt die Ausführung fort und loggt den Fehler
-            // auch wenn die Session erfolgreich gestartet wurde
-        } else {
-            $this->logger->error('Failed to start session');
+            return true;
         }
 
-        return $this->started;
+        $this->logger?->error('Failed to start session');
+        return false;
     }
 
     /**
@@ -133,20 +144,31 @@ class Session implements SessionInterface
      */
     protected function configureSession(): void
     {
-        // Korrekte Verwendung von session_set_cookie_params mit einem Optionen-Array
+        // Verwende konstante Cookie-Parameter für konsistentes Verhalten
+        $lifetime = $this->config->lifetime > 0 ? $this->config->lifetime : 0;
+
+        // Setze Cookie-Parameter mit korrekten Werten für die Konsistenz
         session_set_cookie_params([
-            'lifetime' => $this->config->lifetime,
+            'lifetime' => $lifetime,
             'path' => $this->config->path,
             'domain' => $this->config->domain,
             'secure' => $this->config->secure,
             'httponly' => $this->config->httpOnly,
-            'SameSite' => $this->config->sameSite,
+            'samesite' => $this->config->sameSite,
         ]);
 
         // Garbage Collection konfigurieren
         ini_set('session.gc_probability', (string)$this->config->gcProbability);
         ini_set('session.gc_divisor', (string)$this->config->gcDivisor);
         ini_set('session.gc_maxlifetime', (string)$this->config->gcMaxLifetime);
+
+        // Wichtig: Stelle sicher, dass die Session-Cookies verwendet werden
+        ini_set('session.use_cookies', '1');
+        ini_set('session.use_only_cookies', '1');
+        ini_set('session.use_strict_mode', '1');
+
+        // Verhindere SID-Übertragung in URLs
+        ini_set('session.use_trans_sid', '0');
     }
 
     /**
@@ -238,7 +260,20 @@ class Session implements SessionInterface
     public function isValid(): bool
     {
         // Schnelle Prüfungen zuerst
-        if (!$this->started || $this->hasAbsoluteLifetimeExpired()) {
+        if (!$this->started) {
+            return false;
+        }
+
+        // Neue Sessions sind immer gültig - falls keine _created_at vorhanden ist
+        if (!$this->has('_created_at')) {
+            // Für neue Sessions Fingerprint setzen
+            $this->saveFingerprint();
+            $this->set('_created_at', time());
+            return true;
+        }
+
+        // Absolute Lebensdauer prüfen
+        if ($this->hasAbsoluteLifetimeExpired()) {
             return false;
         }
 
@@ -251,6 +286,7 @@ class Session implements SessionInterface
         if (!$this->checkActivity()) {
             return false;
         }
+
 
         // Benutzer-Session-Prüfungen nur wenn vorhanden
         if ($this->has(self::USER_SESSION_KEY)) {
@@ -293,16 +329,13 @@ class Session implements SessionInterface
     }
 
     /**
-     * {@inheritdoc}
-     */
-    // src/Infrastructure/Session/Session.php
-    /**
-     * {@inheritdoc}
+     * Überprüft die Fingerprint-Validität
      */
     public function validateFingerprint(): bool
     {
+        // Wenn kein Fingerprint vorhanden ist, gib true zurück (neue Sessions sind gültig)
         if (!$this->has('_fingerprint')) {
-            return false;
+            return true;
         }
 
         $storedFingerprint = $this->get('_fingerprint');
@@ -310,8 +343,6 @@ class Session implements SessionInterface
 
         return hash_equals($storedFingerprint, $currentFingerprint);
     }
-
-// Neue Methode zur Auslagerung der Benutzer-Session-Prüfung
 
     /**
      * {@inheritdoc}

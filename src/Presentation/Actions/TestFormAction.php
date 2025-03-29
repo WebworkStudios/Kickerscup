@@ -10,7 +10,6 @@ use App\Infrastructure\Http\Contracts\ResponseFactoryInterface;
 use App\Infrastructure\Http\Contracts\ResponseInterface;
 use App\Infrastructure\Routing\Attributes\Get;
 use App\Infrastructure\Routing\Attributes\Post;
-use App\Infrastructure\Validation\ValidationException;
 
 #[Injectable]
 class TestFormAction
@@ -24,17 +23,14 @@ class TestFormAction
     public function __construct(
         private readonly ResponseFactoryInterface $responseFactory
     ) {
-        // Starten Sie die Session, falls noch nicht gestartet
-        if (session_status() !== PHP_SESSION_ACTIVE) {
-            session_start();
-        }
+        // Session wird jetzt vom Framework korrekt gehandhabt
     }
 
     /**
      * Zeigt das Formular an
      */
     #[Get('/test/form', 'test.form')]
-    public function showForm(RequestInterface $request): ResponseInterface
+    public function showForm(): ResponseInterface
     {
         // CSRF-Token manuell generieren und in der Session speichern
         if (!isset($_SESSION[self::CSRF_TOKEN])) {
@@ -48,9 +44,9 @@ class TestFormAction
         $oldInput = $_SESSION[self::OLD_INPUT_KEY] ?? [];
 
         // Nach dem Lesen aus der Session löschen
-        unset($_SESSION[self::ERRORS_KEY]);
-        unset($_SESSION[self::SUCCESS_KEY]);
-        unset($_SESSION[self::OLD_INPUT_KEY]);
+        if (isset($_SESSION[self::ERRORS_KEY])) unset($_SESSION[self::ERRORS_KEY]);
+        if (isset($_SESSION[self::SUCCESS_KEY])) unset($_SESSION[self::SUCCESS_KEY]);
+        if (isset($_SESSION[self::OLD_INPUT_KEY])) unset($_SESSION[self::OLD_INPUT_KEY]);
 
         // HTML für das Formular generieren
         $html = $this->renderForm($oldInput, $errors, $success, $csrfToken);
@@ -70,6 +66,7 @@ class TestFormAction
 
         if (empty($submittedToken) || $submittedToken !== $storedToken) {
             $_SESSION[self::ERRORS_KEY] = ['global' => ['CSRF-Token ist ungültig. Bitte laden Sie die Seite neu.']];
+            $_SESSION[self::CSRF_TOKEN] = bin2hex(random_bytes(32)); // Generiere einen neuen Token
             return $this->responseFactory->createRedirect('/test/form');
         }
 
@@ -124,12 +121,9 @@ class TestFormAction
     private function renderForm(array $oldInput = [], array $errors = [], ?string $success = null, string $csrfToken = ''): string
     {
         // Session-Status überprüfen
-        $sessionStatus = '';
-        if (session_status() === PHP_SESSION_ACTIVE) {
-            $sessionStatus = '<p style="color: green;">Session aktiv (ID: ' . session_id() . ')</p>';
-        } else {
-            $sessionStatus = '<p style="color: red;">Keine aktive Session!</p>';
-        }
+        $sessionStatus = session_status() === PHP_SESSION_ACTIVE
+            ? '<p style="color: green;">Session aktiv (ID: ' . session_id() . ')</p>'
+            : '<p style="color: red;">Keine aktive Session!</p>';
 
         // Erfolgs- oder Fehlermeldungen anzeigen
         $alertHtml = '';
@@ -166,7 +160,7 @@ class TestFormAction
         $ageErrors = isset($errors['age']) ? $this->renderFieldErrors($errors['age']) : '';
 
         // Formular HTML
-        $html = '<!DOCTYPE html>
+        return '<!DOCTYPE html>
         <html lang="de">
         <head>
             <title>Test Formular</title>
@@ -269,8 +263,6 @@ class TestFormAction
             </div>
         </body>
         </html>';
-
-        return $html;
     }
 
     /**

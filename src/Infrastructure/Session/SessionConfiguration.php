@@ -91,13 +91,13 @@ class SessionConfiguration
     public function __construct(
         public string  $path = '/',
         public ?string $domain = null,
-        public bool    $secure = true,           // HTTPS empfohlen
+        public bool    $secure = false,        // Geändert zu false für Entwicklung/Testing
         public bool    $httpOnly = true,
-        public string  $sameSite = 'Lax',      // Lax als Standard (guter Kompromiss)
-        public int     $gcProbability = 1,        // Garbage Collection (1%)
+        public string  $sameSite = 'Lax',
+        public int     $gcProbability = 1,
         public int     $gcDivisor = 100,
-        public int     $gcMaxLifetime = 7200,     // 2 Stunden
-        public bool    $strictIpCheck = false,    // IP-Bereichsüberprüfung standardmäßig deaktiviert
+        public int     $gcMaxLifetime = 7200,
+        public bool    $strictIpCheck = false,
         public bool    $fingerprintCheck = true,
         public string  $storeType = 'default',    // 'default', 'redis'
         public array   $storeConfig = [
