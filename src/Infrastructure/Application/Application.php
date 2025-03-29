@@ -132,15 +132,17 @@ class Application
      */
     protected function shouldStartSession(RequestInterface $request): bool
     {
-        // Statische Assets nie mit Session belasten
+        // Prüfe Pfad schneller mit statischem Regex-Muster
+        static $staticAssetsPattern = '~^/(assets|images|css|js|favicon\.ico|robots\.txt)~';
+
         $path = $request->getPath();
-        if (preg_match('~^/(assets|images|css|js|favicon\.ico|robots\.txt)~', $path)) {
+        if (preg_match($staticAssetsPattern, $path)) {
             return false;
         }
 
-        // API-Anfragen typisicherweise keine Session
-        if ($request->isJson() ||
-            $request->hasHeader('X-Requested-With') === 'XMLHttpRequest' ||
+        // API-Erkennung effizienter gestalten
+        if ($request->getHeader('Accept') === 'application/json' ||
+            $request->getHeader('Content-Type') === 'application/json' ||
             $request->hasHeader('X-API-Key')) {
             return false;
         }

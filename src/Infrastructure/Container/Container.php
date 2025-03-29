@@ -261,13 +261,12 @@ class Container implements ContainerInterface
 // Optimiere die resolve-Methode
     protected function resolve(string $abstract, array $parameters = []): mixed
     {
-        // Reduziere Logging auf das Wesentliche
         if (isset($this->instances[$abstract])) {
             return $this->instances[$abstract];
         }
 
-        // Prüfe auf zirkuläre Abhängigkeit
-        if (in_array($abstract, $this->resolutionStack)) {
+        // Prüfe auf zirkuläre Abhängigkeit mit effizientem Array-Lookup
+        if (in_array($abstract, $this->resolutionStack, true)) {
             $this->logCircularDependency($abstract);
             throw new BindingResolutionException(
                 "Zirkuläre Abhängigkeit erkannt: " .

@@ -52,34 +52,82 @@ class RouteScanner implements RouteScannerInterface
     }
 
     /**
-     * {@inheritdoc}
+     * @param array $directories
+     * @param string $namespace
+     * @return void
      */
     public function scan(array $directories, string $namespace = ''): void
     {
+        $cacheFile = $this->getCacheFilePath();
+
+        // Cache verwenden, wenn vorhanden
+        if (file_exists($cacheFile)) {
+            $cachedRoutes = require $cacheFile;
+            if (is_array($cachedRoutes)) {
+                foreach ($cachedRoutes as $routeInfo) {
+                    $this->router->addRoute(
+                        $routeInfo['methods'],
+                        $routeInfo['path'],
+                        $routeInfo['handler'],
+                        $routeInfo['name'] ?? null,
+                        $routeInfo['domain'] ?? null
+                    );
+
+                    // CORS-Konfiguration hinzufügen, wenn vorhanden
+                    if (isset($routeInfo['cors'])) {
+                        $this->router->addCorsConfiguration($routeInfo['path'], $routeInfo['cors']);
+                    }
+
+                    // CSRF-Konfiguration hinzufügen, wenn vorhanden
+                    if (isset($routeInfo['csrf'])) {
+                        $this->router->addCsrfConfiguration($routeInfo['path'], $routeInfo['csrf']);
+                    }
+                }
+                $this->logger->info('RouteScanner: Routes loaded from cache', [
+                    'count' => count($cachedRoutes)
+                ]);
+                return;
+            }
+        }
+
         $this->logger->info('RouteScanner: Starting scan', [
             'directories' => $directories,
             'namespace' => $namespace
         ]);
 
+        // Cache der gefundenen Routen für späteres Speichern
+        $routesToCache = [];
+
         foreach ($directories as $directory) {
-            $this->scanDirectory($directory, $namespace);
+            $routesToCache = array_merge(
+                $routesToCache,
+                $this->scanDirectory($directory, $namespace)
+            );
         }
 
-        $this->logger->info('RouteScanner: Scan completed');
+        // Cache schreiben
+        $this->writeRouteCache($cacheFile, $routesToCache);
+
+        $this->logger->info('RouteScanner: Scan completed', [
+            'routes_found' => count($routesToCache),
+            'cache_written' => true
+        ]);
     }
 
     /**
-     * Scannt ein Verzeichnis nach Routen-Attributen
+     * Scannt ein Verzeichnis nach Routen-Attributen und gibt gefundene Routen zurück
      *
      * @param string $directory Das zu scannende Verzeichnis
      * @param string $namespace Der Basis-Namespace
-     * @return void
+     * @return array Gefundene Routen
      */
-    protected function scanDirectory(string $directory, string $namespace): void
+    protected function scanDirectory(string $directory, string $namespace): array
     {
+        $foundRoutes = [];
+
         if (!is_dir($directory)) {
             $this->logger->warning('RouteScanner: Directory not found', ['directory' => $directory]);
-            return;
+            return $foundRoutes;
         }
 
         $this->logger->debug('RouteScanner: Scanning directory', ['directory' => $directory]);
@@ -89,7 +137,6 @@ class RouteScanner implements RouteScannerInterface
         );
 
         $scannedFiles = 0;
-        $foundRoutes = 0;
 
         foreach ($iterator as $file) {
             if ($file->isFile() && $file->getExtension() === 'php') {
@@ -97,24 +144,47 @@ class RouteScanner implements RouteScannerInterface
                 $className = $this->getClassNameFromFile($file->getPathname(), $namespace);
 
                 if ($className) {
-                    $routeCount = $this->registerClassRoutes($className);
-                    $foundRoutes += $routeCount;
-
-                    if ($routeCount > 0) {
-                        $this->logger->debug('RouteScanner: Found routes in class', [
-                            'class' => $className,
-                            'count' => $routeCount
-                        ]);
+                    $classRoutes = $this->registerClassRoutes($className);
+                    if (!empty($classRoutes)) {
+                        $foundRoutes = array_merge($foundRoutes, $classRoutes);
                     }
                 }
             }
         }
 
-        $this->logger->info('RouteScanner: Directory scan completed', [
-            'directory' => $directory,
-            'scanned_files' => $scannedFiles,
-            'found_routes' => $foundRoutes
-        ]);
+        return $foundRoutes;
+    }
+
+    /**
+     * Gibt den Pfad zur Cache-Datei zurück
+     *
+     * @return string
+     */
+    private function getCacheFilePath(): string
+    {
+        $cacheDir = APP_ROOT . '/cache';
+
+        // Erstelle Cache-Verzeichnis, falls nicht vorhanden
+        if (!is_dir($cacheDir)) {
+            mkdir($cacheDir, 0755, true);
+        }
+
+        return $cacheDir . '/routes.php';
+    }
+
+    /**
+     * Schreibt den Route-Cache in eine Datei
+     *
+     * @param string $cacheFile Pfad zur Cache-Datei
+     * @param array $routes Zu cachende Routen
+     * @return bool
+     */
+    private function writeRouteCache(string $cacheFile, array $routes): bool
+    {
+        $content = "<?php\n// Generated Route Cache - " . date('Y-m-d H:i:s') . "\nreturn " .
+            var_export($routes, true) . ";\n";
+
+        return file_put_contents($cacheFile, $content) !== false;
     }
 
     /**
@@ -198,15 +268,10 @@ class RouteScanner implements RouteScannerInterface
         return null;
     }
 
-    /**
-     * Registriert Routen für eine Klasse
-     *
-     * @param string $className Der Klassenname
-     * @return int Anzahl der registrierten Routen
-     */
-    protected function registerClassRoutes(string $className): int
+// src/Infrastructure/Routing/RouteScanner.php
+    protected function registerClassRoutes(string $className): array
     {
-        $routeCount = 0;
+        $routeCache = [];
 
         try {
             $reflector = new ReflectionClass($className);
@@ -234,7 +299,15 @@ class RouteScanner implements RouteScannerInterface
                     $redirectAttr->statusCode,
                     $redirectAttr->preserveQueryString
                 );
-                $routeCount++;
+
+                // Cache-Eintrag für Redirect
+                $routeCache[] = [
+                    'type' => 'redirect',
+                    'from_path' => $redirectAttr->fromPath,
+                    'to_path' => $redirectAttr->toPath,
+                    'status_code' => $redirectAttr->statusCode,
+                    'preserve_query_string' => $redirectAttr->preserveQueryString
+                ];
             }
 
             // Wenn die Klasse __invoke hat und Route-Attribute besitzt
@@ -251,7 +324,16 @@ class RouteScanner implements RouteScannerInterface
 
                     // Registriere die Route mit der Klasse als Handler und Domain
                     $this->router->addRoute($methods, $path, $className, $name, $domain);
-                    $routeCount++;
+
+                    // Cache-Eintrag für Route
+                    $routeCache[] = [
+                        'type' => 'route',
+                        'methods' => $methods,
+                        'path' => $path,
+                        'handler' => $className,
+                        'name' => $name,
+                        'domain' => $domain
+                    ];
 
                     $this->logger->debug('RouteScanner: Registered class route', [
                         'class' => $className,
@@ -263,12 +345,29 @@ class RouteScanner implements RouteScannerInterface
                     // Registriere CORS-Konfiguration, wenn vorhanden
                     if ($corsConfig) {
                         $this->router->addCorsConfiguration($path, $corsConfig);
+
+                        // Cache-Eintrag für CORS
+                        $routeCache[count($routeCache) - 1]['cors'] = [
+                            'allowOrigin' => $corsConfig->allowOrigin,
+                            'allowMethods' => $corsConfig->allowMethods,
+                            'allowHeaders' => $corsConfig->allowHeaders,
+                            'allowCredentials' => $corsConfig->allowCredentials,
+                            'maxAge' => $corsConfig->maxAge,
+                            'exposeHeaders' => $corsConfig->exposeHeaders
+                        ];
                     }
 
                     $csrfAttributes = $invokeMethod->getAttributes(CsrfProtection::class);
                     if (!empty($csrfAttributes)) {
                         $csrfConfig = $csrfAttributes[0]->newInstance();
                         $this->router->addCsrfConfiguration($path, $csrfConfig);
+
+                        // Cache-Eintrag für CSRF
+                        $routeCache[count($routeCache) - 1]['csrf'] = [
+                            'enabled' => $csrfConfig->enabled,
+                            'tokenKey' => $csrfConfig->tokenKey,
+                            'validateOrigin' => $csrfConfig->validateOrigin
+                        ];
                     }
 
                     // Sammle Parameter-Attribute für die URL-Generierung
@@ -306,7 +405,15 @@ class RouteScanner implements RouteScannerInterface
                         $redirectAttr->statusCode,
                         $redirectAttr->preserveQueryString
                     );
-                    $routeCount++;
+
+                    // Cache-Eintrag für Redirect
+                    $routeCache[] = [
+                        'type' => 'redirect',
+                        'from_path' => $redirectAttr->fromPath,
+                        'to_path' => $redirectAttr->toPath,
+                        'status_code' => $redirectAttr->statusCode,
+                        'preserve_query_string' => $redirectAttr->preserveQueryString
+                    ];
                 }
 
                 foreach ($methodRouteAttributes as $attribute) {
@@ -319,7 +426,16 @@ class RouteScanner implements RouteScannerInterface
 
                     // Registriere die Route mit der Klasse und Methode als Handler und Domain
                     $this->router->addRoute($methods, $path, [$className, $method->getName()], $name, $domain);
-                    $routeCount++;
+
+                    // Cache-Eintrag für Route
+                    $routeCache[] = [
+                        'type' => 'route',
+                        'methods' => $methods,
+                        'path' => $path,
+                        'handler' => [$className, $method->getName()],
+                        'name' => $name,
+                        'domain' => $domain
+                    ];
 
                     $this->logger->debug('RouteScanner: Registered method route', [
                         'class' => $className,
@@ -331,6 +447,16 @@ class RouteScanner implements RouteScannerInterface
 
                     if ($methodCorsConfig) {
                         $this->router->addCorsConfiguration($path, $methodCorsConfig);
+
+                        // Cache-Eintrag für CORS
+                        $routeCache[count($routeCache) - 1]['cors'] = [
+                            'allowOrigin' => $methodCorsConfig->allowOrigin,
+                            'allowMethods' => $methodCorsConfig->allowMethods,
+                            'allowHeaders' => $methodCorsConfig->allowHeaders,
+                            'allowCredentials' => $methodCorsConfig->allowCredentials,
+                            'maxAge' => $methodCorsConfig->maxAge,
+                            'exposeHeaders' => $methodCorsConfig->exposeHeaders
+                        ];
                     }
 
                     // Sammle CSRF-Attribute der Methode
@@ -338,6 +464,13 @@ class RouteScanner implements RouteScannerInterface
                     if (!empty($csrfAttributes)) {
                         $csrfConfig = $csrfAttributes[0]->newInstance();
                         $this->router->addCsrfConfiguration($path, $csrfConfig);
+
+                        // Cache-Eintrag für CSRF
+                        $routeCache[count($routeCache) - 1]['csrf'] = [
+                            'enabled' => $csrfConfig->enabled,
+                            'tokenKey' => $csrfConfig->tokenKey,
+                            'validateOrigin' => $csrfConfig->validateOrigin
+                        ];
                     }
 
                     // Sammle Parameter-Attribute für die URL-Generierung
@@ -357,7 +490,7 @@ class RouteScanner implements RouteScannerInterface
             ]);
         }
 
-        return $routeCount;
+        return $routeCache;
     }
 
     /**

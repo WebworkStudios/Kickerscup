@@ -513,13 +513,27 @@ class Router implements RouterInterface
         }
     }
 
-    // src/Infrastructure/Routing/Router.php
-
+    /**
+     * @param RequestInterface $request
+     * @return array|false
+     * @throws MethodNotAllowedException
+     */
     public function match(RequestInterface $request): array|false
     {
         $method = $request->getMethod();
         $path = $this->normalizePath($request->getPath());
         $host = $request->getHost();
+
+        // Cache-Key aus Methode, Pfad und Host erstellen
+        $cacheKey = "{$method}|{$path}|{$host}";
+
+        // Statischer Cache für Route-Matches
+        static $routeCache = [];
+
+        // Cache-Lookup
+        if (isset($routeCache[$cacheKey])) {
+            return $routeCache[$cacheKey];
+        }
 
         // Prüfe, ob die HTTP-Methode überhaupt registrierte Routen hat
         if (!isset($this->routes[$method])) {
@@ -544,6 +558,11 @@ class Router implements RouterInterface
         if ($host !== null && isset($this->routes[$method][$host])) {
             $match = $this->matchPath($path, $this->routes[$method][$host]);
             if ($match !== false) {
+                // Cache-Ergebnis speichern (begrenzt auf ~100 Einträge)
+                if (count($routeCache) > 100) {
+                    array_shift($routeCache); // Entferne ältesten Eintrag
+                }
+                $routeCache[$cacheKey] = $match;
                 return $match;
             }
         }
@@ -575,6 +594,11 @@ class Router implements RouterInterface
                             'matched' => $host
                         ];
 
+                        // Cache-Ergebnis speichern
+                        if (count($routeCache) > 100) {
+                            array_shift($routeCache);
+                        }
+                        $routeCache[$cacheKey] = $match;
                         return $match;
                     }
                 }
@@ -585,10 +609,17 @@ class Router implements RouterInterface
         if (isset($this->routes[$method][null])) {
             $match = $this->matchPath($path, $this->routes[$method][null]);
             if ($match !== false) {
+                // Cache-Ergebnis speichern
+                if (count($routeCache) > 100) {
+                    array_shift($routeCache);
+                }
+                $routeCache[$cacheKey] = $match;
                 return $match;
             }
         }
 
+        // Kein Match gefunden
+        $routeCache[$cacheKey] = false;
         return false;
     }
 

@@ -84,8 +84,13 @@ class Validator implements ValidatorInterface
     {
         $this->errors = [];
 
+        // Früher Ausstieg bei leeren Regeln
+        if (empty($rules)) {
+            return true;
+        }
+
         foreach ($rules as $field => $fieldRules) {
-            // Ermittle den Feldwert
+            // Ermittle den Feldwert mit direktem Array-Zugriff
             $value = $data[$field] ?? null;
 
             // Konvertiere String-Regeln in ein Array
@@ -101,20 +106,25 @@ class Validator implements ValidatorInterface
                 continue;
             }
 
-            // Validiere alle Regeln
+            // Validiere alle Regeln in optimierter Reihenfolge
             foreach ($fieldRules as $rule) {
                 $ruleName = $this->parseRuleName($rule);
                 $params = $this->parseRuleParams($rule);
 
-                // Wenn Validierung fehlschlägt
+                // Schneller Ausstieg bei required Regel
+                if ($ruleName === 'required') {
+                    if (!$this->validateSingle($value, $ruleName, $params, $field)) {
+                        $errorMessage = $this->getErrorMessage($field, $ruleName, $params, $value);
+                        $this->addError($field, $errorMessage);
+                        break; // Überspringe andere Regeln, wenn required fehlschlägt
+                    }
+                    continue;
+                }
+
+                // Für alle anderen Regeln
                 if (!$this->validateSingle($value, $ruleName, $params, $field)) {
                     $errorMessage = $this->getErrorMessage($field, $ruleName, $params, $value);
                     $this->addError($field, $errorMessage);
-
-                    // Bei "required" weitere Regeln überspringen
-                    if ($ruleName === 'required') {
-                        break;
-                    }
                 }
             }
         }
@@ -142,9 +152,19 @@ class Validator implements ValidatorInterface
      */
     private function isEmpty($value): bool
     {
-        return $value === null || $value === '' ||
-            (is_string($value) && trim($value) === '') ||
-            (is_array($value) && empty($value));
+        if ($value === null || $value === '') {
+            return true;
+        }
+
+        if (is_string($value) && trim($value) === '') {
+            return true;
+        }
+
+        if (is_array($value) && empty($value)) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
