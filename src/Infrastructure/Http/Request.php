@@ -1,6 +1,5 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Infrastructure\Http;
@@ -12,6 +11,74 @@ use App\Infrastructure\Http\Contracts\RequestInterface;
  */
 class Request implements RequestInterface
 {
+    // Private Properties für den internen Zustand
+    private string $_method;
+    private string $_uri;
+    private array $_queryParams;
+    private array $_postData;
+    private array $_cookies;
+    private array $_files;
+    private array $_serverParams;
+    private array $_headers;
+    private string $_path;
+
+    // Cache Properties
+    private ?string $_pathCache = null;
+    private ?string $_contentTypeCache = null;
+    private ?string $_rawBodyCache = null;
+    private ?string $_queryStringCache = null;
+    private ?string $_clientIpCache = null;
+    private ?string $_hostCache = null;
+
+    // Public Get-Hooks
+    public string $method {
+        get {
+            return $this->_method;
+        }
+    }
+
+    public string $uri {
+        get {
+            return $this->_uri;
+        }
+    }
+
+    public array $queryParams {
+        get {
+            return $this->_queryParams;
+        }
+    }
+
+    public array $postData {
+        get {
+            return $this->_postData;
+        }
+    }
+
+    public array $cookies {
+        get {
+            return $this->_cookies;
+        }
+    }
+
+    public array $files {
+        get {
+            return $this->_files;
+        }
+    }
+
+    public array $serverParams {
+        get {
+            return $this->_serverParams;
+        }
+    }
+
+    public array $headers {
+        get {
+            return $this->_headers;
+        }
+    }
+
     public string $path {
         get {
             return $this->_path;
@@ -22,55 +89,62 @@ class Request implements RequestInterface
             $this->_path = '/' . $path;
         }
     }
-    /**
-     * HTTP Methode
-     */
-    protected string $method;
-    /**
-     * Request URI
-     */
-    protected string $uri;
-    /**
-     * Query Parameter
-     *
-     * @var array<string, string>
-     */
-    protected array $queryParams;
-    /**
-     * Post Daten
-     *
-     * @var array<string, mixed>
-     */
-    protected array $postData;
-    /**
-     * Cookies
-     *
-     * @var array<string, string>
-     */
-    protected array $cookies;
-    /**
-     * Files
-     *
-     * @var array<string, array<string, mixed>>
-     */
-    protected array $files;
-    /**
-     * Server Parameter
-     *
-     * @var array<string, string>
-     */
-    protected array $serverParams;
-    /**
-     * Headers
-     *
-     * @var array<string, string>
-     */
-    protected array $headers;
-    /**
-     * Raw Body
-     */
-    protected ?string $rawBody = null;
-    private string $_path;
+
+    // Berechnete Get-Hooks
+    public string $calculatedPath {
+        get {
+            if ($this->_pathCache === null) {
+                $uri = parse_url($this->uri, PHP_URL_PATH) ?? '/';
+                $this->_pathCache = $uri === '' ? '/' : $uri;
+            }
+            return $this->_pathCache;
+        }
+    }
+
+    public ?string $contentType {
+        get {
+            if ($this->_contentTypeCache === null) {
+                $this->_contentTypeCache = $this->getHeader('content-type');
+            }
+            return $this->_contentTypeCache;
+        }
+    }
+
+    public string $rawBody {
+        get {
+            if ($this->_rawBodyCache === null) {
+                $this->_rawBodyCache = file_get_contents('php://input') ?: '';
+            }
+            return $this->_rawBodyCache;
+        }
+    }
+
+    public ?string $queryString {
+        get {
+            if ($this->_queryStringCache === null) {
+                $this->_queryStringCache = parse_url($this->uri, PHP_URL_QUERY);
+            }
+            return $this->_queryStringCache;
+        }
+    }
+
+    public string $clientIp {
+        get {
+            if ($this->_clientIpCache === null) {
+                $this->_clientIpCache = $this->determineClientIp();
+            }
+            return $this->_clientIpCache;
+        }
+    }
+
+    public ?string $host {
+        get {
+            if ($this->_hostCache === null) {
+                $this->_hostCache = $this->_serverParams['HTTP_HOST'] ?? null;
+            }
+            return $this->_hostCache;
+        }
+    }
 
     /**
      * Konstruktor
@@ -91,14 +165,19 @@ class Request implements RequestInterface
         array  $serverParams = []
     )
     {
-        $this->method = strtoupper($method);
-        $this->uri = $uri;
-        $this->queryParams = $queryParams;
-        $this->postData = $postData;
-        $this->cookies = $cookies;
-        $this->files = $files;
-        $this->serverParams = $serverParams;
-        $this->headers = $this->parseHeaders($serverParams);
+        $this->_method = strtoupper($method);
+        $this->_uri = $uri;
+        $this->_queryParams = $queryParams;
+        $this->_postData = $postData;
+        $this->_cookies = $cookies;
+        $this->_files = $files;
+        $this->_serverParams = $serverParams;
+        $this->_headers = $this->parseHeaders($serverParams);
+
+        // Initialisiere den Pfad aus der URI
+        $uri_path = parse_url($uri, PHP_URL_PATH) ?? '/';
+        $this->path = $uri_path; // Nutzt den Setter-Hook
+
     }
 
     /**
@@ -122,6 +201,35 @@ class Request implements RequestInterface
         }
 
         return $headers;
+    }
+
+    /**
+     * Bestimmt die Client-IP-Adresse
+     */
+    private function determineClientIp(): string
+    {
+        $keys = [
+            'HTTP_CLIENT_IP',
+            'HTTP_X_FORWARDED_FOR',
+            'HTTP_X_FORWARDED',
+            'HTTP_X_CLUSTER_CLIENT_IP',
+            'HTTP_FORWARDED_FOR',
+            'HTTP_FORWARDED',
+            'REMOTE_ADDR'
+        ];
+
+        foreach ($keys as $key) {
+            if (isset($this->_serverParams[$key])) {
+                $ips = explode(',', $this->_serverParams[$key]);
+                $ip = trim(reset($ips));
+
+                if (filter_var($ip, FILTER_VALIDATE_IP)) {
+                    return $ip;
+                }
+            }
+        }
+
+        return 'unknown';
     }
 
     /**
@@ -201,14 +309,7 @@ class Request implements RequestInterface
      */
     public function getPath(): string
     {
-        static $pathCache = null;
-
-        if ($pathCache === null) {
-            $uri = parse_url($this->uri, PHP_URL_PATH) ?? '/';
-            $pathCache = $uri === '' ? '/' : $uri;
-        }
-
-        return $pathCache;
+        return $this->calculatedPath;
     }
 
     /**
@@ -216,7 +317,7 @@ class Request implements RequestInterface
      */
     public function getQueryString(): ?string
     {
-        return parse_url($this->uri, PHP_URL_QUERY);
+        return $this->queryString;
     }
 
     /**
@@ -415,7 +516,7 @@ class Request implements RequestInterface
             return null;
         }
 
-        $body = $this->getRawBody();
+        $body = $this->rawBody;
         if (empty($body)) {
             return null;
         }
@@ -441,7 +542,7 @@ class Request implements RequestInterface
      */
     public function isContentType(string $contentType): bool
     {
-        $currentContentType = $this->getContentType();
+        $currentContentType = $this->contentType;
         if ($currentContentType === null) {
             return false;
         }
@@ -456,7 +557,7 @@ class Request implements RequestInterface
      */
     public function getContentType(): ?string
     {
-        return $this->getHeader('content-type');
+        return $this->contentType;
     }
 
     /**
@@ -464,10 +565,6 @@ class Request implements RequestInterface
      */
     public function getRawBody(): string
     {
-        if ($this->rawBody === null) {
-            $this->rawBody = file_get_contents('php://input') ?: '';
-        }
-
         return $this->rawBody;
     }
 
@@ -476,28 +573,7 @@ class Request implements RequestInterface
      */
     public function getClientIp(): string
     {
-        $keys = [
-            'HTTP_CLIENT_IP',
-            'HTTP_X_FORWARDED_FOR',
-            'HTTP_X_FORWARDED',
-            'HTTP_X_CLUSTER_CLIENT_IP',
-            'HTTP_FORWARDED_FOR',
-            'HTTP_FORWARDED',
-            'REMOTE_ADDR'
-        ];
-
-        foreach ($keys as $key) {
-            if (isset($this->serverParams[$key])) {
-                $ips = explode(',', $this->serverParams[$key]);
-                $ip = trim(reset($ips));
-
-                if (filter_var($ip, FILTER_VALIDATE_IP)) {
-                    return $ip;
-                }
-            }
-        }
-
-        return 'unknown';
+        return $this->clientIp;
     }
 
     /**
@@ -520,7 +596,7 @@ class Request implements RequestInterface
      */
     public function getSubdomain(string $baseDomain): ?string
     {
-        $host = $this->getHost();
+        $host = $this->host;
         if ($host === null) {
             return null;
         }
@@ -538,6 +614,6 @@ class Request implements RequestInterface
      */
     public function getHost(): ?string
     {
-        return $this->serverParams['HTTP_HOST'] ?? null;
+        return $this->host;
     }
 }
