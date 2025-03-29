@@ -124,11 +124,42 @@ class ExceptionHandler implements ExceptionHandlerInterface
         return $additionalContext;
     }
 
-    /**
-     * {@inheritdoc}
-     */
+// src/Infrastructure/ErrorHandling/ExceptionHandler.php
     public function report(Throwable $exception, array $context = []): void
     {
+        // Bestimme den Schweregrad der Exception
+        $needsFullContext = $exception instanceof Error ||
+            $this->isHighSeverityException($exception);
+
+        // Bei weniger kritischen Exceptions minimalen Kontext sammeln für bessere Performance
+        if (!$needsFullContext) {
+            $minimalContext = [
+                'type' => get_class($exception),
+                'message' => $exception->getMessage(),
+                'file' => $exception->getFile(),
+                'line' => $exception->getLine()
+            ];
+
+            // Request-Informationen hinzufügen, falls verfügbar
+            if ($this->request !== null) {
+                $minimalContext['request'] = [
+                    'method' => $this->request->getMethod(),
+                    'path' => $this->request->getPath(),
+                    'ip' => $this->request->getClientIp()
+                ];
+            }
+
+            // Log mit minimalem Kontext
+            $this->logger->exception(
+                $exception,
+                $this->getLogLevelForException($exception)->value,
+                '',
+                $minimalContext
+            );
+            return;
+        }
+
+        // Vollständiger Kontext für kritische Fehler
         // Erweitere den Kontext mit Request-Informationen
         if ($this->request !== null) {
             $context['request'] = $this->collectRequestInformation($this->request);
@@ -142,6 +173,40 @@ class ExceptionHandler implements ExceptionHandlerInterface
 
         // Verwende den Logger, um die Exception zu protokollieren
         $this->logger->exception($exception, $level->value, '', $context);
+    }
+
+    /**
+     * Prüft, ob eine Exception als hochkritisch eingestuft werden sollte
+     *
+     * @param Throwable $exception Die zu prüfende Exception
+     * @return bool
+     */
+    private function isHighSeverityException(Throwable $exception): bool
+    {
+        // Spezifische kritische Exception-Typen
+        $highSeverityClasses = [
+            'App\\Infrastructure\\Security\\Exceptions\\SecurityException',
+            'App\\Infrastructure\\Database\\Exceptions\\ConnectionException',
+            'App\\Infrastructure\\Container\\Exceptions\\ContainerException',
+        ];
+
+        // Prüfe auf Exception-Typen mit array_any
+        if (array_any($highSeverityClasses, fn($class) => $exception instanceof $class)) {
+            return true;
+        }
+
+        // Prüfe auf kritische Schlüsselwörter in der Nachricht
+        $criticalKeywords = ['security breach', 'SQL injection', 'authentication failure'];
+        if (array_any($criticalKeywords, fn($keyword) => stripos($exception->getMessage(), $keyword) !== false)) {
+            return true;
+        }
+
+        // Prüfe auf hohen Fehlercode
+        if (method_exists($exception, 'getCode') && $exception->getCode() >= 500) {
+            return true;
+        }
+
+        return false;
     }
 
     /**

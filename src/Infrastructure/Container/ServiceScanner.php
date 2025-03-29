@@ -257,52 +257,48 @@ class ServiceScanner
      * @param string $className Der zu prüfende Klassenname
      * @return bool
      */
+
     private function isHeavyService(string $className): bool
     {
-        if (in_array($className, $this->lazyLoadingConfig->excludedServices)) {
+        // Schnellste Checks zuerst
+        if (in_array($className, $this->lazyLoadingConfig->excludedServices, true)) {
             return false;
         }
 
-        // Überprüfe zuerst, ob es sich um ein Interface oder eine abstrakte Klasse handelt
-        try {
-            $reflector = new ReflectionClass($className);
-            if ($reflector->isInterface() || $reflector->isAbstract()) {
-                return false; // Keine Lazy-Loading für Interfaces oder abstrakte Klassen
-            }
-        } catch (ReflectionException $e) {
-            $this->logger->warning('Error examining class', [
-                'class' => $className,
-                'error' => $e->getMessage()
-            ]);
-            return false;
-        }
-
-        // Vorregistrierte schwere Services - schnellster Check zuerst
-        if (in_array($className, $this->lazyLoadingConfig->heavyServices)) {
+        // Vorregistrierte schwere Services
+        if (in_array($className, $this->lazyLoadingConfig->heavyServices, true)) {
             return true;
         }
 
-        // Komplexitätsüberprüfung nur ausführen, wenn Auto-Detection aktiviert ist
+        // Nutze statischen Cache
+        static $heavyServicesCache = [];
+        if (isset($heavyServicesCache[$className])) {
+            return $heavyServicesCache[$className];
+        }
+
+        // Komplexitätscheck, nur wenn nötig
         if (!$this->lazyLoadingConfig->autoDetectHeavyServices) {
             return false;
         }
 
-        try {
-            // Prüfe zuerst Konstruktorkomplexität, da dies am wenigsten Ressourcen benötigt
-            if ($this->hasComplexConstructor($className)) {
-                return true;
-            }
+        // Lese Ergebnisse in Cache
+        $result = false;
 
-            // Teurere Überprüfungen nur durchführen, wenn notwendig
-            return $this->hasLongExecutionTime($className) ||
-                $this->hasHighMemoryFootprint($className);
+        try {
+            // Prüfe nur Konstruktor-Komplexität (schnellster Check)
+            if ($this->hasComplexConstructor($className)) {
+                $result = true;
+            }
         } catch (Throwable $e) {
             $this->logger->warning('Error detecting heavy service', [
                 'class' => $className,
                 'error' => $e->getMessage()
             ]);
-            return false;
         }
+
+        // Cache für zukünftige Anfragen
+        $heavyServicesCache[$className] = $result;
+        return $result;
     }
 
     /**
