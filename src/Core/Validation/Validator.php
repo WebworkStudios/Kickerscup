@@ -78,6 +78,7 @@ class Validator
 
             // Wert aus den Daten holen
             $value = $data[$field] ?? null;
+            $isFieldValid = true;
 
             // Jede Regel prüfen
             foreach ($fieldRules as $rule) {
@@ -85,7 +86,7 @@ class Validator
                 $parameters = [];
 
                 if (is_string($rule)) {
-                    if (strpos($rule, ':') !== false) {
+                    if (str_contains($rule, ':')) {
                         [$rule, $paramStr] = explode(':', $rule, 2);
                         $parameters = explode(',', $paramStr);
                     }
@@ -103,7 +104,10 @@ class Validator
 
                     if ($result !== true) {
                         // Fehlermeldung bestimmen
-                        $message = $messages["$field.$rule"] ?? $messages[$rule] ?? $this->messages[$rule] ?? "Validation failed for $field with rule $rule.";
+                        $message = $messages["$field.$rule"]
+                            ?? $messages[$rule]
+                            ?? $this->messages[$rule]
+                            ?? "Validation failed for $field with rule $rule.";
 
                         // Parameter in der Fehlermeldung ersetzen
                         $message = str_replace(':attribute', $field, $message);
@@ -117,13 +121,14 @@ class Validator
                         }
 
                         $errors[$field][] = $message;
+                        $isFieldValid = false;
                         break; // Bei einem Fehler weitere Regeln für dieses Feld überspringen
                     }
                 }
             }
 
             // Wenn keine Fehler für dieses Feld vorhanden sind, zu den validierten Daten hinzufügen
-            if (!isset($errors[$field])) {
+            if ($isFieldValid) {
                 $validated[$field] = $value;
             }
         }
@@ -143,6 +148,247 @@ class Validator
     protected function validateRequired(string $field, mixed $value, array $parameters, array $data): bool
     {
         if ($value === null) {
+            return false;
+        }
+
+        if (is_string($value) && trim($value) === '') {
+            return false;
+        }
+
+        if (is_array($value) && count($value) === 0) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Validiert, ob ein Wert ein String ist
+     *
+     * @param string $field Feldname
+     * @param mixed $value Wert
+     * @param array $parameters Parameter
+     * @param array $data Alle Daten
+     * @return bool
+     */
+    protected function validateString(string $field, mixed $value, array $parameters, array $data): bool
+    {
+        return is_string($value);
+    }
+
+    /**
+     * Validiert, ob ein Wert eine E-Mail-Adresse ist
+     *
+     * @param string $field Feldname
+     * @param mixed $value Wert
+     * @param array $parameters Parameter
+     * @param array $data Alle Daten
+     * @return bool
+     */
+    protected function validateEmail(string $field, mixed $value, array $parameters, array $data): bool
+    {
+        if (!is_string($value)) {
+            return false;
+        }
+
+        return filter_var($value, FILTER_VALIDATE_EMAIL) !== false;
+    }
+
+    /**
+     * Validiert, ob ein Wert eine Zahl ist
+     *
+     * @param string $field Feldname
+     * @param mixed $value Wert
+     * @param array $parameters Parameter
+     * @param array $data Alle Daten
+     * @return bool
+     */
+    protected function validateNumeric(string $field, mixed $value, array $parameters, array $data): bool
+    {
+        return is_numeric($value);
+    }
+
+    /**
+     * Validiert, ob ein Wert eine Ganzzahl ist
+     *
+     * @param string $field Feldname
+     * @param mixed $value Wert
+     * @param array $parameters Parameter
+     * @param array $data Alle Daten
+     * @return bool
+     */
+    protected function validateInteger(string $field, mixed $value, array $parameters, array $data): bool
+    {
+        return filter_var($value, FILTER_VALIDATE_INT) !== false;
+    }
+
+    /**
+     * Validiert, ob ein Wert ein Boolean ist
+     *
+     * @param string $field Feldname
+     * @param mixed $value Wert
+     * @param array $parameters Parameter
+     * @param array $data Alle Daten
+     * @return bool
+     */
+    protected function validateBoolean(string $field, mixed $value, array $parameters, array $data): bool
+    {
+        $acceptable = [true, false, 0, 1, '0', '1'];
+
+        return in_array($value, $acceptable, strict: true);
+    }
+
+    /**
+     * Validiert, ob ein Wert eine minimale Länge hat
+     *
+     * @param string $field Feldname
+     * @param mixed $value Wert
+     * @param array $parameters Parameter
+     * @param array $data Alle Daten
+     * @return bool
+     */
+    protected function validateMin(string $field, mixed $value, array $parameters, array $data): bool
+    {
+        if (empty($parameters)) {
+            return false;
+        }
+
+        $min = (int)$parameters[0];
+
+        if (is_string($value)) {
+            return mb_strlen($value) >= $min;
+        }
+
+        if (is_numeric($value)) {
+            return $value >= $min;
+        }
+
+        if (is_array($value)) {
+            return count($value) >= $min;
+        }
+
+        return false;
+    }
+
+    /**
+     * Validiert, ob ein Wert eine maximale Länge hat
+     *
+     * @param string $field Feldname
+     * @param mixed $value Wert
+     * @param array $parameters Parameter
+     * @param array $data Alle Daten
+     * @return bool
+     */
+    protected function validateMax(string $field, mixed $value, array $parameters, array $data): bool
+    {
+        if (empty($parameters)) {
+            return false;
+        }
+
+        $max = (int)$parameters[0];
+
+        if (is_string($value)) {
+            return mb_strlen($value) <= $max;
+        }
+
+        if (is_numeric($value)) {
+            return $value <= $max;
+        }
+
+        if (is_array($value)) {
+            return count($value) <= $max;
+        }
+
+        return false;
+    }
+
+    /**
+     * Validiert, ob ein Wert zwischen zwei Werten liegt
+     *
+     * @param string $field Feldname
+     * @param mixed $value Wert
+     * @param array $parameters Parameter
+     * @param array $data Alle Daten
+     * @return bool
+     */
+    protected function validateBetween(string $field, mixed $value, array $parameters, array $data): bool
+    {
+        if (count($parameters) < 2) {
+            return false;
+        }
+
+        $min = (int)$parameters[0];
+        $max = (int)$parameters[1];
+
+        return $this->validateMin($field, $value, [$min], $data) &&
+            $this->validateMax($field, $value, [$max], $data);
+    }
+
+    /**
+     * Validiert, ob ein Wert in einer Liste von Werten enthalten ist
+     *
+     * @param string $field Feldname
+     * @param mixed $value Wert
+     * @param array $parameters Parameter
+     * @param array $data Alle Daten
+     * @return bool
+     */
+    protected function validateIn(string $field, mixed $value, array $parameters, array $data): bool
+    {
+        return in_array($value, $parameters, strict: true);
+    }
+
+    /**
+     * Validiert, ob ein Wert nicht in einer Liste von Werten enthalten ist
+     *
+     * @param string $field Feldname
+     * @param mixed $value Wert
+     * @param array $parameters Parameter
+     * @param array $data Alle Daten
+     * @return bool
+     */
+    protected function validateNotIn(string $field, mixed $value, array $parameters, array $data): bool
+    {
+        return !array_any($parameters, fn($item) => $item === $value);
+    }
+
+    /**
+     * Validiert, ob ein Wert ein gültiges Datum ist
+     *
+     * @param string $field Feldname
+     * @param mixed $value Wert
+     * @param array $parameters Parameter
+     * @param array $data Alle Daten
+     * @return bool
+     */
+    protected function validateDate(string $field, mixed $value, array $parameters, array $data): bool
+    {
+        if (!is_string($value) && !is_numeric($value)) {
+            return false;
+        }
+
+        $format = $parameters[0] ?? null;
+
+        if ($format) {
+            $date = \DateTime::createFromFormat($format, $value);
+            return $date && $date->format($format) === $value;
+        }
+
+        return strtotime($value) !== false;
+    }
+
+    /**
+     * Validiert, ob ein Wert eine gültige URL ist
+     *
+     * @param string $field Feldname
+     * @param mixed $value Wert
+     * @param array $parameters Parameter
+     * @param array $data Alle Daten
+     * @return bool
+     */
+    protected function validateUrl(string $field, mixed $value, array $parameters, array $data): bool
+    {
+        if (!is_string($value)) {
             return false;
         }
 
@@ -273,255 +519,3 @@ class Validator
         return $this->db->table($table)->where($column, '=', $value)->count() > 0;
     }
 }
-
-if (is_string($value) && trim($value) === '') {
-    return false;
-}
-
-if (is_array($value) && count($value) === 0) {
-    return false;
-}
-
-return true;
-}
-
-/**
- * Validiert, ob ein Wert ein String ist
- *
- * @param string $field Feldname
- * @param mixed $value Wert
- * @param array $parameters Parameter
- * @param array $data Alle Daten
- * @return bool
- */
-protected
-function validateString(string $field, mixed $value, array $parameters, array $data): bool
-{
-    return is_string($value);
-}
-
-/**
- * Validiert, ob ein Wert eine E-Mail-Adresse ist
- *
- * @param string $field Feldname
- * @param mixed $value Wert
- * @param array $parameters Parameter
- * @param array $data Alle Daten
- * @return bool
- */
-protected
-function validateEmail(string $field, mixed $value, array $parameters, array $data): bool
-{
-    if (!is_string($value)) {
-        return false;
-    }
-
-    return filter_var($value, FILTER_VALIDATE_EMAIL) !== false;
-}
-
-/**
- * Validiert, ob ein Wert eine Zahl ist
- *
- * @param string $field Feldname
- * @param mixed $value Wert
- * @param array $parameters Parameter
- * @param array $data Alle Daten
- * @return bool
- */
-protected
-function validateNumeric(string $field, mixed $value, array $parameters, array $data): bool
-{
-    return is_numeric($value);
-}
-
-/**
- * Validiert, ob ein Wert eine Ganzzahl ist
- *
- * @param string $field Feldname
- * @param mixed $value Wert
- * @param array $parameters Parameter
- * @param array $data Alle Daten
- * @return bool
- */
-protected
-function validateInteger(string $field, mixed $value, array $parameters, array $data): bool
-{
-    return filter_var($value, FILTER_VALIDATE_INT) !== false;
-}
-
-/**
- * Validiert, ob ein Wert ein Boolean ist
- *
- * @param string $field Feldname
- * @param mixed $value Wert
- * @param array $parameters Parameter
- * @param array $data Alle Daten
- * @return bool
- */
-protected
-function validateBoolean(string $field, mixed $value, array $parameters, array $data): bool
-{
-    $acceptable = [true, false, 0, 1, '0', '1'];
-
-    return in_array($value, $acceptable, true);
-}
-
-/**
- * Validiert, ob ein Wert eine minimale Länge hat
- *
- * @param string $field Feldname
- * @param mixed $value Wert
- * @param array $parameters Parameter
- * @param array $data Alle Daten
- * @return bool
- */
-protected
-function validateMin(string $field, mixed $value, array $parameters, array $data): bool
-{
-    if (empty($parameters)) {
-        return false;
-    }
-
-    $min = (int)$parameters[0];
-
-    if (is_string($value)) {
-        return mb_strlen($value) >= $min;
-    }
-
-    if (is_numeric($value)) {
-        return $value >= $min;
-    }
-
-    if (is_array($value)) {
-        return count($value) >= $min;
-    }
-
-    return false;
-}
-
-/**
- * Validiert, ob ein Wert eine maximale Länge hat
- *
- * @param string $field Feldname
- * @param mixed $value Wert
- * @param array $parameters Parameter
- * @param array $data Alle Daten
- * @return bool
- */
-protected
-function validateMax(string $field, mixed $value, array $parameters, array $data): bool
-{
-    if (empty($parameters)) {
-        return false;
-    }
-
-    $max = (int)$parameters[0];
-
-    if (is_string($value)) {
-        return mb_strlen($value) <= $max;
-    }
-
-    if (is_numeric($value)) {
-        return $value <= $max;
-    }
-
-    if (is_array($value)) {
-        return count($value) <= $max;
-    }
-
-    return false;
-}
-
-/**
- * Validiert, ob ein Wert zwischen zwei Werten liegt
- *
- * @param string $field Feldname
- * @param mixed $value Wert
- * @param array $parameters Parameter
- * @param array $data Alle Daten
- * @return bool
- */
-protected
-function validateBetween(string $field, mixed $value, array $parameters, array $data): bool
-{
-    if (count($parameters) < 2) {
-        return false;
-    }
-
-    $min = (int)$parameters[0];
-    $max = (int)$parameters[1];
-
-    return $this->validateMin($field, $value, [$min], $data) &&
-        $this->validateMax($field, $value, [$max], $data);
-}
-
-/**
- * Validiert, ob ein Wert in einer Liste von Werten enthalten ist
- *
- * @param string $field Feldname
- * @param mixed $value Wert
- * @param array $parameters Parameter
- * @param array $data Alle Daten
- * @return bool
- */
-protected
-function validateIn(string $field, mixed $value, array $parameters, array $data): bool
-{
-    return in_array($value, $parameters, true);
-}
-
-/**
- * Validiert, ob ein Wert nicht in einer Liste von Werten enthalten ist
- *
- * @param string $field Feldname
- * @param mixed $value Wert
- * @param array $parameters Parameter
- * @param array $data Alle Daten
- * @return bool
- */
-protected
-function validateNotIn(string $field, mixed $value, array $parameters, array $data): bool
-{
-    return !in_array($value, $parameters, true);
-}
-
-/**
- * Validiert, ob ein Wert ein gültiges Datum ist
- *
- * @param string $field Feldname
- * @param mixed $value Wert
- * @param array $parameters Parameter
- * @param array $data Alle Daten
- * @return bool
- */
-protected
-function validateDate(string $field, mixed $value, array $parameters, array $data): bool
-{
-    if (!is_string($value) && !is_numeric($value)) {
-        return false;
-    }
-
-    $format = $parameters[0] ?? null;
-
-    if ($format) {
-        $date = \DateTime::createFromFormat($format, $value);
-        return $date && $date->format($format) === $value;
-    }
-
-    return strtotime($value) !== false;
-}
-
-/**
- * Validiert, ob ein Wert eine gültige URL ist
- *
- * @param string $field Feldname
- * @param mixed $value Wert
- * @param array $parameters Parameter
- * @param array $data Alle Daten
- * @return bool
- */
-protected
-function validateUrl(string $field, mixed $value, array $parameters, array $data): bool
-{
-    if (!is_string($value)) {
-        return

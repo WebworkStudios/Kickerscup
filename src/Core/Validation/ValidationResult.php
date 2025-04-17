@@ -7,7 +7,7 @@ namespace App\Core\Validation;
 /**
  * Ergebnis einer Validierung
  */
-class ValidationResult
+readonly class ValidationResult
 {
     /**
      * Konstruktor
@@ -16,20 +16,10 @@ class ValidationResult
      * @param array $errors Fehlermeldungen
      */
     public function __construct(
-        private readonly array $validated = [],
-        private readonly array $errors = []
+        private array $validated = [],
+        private array $errors = []
     )
     {
-    }
-
-    /**
-     * Prüft, ob die Validierung fehlgeschlagen ist
-     *
-     * @return bool True, wenn fehlgeschlagen, sonst false
-     */
-    public function fails(): bool
-    {
-        return !$this->isValid();
     }
 
     /**
@@ -40,6 +30,16 @@ class ValidationResult
     public function isValid(): bool
     {
         return empty($this->errors);
+    }
+
+    /**
+     * Prüft, ob die Validierung fehlgeschlagen ist
+     *
+     * @return bool True, wenn fehlgeschlagen, sonst false
+     */
+    public function fails(): bool
+    {
+        return !$this->isValid();
     }
 
     /**
