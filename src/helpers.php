@@ -32,10 +32,15 @@ function setContainer(Container $container): void
  *
  * @param string|null $abstract Abstrakter Klassenname oder null für den Container selbst
  * @return mixed Service oder Container
+ * @throws \Exception Wenn der Container nicht initialisiert wurde
  */
 function app(?string $abstract = null): mixed
 {
     global $container;
+
+    if ($container === null) {
+        throw new \Exception('Container is not initialized. Make sure setContainer() is called before using app().');
+    }
 
     if ($abstract === null) {
         return $container;
@@ -62,17 +67,26 @@ function config(string $key, mixed $default = null): mixed
         return $default;
     }
 
-    $config = require $configPath;
+    try {
+        $config = require $configPath;
 
-    foreach ($parts as $part) {
-        if (!is_array($config) || !array_key_exists($part, $config)) {
+        if (!is_array($config)) {
             return $default;
         }
 
-        $config = $config[$part];
-    }
+        foreach ($parts as $part) {
+            if (!is_array($config) || !array_key_exists($part, $config)) {
+                return $default;
+            }
 
-    return $config;
+            $config = $config[$part];
+        }
+
+        return $config;
+    } catch (\Throwable $e) {
+        error_log('Error loading config file: ' . $e->getMessage());
+        return $default;
+    }
 }
 
 /**

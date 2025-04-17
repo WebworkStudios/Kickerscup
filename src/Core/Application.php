@@ -28,6 +28,8 @@ class Application
     private Router $router;
 
     /**
+     * Konstruktor
+     *
      * @param string $basePath Basis-Pfad der Anwendung
      */
     public function __construct(
@@ -38,7 +40,7 @@ class Application
         $this->container = new Container();
 
         // Basis-Pfad registrieren
-        $this->container->singleton('base_path', fn() => $this->basePath);
+        $this->container->singleton('base_path', $this->basePath);
 
         // Router initialisieren
         $this->router = $this->container->make(Router::class);
@@ -68,12 +70,12 @@ class Application
     private function loadRoutes(): void
     {
         $routesFile = $this->basePath . '/config/routes.php';
+        $app = $this;
 
         if (file_exists($routesFile)) {
             require $routesFile;
         }
     }
-
     /**
      * Verarbeitet den Request und gibt eine Response zurück
      */
@@ -81,7 +83,7 @@ class Application
     {
         try {
             // Request im Container registrieren
-            $this->container->singleton(Request::class, fn() => $request);
+            $this->container->singleton(Request::class, $request);
 
             // Route finden
             $route = $this->router->resolve($request);
@@ -114,11 +116,18 @@ class Application
             }
 
             // Wenn Action nicht aufrufbar ist, 500 Internal Server Error zurückgeben
-            return $this->container->make(ResponseFactory::class)->serverError();
+            return $this->container->make(ResponseFactory::class)->serverError('Action is not callable');
         } catch (\Throwable $e) {
             // Fehler protokollieren und 500 Internal Server Error zurückgeben
-            // In Zukunft hier Logger einbinden
-            error_log($e->getMessage());
+            error_log('Exception: ' . $e->getMessage() . ' in ' . $e->getFile() . ' on line ' . $e->getLine());
+            error_log('Stack trace: ' . $e->getTraceAsString());
+
+            // Im Entwicklungsmodus können wir Fehlerdetails zurückgeben
+            if (config('app.debug', false)) {
+                return $this->container->make(ResponseFactory::class)->serverError(
+                    'Exception: ' . $e->getMessage() . ' in ' . $e->getFile() . ' on line ' . $e->getLine()
+                );
+            }
 
             return $this->container->make(ResponseFactory::class)->serverError();
         }
