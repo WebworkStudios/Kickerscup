@@ -198,7 +198,7 @@ class Request
     }
 
     /**
-     * Gibt einen Parameter (GET oder POST) zurück
+     * Gibt einen Parameter (GET, POST oder JSON) zurück
      *
      * @param string $name Name des Parameters
      * @param mixed $default Standardwert, wenn der Parameter nicht existiert
@@ -206,7 +206,71 @@ class Request
      */
     public function get(string $name, mixed $default = null): mixed
     {
-        return $this->all()[$name] ?? $default;
+        return $this->input()[$name] ?? $default;
+    }
+
+    /**
+     * Gibt alle Input-Parameter (GET, POST, JSON) zurück
+     *
+     * @return array Alle Input-Parameter
+     */
+    public function input(): array
+    {
+        // Wenn es sich um einen JSON-Request handelt, JSON-Daten verwenden
+        if ($this->isJson()) {
+            $json = $this->getJson();
+
+            if (is_array($json)) {
+                return array_merge($this->query, $json);
+            }
+        }
+
+        return $this->all();
+    }
+
+    /**
+     * Prüft, ob der Request ein JSON-Request ist
+     *
+     * @return bool True, wenn der Request ein JSON-Request ist, sonst false
+     */
+    public function isJson(): bool
+    {
+        return $this->hasHeader('Content-Type') &&
+            strpos(strtolower($this->getHeader('Content-Type')), 'application/json') !== false;
+    }
+
+    /**
+     * Prüft, ob ein Header existiert
+     *
+     * @param string $name Name des Headers
+     * @return bool True, wenn der Header existiert, sonst false
+     */
+    public function hasHeader(string $name): bool
+    {
+        return isset($this->headers[$name]);
+    }
+
+    /**
+     * Gibt einen Header zurück
+     *
+     * @param string $name Name des Headers
+     * @param mixed $default Standardwert, wenn der Header nicht existiert
+     * @return mixed Wert des Headers oder Standardwert
+     */
+    public function getHeader(string $name, mixed $default = null): mixed
+    {
+        return $this->headers[$name] ?? $default;
+    }
+
+    /**
+     * Gibt den Request-Body als JSON zurück
+     *
+     * @param bool $assoc True, um ein assoziatives Array zurückzugeben, false für ein Objekt
+     * @return mixed Decodiertes JSON oder null, wenn der Body kein gültiges JSON ist
+     */
+    public function getJson(bool $assoc = true): mixed
+    {
+        return json_decode($this->content, $assoc) ?: null;
     }
 
     /**
@@ -220,14 +284,14 @@ class Request
     }
 
     /**
-     * Prüft, ob ein Parameter (GET oder POST) existiert
+     * Prüft, ob ein Parameter (GET, POST oder JSON) existiert
      *
      * @param string $name Name des Parameters
      * @return bool True, wenn der Parameter existiert, sonst false
      */
     public function has(string $name): bool
     {
-        return isset($this->all()[$name]);
+        return isset($this->input()[$name]);
     }
 
     /**
@@ -274,17 +338,6 @@ class Request
     }
 
     /**
-     * Gibt den Request-Body als JSON zurück
-     *
-     * @param bool $assoc True, um ein assoziatives Array zurückzugeben, false für ein Objekt
-     * @return mixed Decodiertes JSON oder null, wenn der Body kein gültiges JSON ist
-     */
-    public function getJson(bool $assoc = true): mixed
-    {
-        return json_decode($this->content, $assoc) ?: null;
-    }
-
-    /**
      * Prüft, ob der Request ein AJAX-Request ist
      *
      * @return bool True, wenn der Request ein AJAX-Request ist, sonst false
@@ -293,40 +346,6 @@ class Request
     {
         return $this->hasHeader('X-Requested-With') &&
             strtolower($this->getHeader('X-Requested-With')) === 'xmlhttprequest';
-    }
-
-    /**
-     * Prüft, ob ein Header existiert
-     *
-     * @param string $name Name des Headers
-     * @return bool True, wenn der Header existiert, sonst false
-     */
-    public function hasHeader(string $name): bool
-    {
-        return isset($this->headers[$name]);
-    }
-
-    /**
-     * Gibt einen Header zurück
-     *
-     * @param string $name Name des Headers
-     * @param mixed $default Standardwert, wenn der Header nicht existiert
-     * @return mixed Wert des Headers oder Standardwert
-     */
-    public function getHeader(string $name, mixed $default = null): mixed
-    {
-        return $this->headers[$name] ?? $default;
-    }
-
-    /**
-     * Prüft, ob der Request ein JSON-Request ist
-     *
-     * @return bool True, wenn der Request ein JSON-Request ist, sonst false
-     */
-    public function isJson(): bool
-    {
-        return $this->hasHeader('Content-Type') &&
-            strpos(strtolower($this->getHeader('Content-Type')), 'application/json') !== false;
     }
 
     /**
@@ -339,4 +358,5 @@ class Request
     {
         return strtoupper($this->method) === strtoupper($method);
     }
+
 }

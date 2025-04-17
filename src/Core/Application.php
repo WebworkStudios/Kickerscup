@@ -88,7 +88,7 @@ class Application
     {
         try {
             // Request im Container registrieren
-            $this->container->singleton(Request::class, $request);
+            $this->container->singleton(Request::class, fn() => $request);
 
             // Route finden
             $route = $this->router->resolve($request);
@@ -100,9 +100,21 @@ class Application
             // Action auflösen
             $action = $route->getAction();
 
-            // Wenn Action ein Classname ist, instanziieren
+            // Wenn Action ein Array ist [Controller::class, 'method']
+            if (is_array($action) && count($action) === 2 && is_string($action[0]) && is_string($action[1])) {
+                $controller = $this->container->make($action[0]);
+                $action = [$controller, $action[1]];
+            }
+
+            // Wenn Action ein Classname ist, instanziieren und invoke-Methode aufrufen
             if (is_string($action) && class_exists($action)) {
-                $action = $this->container->make($action);
+                $controller = $this->container->make($action);
+
+                if (method_exists($controller, '__invoke')) {
+                    $action = [$controller, '__invoke'];
+                } else {
+                    return $this->container->make(ResponseFactory::class)->serverError('Controller hat keine __invoke-Methode.');
+                }
             }
 
             // Parameter vorbereiten
@@ -121,18 +133,14 @@ class Application
             }
 
             // Wenn Action nicht aufrufbar ist, 500 Internal Server Error zurückgeben
-            return $this->container->make(ResponseFactory::class)->serverError('Action is not callable');
+            return $this->container->make(ResponseFactory::class)->serverError('Route-Action ist nicht aufrufbar.');
         } catch (\Throwable $e) {
             // Fehler protokollieren und 500 Internal Server Error zurückgeben
-            error_log('Exception: ' . $e->getMessage() . ' in ' . $e->getFile() . ' on line ' . $e->getLine());
-            error_log('Stack trace: ' . $e->getTraceAsString());
-
-            // Im Entwicklungsmodus können wir Fehlerdetails zurückgeben
-            if (config('app.debug', false)) {
-                return $this->container->make(ResponseFactory::class)->serverError(
-                    'Exception: ' . $e->getMessage() . ' in ' . $e->getFile() . ' on line ' . $e->getLine()
-                );
-            }
+            log('error', $e->getMessage(), [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ]);
 
             return $this->container->make(ResponseFactory::class)->serverError();
         }

@@ -39,10 +39,10 @@ class RouteCollection implements \Iterator, \Countable
     }
 
     /**
-     * Findet eine Route anhand ihres Namens
+     * Sucht nach einer Route mit einem bestimmten Namen
      *
-     * @param string $name Name der Route
-     * @return Route|null Route oder null, wenn keine gefunden wurde
+     * @param string $name Routenname
+     * @return Route|null Die gefundene Route oder null
      */
     public function findByName(string $name): ?Route
     {
@@ -113,5 +113,17 @@ class RouteCollection implements \Iterator, \Countable
     public function count(): int
     {
         return count($this->routes);
+    }
+
+    // src/Core/Routing/Router.php
+
+    /**
+     * Gibt die RouteCollection zurück
+     *
+     * @return array Sammlung aller Routen
+     */
+    public function getRoutes(): array
+    {
+        return $this->routes;
     }
 }

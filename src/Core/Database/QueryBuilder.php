@@ -577,125 +577,130 @@ class QueryBuilder
                 }
             }
 
-    /**
-     * Führt die Abfrage aus und gibt die Anzahl der Ergebnisse zurück
-     *
-     * @param string $column Spalte
-     * @return int
-     */
-    public function count(string $column = '*'): int
-    {
-        $this->components['select'] = ["COUNT($column) as count"];
+            /**
+             * Führt die Abfrage aus und gibt die Anzahl der Ergebnisse zurück
+             *
+             * @param string $column Spalte
+             * @return int
+             */
+            public
+            function count(string $column = '*'): int
+            {
+                $this->components['select'] = ["COUNT($column) as count"];
 
-        $result = $this->first();
+                $result = $this->first();
 
-        return (int)($result['count'] ?? 0);
-    }
-
-    /**
-     * Führt ein INSERT aus
-     *
-     * @param array $data Daten
-     * @return int Letzte eingefügte ID
-     */
-    public function insert(array $data): int
-    {
-        return $this->connection->insert($this->table, $data);
-    }
-
-    /**
-     * Führt mehrere INSERTs aus
-     *
-     * @param array $data Daten
-     * @return bool
-     */
-    public function insertMany(array $data): bool
-    {
-        if (empty($data)) {
-            return true;
-        }
-
-        $first = reset($data);
-        $columns = array_keys($first);
-
-        $query = sprintf(
-            'INSERT INTO %s (%s) VALUES ',
-            $this->table,
-            implode(', ', $columns)
-        );
-
-        $valuePlaceholders = [];
-        $values = [];
-
-        foreach ($data as $i => $row) {
-            $rowPlaceholders = [];
-
-            foreach ($columns as $column) {
-                $key = ":{$column}_{$i}";
-                $rowPlaceholders[] = $key;
-                $values[$key] = $row[$column] ?? null;
+                return (int)($result['count'] ?? 0);
             }
 
-            $valuePlaceholders[] = '(' . implode(', ', $rowPlaceholders) . ')';
-        }
+            /**
+             * Führt ein INSERT aus
+             *
+             * @param array $data Daten
+             * @return int Letzte eingefügte ID
+             */
+            public
+            function insert(array $data): int
+            {
+                return $this->connection->insert($this->table, $data);
+            }
 
-        $query .= implode(', ', $valuePlaceholders);
+            /**
+             * Führt mehrere INSERTs aus
+             *
+             * @param array $data Daten
+             * @return bool
+             */
+            public
+            function insertMany(array $data): bool
+            {
+                if (empty($data)) {
+                    return true;
+                }
 
-        $this->connection->query($query, $values);
+                $first = reset($data);
+                $columns = array_keys($first);
 
-        return true;
-    }
+                $query = sprintf(
+                    'INSERT INTO %s (%s) VALUES ',
+                    $this->table,
+                    implode(', ', $columns)
+                );
 
-    /**
-     * Führt ein UPDATE aus
-     *
-     * @param array $data Daten
-     * @return int Anzahl der geänderten Zeilen
-     */
-    public function update(array $data): int
-    {
-        $query = sprintf('UPDATE %s SET ', $this->table);
+                $valuePlaceholders = [];
+                $values = [];
 
-        $set = [];
-        $params = [];
+                foreach ($data as $i => $row) {
+                    $rowPlaceholders = [];
 
-        foreach ($data as $column => $value) {
-            $set[] = "$column = :update_$column";
-            $params["update_$column"] = $value;
-        }
+                    foreach ($columns as $column) {
+                        $key = ":{$column}_{$i}";
+                        $rowPlaceholders[] = $key;
+                        $values[$key] = $row[$column] ?? null;
+                    }
 
-        $query .= implode(', ', $set);
+                    $valuePlaceholders[] = '(' . implode(', ', $rowPlaceholders) . ')';
+                }
 
-        // WHERE-Klausel hinzufügen
-        [$where, $whereParams] = $this->buildWhereClause();
+                $query .= implode(', ', $valuePlaceholders);
 
-        if ($where) {
-            $query .= " WHERE $where";
-            $params = array_merge($params, $whereParams);
-        }
+                $this->connection->query($query, $values);
 
-        $statement = $this->connection->query($query, $params);
+                return true;
+            }
 
-        return $statement->rowCount();
-    }
+            /**
+             * Führt ein UPDATE aus
+             *
+             * @param array $data Daten
+             * @return int Anzahl der geänderten Zeilen
+             */
+            public
+            function update(array $data): int
+            {
+                $query = sprintf('UPDATE %s SET ', $this->table);
 
-    /**
-     * Führt ein DELETE aus
-     *
-     * @return int Anzahl der gelöschten Zeilen
-     */
-    public function delete(): int
-    {
-        $query = sprintf('DELETE FROM %s', $this->table);
+                $set = [];
+                $params = [];
 
-        // WHERE-Klausel hinzufügen
-        [$where, $params] = $this->buildWhereClause();
+                foreach ($data as $column => $value) {
+                    $set[] = "$column = :update_$column";
+                    $params["update_$column"] = $value;
+                }
 
-        if ($where) {
-            $query .= " WHERE $where";
-        }
+                $query .= implode(', ', $set);
 
-        $statement = $this->connection->query($query, $params);
+                // WHERE-Klausel hinzufügen
+                [$where, $whereParams] = $this->buildWhereClause();
 
-        return $statement->rowCount();
-    }
+                if ($where) {
+                    $query .= " WHERE $where";
+                    $params = array_merge($params, $whereParams);
+                }
+
+                $statement = $this->connection->query($query, $params);
+
+                return $statement->rowCount();
+            }
+
+            /**
+             * Führt ein DELETE aus
+             *
+             * @return int Anzahl der gelöschten Zeilen
+             */
+            public
+            function delete(): int
+            {
+                $query = sprintf('DELETE FROM %s', $this->table);
+
+                // WHERE-Klausel hinzufügen
+                [$where, $params] = $this->buildWhereClause();
+
+                if ($where) {
+                    $query .= " WHERE $where";
+                }
+
+                $statement = $this->connection->query($query, $params);
+
+                return $statement->rowCount();
+            }

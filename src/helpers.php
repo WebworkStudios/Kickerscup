@@ -9,6 +9,7 @@ declare(strict_types=1);
 use App\Core\Container\Container;
 use App\Core\Http\Request;
 use App\Core\Http\ResponseFactory;
+use JetBrains\PhpStorm\NoReturn;
 
 /**
  * Globale Container-Instanz
@@ -24,7 +25,6 @@ $container = null;
 function setContainer(Container $container): void
 {
     global $container;
-    $container = $container;
 }
 
 
@@ -33,14 +33,14 @@ function setContainer(Container $container): void
  *
  * @param string|null $abstract Abstrakter Klassenname oder null für den Container selbst
  * @return mixed Service oder Container
- * @throws \Exception Wenn der Container nicht initialisiert ist
+ * @throws Exception Wenn der Container nicht initialisiert ist
  */
 function app(?string $abstract = null): mixed
 {
     global $container;
 
     if ($container === null) {
-        throw new \Exception('Container is not initialized. Make sure setContainer() is called before using app().');
+        throw new Exception('Container is not initialized. Make sure setContainer() is called before using app().');
     }
 
     if ($abstract === null) {
@@ -49,6 +49,7 @@ function app(?string $abstract = null): mixed
 
     return $container->make($abstract);
 }
+
 
 /**
  * Holt einen Konfigurationswert
@@ -59,35 +60,33 @@ function app(?string $abstract = null): mixed
  */
 function config(string $key, mixed $default = null): mixed
 {
+    static $configCache = [];
+
     $parts = explode('.', $key);
     $file = array_shift($parts);
 
-    $configPath = dirname(__DIR__) . '/config/' . $file . '.php';
+    // Konfiguration aus dem Cache laden, wenn vorhanden
+    if (!isset($configCache[$file])) {
+        $configPath = dirname(__DIR__) . '/config/' . $file . '.php';
 
-    if (!file_exists($configPath)) {
-        return $default;
-    }
-
-    try {
-        $config = require $configPath;
-
-        if (!is_array($config)) {
+        if (!file_exists($configPath)) {
             return $default;
         }
 
-        foreach ($parts as $part) {
-            if (!is_array($config) || !array_key_exists($part, $config)) {
-                return $default;
-            }
+        $configCache[$file] = require $configPath;
+    }
 
-            $config = $config[$part];
+    $config = $configCache[$file];
+
+    foreach ($parts as $part) {
+        if (!is_array($config) || !array_key_exists($part, $config)) {
+            return $default;
         }
 
-        return $config;
-    } catch (\Throwable $e) {
-        error_log('Error loading config file: ' . $e->getMessage());
-        return $default;
+        $config = $config[$part];
     }
+
+    return $config;
 }
 
 /**
@@ -105,28 +104,21 @@ function env(string $key, mixed $default = null): mixed
         return $default;
     }
 
-    switch (strtolower($value)) {
-        case 'true':
-        case '(true)':
-            return true;
-        case 'false':
-        case '(false)':
-            return false;
-        case 'null':
-        case '(null)':
-            return null;
-        case 'empty':
-        case '(empty)':
-            return '';
-    }
+    return match (strtolower($value)) {
+        'true', '(true)' => true,
+        'false', '(false)' => false,
+        'null', '(null)' => null,
+        'empty', '(empty)' => '',
+        default => $value,
+    };
 
-    return $value;
 }
 
 /**
  * Erstellt eine ResponseFactory-Instanz
  *
  * @return ResponseFactory
+ * @throws Exception
  */
 function response(): ResponseFactory
 {
@@ -137,6 +129,7 @@ function response(): ResponseFactory
  * Holt die aktuelle Request-Instanz
  *
  * @return Request
+ * @throws Exception
  */
 function request(): Request
 {
@@ -148,6 +141,7 @@ function request(): Request
  *
  * @param string $path Pfad
  * @return string Vollständiger Pfad
+ * @throws Exception
  */
 function base_path(string $path = ''): string
 {
@@ -165,6 +159,7 @@ function base_path(string $path = ''): string
  *
  * @param string $path Pfad
  * @return string Vollständiger Pfad
+ * @throws Exception
  */
 function storage_path(string $path = ''): string
 {
@@ -176,6 +171,7 @@ function storage_path(string $path = ''): string
  *
  * @param string $path Pfad
  * @return string Vollständiger Pfad
+ * @throws Exception
  */
 function resource_path(string $path = ''): string
 {
@@ -187,6 +183,7 @@ function resource_path(string $path = ''): string
  *
  * @param string $path Pfad
  * @return string Vollständiger Pfad
+ * @throws Exception
  */
 function public_path(string $path = ''): string
 {
@@ -211,6 +208,7 @@ function asset(string $path): string
  * @param array $replace Zu ersetzende Werte
  * @param string|null $locale Sprache
  * @return string Übersetzter Text
+ * @throws Exception
  */
 function trans(string $key, array $replace = [], ?string $locale = null): string
 {
@@ -264,17 +262,44 @@ function e(string $value): string
     return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+// src/helpers.php
+
 /**
  * Generiert eine URL für eine Route
  *
  * @param string $name Routenname
  * @param array $parameters Parameter
  * @return string URL
+ * @throws Exception Wenn die Route nicht gefunden wurde
  */
 function route(string $name, array $parameters = []): string
 {
-    $router = app()->make('App\Core\Routing\Router');
-    return $router->generateUrl($name, $parameters);
+    $router = app('App\Core\Routing\Router');
+    $routes = $router->getRoutes();
+
+    $route = $routes->findByName($name);
+
+    if ($route === null) {
+        throw new Exception("Route mit dem Namen '$name' wurde nicht gefunden.");
+    }
+
+    $uri = $route->getUri();
+
+    // Parameter in der URI ersetzen
+    foreach ($parameters as $key => $value) {
+        $uri = str_replace("{{$key}}", (string)$value, $uri);
+    }
+
+    // Basis-URL hinzufügen
+    $baseUrl = config('app.url', '');
+
+    // Domain berücksichtigen, falls vorhanden
+    $domain = $route->getDomain();
+    if ($domain !== null) {
+        $baseUrl = preg_replace('/^https?:\/\/[^\/]+/i', "http://$domain", $baseUrl);
+    }
+
+    return rtrim($baseUrl, '/') . '/' . ltrim($uri, '/');
 }
 
 /**
@@ -284,8 +309,9 @@ function route(string $name, array $parameters = []): string
  * @param int $status HTTP-Statuscode
  * @param array $headers HTTP-Header
  * @return void
+ * @throws Exception
  */
-function json(mixed $value, int $status = 200, array $headers = []): void
+#[NoReturn] function json(mixed $value, int $status = 200, array $headers = []): void
 {
     $response = response()->json($value, $status, $headers);
     $response->send();
@@ -299,8 +325,9 @@ function json(mixed $value, int $status = 200, array $headers = []): void
  * @param int $status HTTP-Statuscode
  * @param array $headers HTTP-Header
  * @return void
+ * @throws Exception
  */
-function redirect(string $url, int $status = 302, array $headers = []): void
+#[NoReturn] function redirect(string $url, int $status = 302, array $headers = []): void
 {
     $response = response()->redirect($url, $status, $headers);
     $response->send();
@@ -311,6 +338,7 @@ function redirect(string $url, int $status = 302, array $headers = []): void
  * Generiert eine CSRF-Token-Eingabe
  *
  * @return string HTML-Input
+ * @throws Exception
  */
 function csrf_field(): string
 {
@@ -323,6 +351,7 @@ function csrf_field(): string
  * Generiert einen CSRF-Token
  *
  * @return string Token
+ * @throws Exception
  */
 function csrf_token(): string
 {
@@ -349,6 +378,7 @@ function method_field(string $method): string
  * @param array $context Kontext
  * @param string $level Log-Level
  * @return void
+ * @throws Exception
  */
 function app_log(string $message, array $context = [], string $level = 'info'): void
 {
@@ -382,10 +412,10 @@ function value(mixed $value, mixed $default = null): mixed
 /**
  * Debug-Funktion
  *
- * @param mixed $value Wert
+ * @param mixed ...$values
  * @return void
  */
-function dd(mixed ...$values): void
+#[NoReturn] function dd(mixed ...$values): void
 {
     foreach ($values as $value) {
         var_dump($value);

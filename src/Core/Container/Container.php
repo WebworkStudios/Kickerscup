@@ -72,8 +72,14 @@ class Container
      */
     private function build(string $concrete, array $parameters = []): object
     {
-        // Reflection-Informationen abrufen
-        $reflector = new ReflectionClass($concrete);
+        // Cache für Reflection-Klassen
+        static $reflectionCache = [];
+
+        // Reflection-Informationen abrufen (mit Cache)
+        if (!isset($reflectionCache[$concrete])) {
+            $reflectionCache[$concrete] = new ReflectionClass($concrete);
+        }
+        $reflector = $reflectionCache[$concrete];
 
         // Prüfen, ob die Klasse instanziierbar ist
         if (!$reflector->isInstantiable()) {
@@ -127,6 +133,7 @@ class Container
      * @param string $abstract Klasse, die erstellt werden soll
      * @param array $parameters Zusätzliche Parameter für den Konstruktor
      * @return mixed Instanz der Klasse
+     * @throws \Exception
      */
     public function make(string $abstract, array $parameters = []): mixed
     {
