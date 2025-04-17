@@ -1,0 +1,106 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Core\Routing;
+
+/**
+ * Sammlung von Routen
+ *
+ * Implementiert Iterator, um über Routen iterieren zu können
+ */
+class RouteCollection implements \Iterator, \Countable
+{
+    /**
+     * Gespeicherte Routen
+     */
+    private array $routes = [];
+
+    /**
+     * Position des Iterators
+     */
+    private int $position = 0;
+
+    /**
+     * Fügt eine Route zur Sammlung hinzu
+     *
+     * @param Route $route Route
+     * @return self
+     */
+    public function add(Route $route): self
+    {
+        $this->routes[] = $route;
+
+        return $this;
+    }
+
+    /**
+     * Gibt alle Routen zurück
+     *
+     * @return array Routen
+     */
+    public function all(): array
+    {
+        return $this->routes;
+    }
+
+    /**
+     * Gibt die aktuelle Route zurück (für Iterator)
+     *
+     * @return Route Aktuelle Route
+     */
+    public function current(): Route
+    {
+        return $this->routes[$this->position];
+    }
+
+    /**
+     * Gibt den aktuellen Schlüssel zurück (für Iterator)
+     *
+     * @return int Aktueller Schlüssel
+     */
+    public function key(): int
+    {
+        return $this->position;
+    }
+
+    /**
+     * Bewegt den Iterator zum nächsten Element (für Iterator)
+     *
+     * @return void
+     */
+    public function next(): void
+    {
+        ++$this->position;
+    }
+
+    /**
+     * Setzt den Iterator zurück (für Iterator)
+     *
+     * @return void
+     */
+    public function rewind(): void
+    {
+        $this->position = 0;
+    }
+
+    /**
+     * Prüft, ob der Iterator gültig ist (für Iterator)
+     *
+     * @return bool True, wenn gültig, sonst false
+     */
+    public function valid(): bool
+    {
+        return isset($this->routes[$this->position]);
+    }
+
+    /**
+     * Gibt die Anzahl der Routen zurück (für Countable)
+     *
+     * @return int Anzahl der Routen
+     */
+    public function count(): int
+    {
+        return count($this->routes);
+    }
+}
