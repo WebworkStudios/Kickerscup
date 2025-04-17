@@ -251,6 +251,54 @@ class Router
     }
 
     /**
+     * Generiert eine URL für eine benannte Route
+     *
+     * @param string $name Routenname
+     * @param array $parameters Parameter
+     * @return string URL
+     * @throws \Exception Wenn die Route nicht gefunden wurde
+     */
+    public function generateUrl(string $name, array $parameters = []): string
+    {
+        // Benannte Route suchen
+        $route = $this->findRouteByName($name);
+
+        if ($route === null) {
+            throw new \Exception("Route mit Namen '$name' nicht gefunden");
+        }
+
+        // URL generieren
+        $uri = $route->getUri();
+
+        // Parameter in die URL einsetzen
+        foreach ($parameters as $paramName => $paramValue) {
+            $uri = preg_replace('/\{' . $paramName . '\}/', (string)$paramValue, $uri);
+        }
+
+        // Basis-URL hinzufügen
+        $baseUrl = config('app.url', '');
+
+        // Domain berücksichtigen
+        $domain = $route->getDomain();
+        if ($domain !== null) {
+            return 'http://' . $domain . $uri;
+        }
+
+        return $baseUrl . $uri;
+    }
+
+    /**
+     * Findet eine Route anhand ihres Namens
+     *
+     * @param string $name Routenname
+     * @return Route|null Route oder null, wenn keine gefunden wurde
+     */
+    private function findRouteByName(string $name): ?Route
+    {
+        return $this->routes->findByName($name);
+    }
+
+    /**
      * Normalisiert einen URI
      *
      * @param string $uri URI

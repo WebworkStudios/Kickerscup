@@ -45,6 +45,23 @@ class RouteCollection implements \Iterator, \Countable
     }
 
     /**
+     * Findet eine Route anhand ihres Namens
+     *
+     * @param string $name Name der Route
+     * @return Route|null Route oder null, wenn keine gefunden wurde
+     */
+    public function findByName(string $name): ?Route
+    {
+        foreach ($this->routes as $route) {
+            if ($route->getName() === $name) {
+                return $route;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Gibt die aktuelle Route zurück (für Iterator)
      *
      * @return Route Aktuelle Route

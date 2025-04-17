@@ -77,9 +77,37 @@ class Route
     }
 
     /**
+     * Setzt den Namen der Route
+     *
+     * @param string $name Name
+     * @return self
+     */
+    public function name(string $name): self
+    {
+        $this->name = $name;
+
+        return $this;
+    }
+
+    /**
+     * Gibt den Namen der Route zurück
+     *
+     * @return string|null Name oder null, wenn keiner gesetzt ist
+     */
+    public function getName(): ?string
+    {
+        return $this->name;
+    }
+
+    /**
      * Domain der Route
      */
     private ?string $domain = null;
+
+    /**
+     * Name der Route
+     */
+    private ?string $name = null;
 
     /**
      * Parameter der Route
@@ -110,5 +138,4 @@ class Route
     {
         return $this->methods;
     }
-
 }

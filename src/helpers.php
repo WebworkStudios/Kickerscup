@@ -259,8 +259,8 @@ function e(string $value): string
  */
 function route(string $name, array $parameters = []): string
 {
-    // Hier eine einfache Implementierung, später erweitern
-    return $name;
+    $router = app()->make('App\Core\Routing\Router');
+    return $router->generateUrl($name, $parameters);
 }
 
 /**
@@ -327,14 +327,16 @@ function method_field(string $method): string
 }
 
 /**
- * Loggt eine Nachricht
+ * Loggt eine Nachricht ins Framework-Logfile
+ *
+ * Wir verwenden app_log anstelle von log, um Konflikte mit anderen Funktionen zu vermeiden
  *
  * @param string $message Nachricht
  * @param array $context Kontext
  * @param string $level Log-Level
  * @return void
  */
-function log(string $message, array $context = [], string $level = 'info'): void
+function app_log(string $message, array $context = [], string $level = 'info'): void
 {
     // Hier eine einfache Implementierung, später erweitern
     $date = date('Y-m-d H:i:s');
