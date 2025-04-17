@@ -806,4 +806,292 @@ class QueryBuilder
 
         return $statement->rowCount();
     }
+
+
+    /**
+     * Berechnet die Summe einer Spalte
+     *
+     * @param string $column Spalte
+     * @return int|float|null
+     */
+    public function sum(string $column): int|float|null
+    {
+        return $this->aggregate('SUM', $column);
+    }
+
+    /**
+     * Berechnet den Durchschnitt einer Spalte
+     *
+     * @param string $column Spalte
+     * @return int|float|null
+     */
+    public function avg(string $column): int|float|null
+    {
+        return $this->aggregate('AVG', $column);
+    }
+
+    /**
+     * Ermittelt den Minimalwert einer Spalte
+     *
+     * @param string $column Spalte
+     * @return mixed
+     */
+    public function min(string $column): mixed
+    {
+        return $this->aggregate('MIN', $column);
+    }
+
+    /**
+     * Ermittelt den Maximalwert einer Spalte
+     *
+     * @param string $column Spalte
+     * @return mixed
+     */
+    public function max(string $column): mixed
+    {
+        return $this->aggregate('MAX', $column);
+    }
+
+    /**
+     * Führt eine Aggregatfunktion auf einer Spalte aus
+     *
+     * @param string $function SQL-Funktion (SUM, AVG, MIN, MAX, etc.)
+     * @param string $column Spalte
+     * @return mixed
+     */
+    protected function aggregate(string $function, string $column): mixed
+    {
+        $this->components['select'] = ["$function($column) as aggregate"];
+
+        $result = $this->first();
+
+        return $result ? $result['aggregate'] : null;
+    }
+
+    /**
+     * Selektiert eine Spalte mit einer SQL-Funktion
+     *
+     * @param string $function SQL-Funktion
+     * @param string $column Spalte
+     * @param string|null $alias Alias für das Ergebnis
+     * @return self
+     */
+    public function selectRaw(string $function, string $column, ?string $alias = null): self
+    {
+        $expression = "$function($column)";
+
+        if ($alias !== null) {
+            $expression .= " as $alias";
+        }
+
+        if (in_array('*', $this->components['select'])) {
+            $this->components['select'] = [$expression];
+        } else {
+            $this->components['select'][] = $expression;
+        }
+
+        return $this;
+    }
+
+    /**
+     * Selektiert mehrere SQL-Funktionen
+     *
+     * @param array $functions Array mit SQL-Funktionen und Spalten
+     *                         Format: [['function' => 'SUM', 'column' => 'price', 'alias' => 'total'], ...]
+     * @return self
+     */
+    public function selectFunctions(array $functions): self
+    {
+        $selections = [];
+
+        foreach ($functions as $function) {
+            $expression = "{$function['function']}({$function['column']})";
+
+            if (isset($function['alias'])) {
+                $expression .= " as {$function['alias']}";
+            }
+
+            $selections[] = $expression;
+        }
+
+        $this->components['select'] = $selections;
+
+        return $this;
+    }
+
+    /**
+     * Ermittelt die Anzahl eindeutiger Werte in einer Spalte
+     *
+     * @param string $column Spalte
+     * @return int
+     */
+    public function countDistinct(string $column): int
+    {
+        $this->components['select'] = ["COUNT(DISTINCT $column) as count"];
+
+        $result = $this->first();
+
+        return (int)($result['count'] ?? 0);
+    }
+
+    /**
+     * Führt die Abfrage aus und gibt die Anzahl der Ergebnisse zurück
+     *
+     * Überschriebene Methode, jetzt mit Unterstützung für DISTINCT
+     *
+     * @param string $column Spalte
+     * @param bool $distinct Nur eindeutige Werte zählen
+     * @return int
+     */
+    public function count(string $column = '*', bool $distinct = false): int
+    {
+        $columnExpression = $distinct ? "DISTINCT $column" : $column;
+        $this->components['select'] = ["COUNT($columnExpression) as count"];
+
+        $result = $this->first();
+
+        return (int)($result['count'] ?? 0);
+    }
+
+    /**
+     * Fügt ein CONCAT für mehrere Spalten hinzu
+     *
+     * @param array $columns Zu verkettende Spalten
+     * @param string $separator Trennzeichen zwischen den Spalten
+     * @param string|null $alias Alias für das Ergebnis
+     * @return self
+     */
+    public function selectConcat(array $columns, string $separator = ' ', ?string $alias = null): self
+    {
+        $quotedSeparator = "'" . addslashes($separator) . "'";
+        $expression = "CONCAT_WS($quotedSeparator, " . implode(', ', $columns) . ")";
+
+        if ($alias !== null) {
+            $expression .= " as $alias";
+        }
+
+        if (in_array('*', $this->components['select'])) {
+            $this->components['select'] = [$expression];
+        } else {
+            $this->components['select'][] = $expression;
+        }
+
+        return $this;
+    }
+
+    /**
+     * Fügt eine CASE WHEN-Abfrage hinzu
+     *
+     * @param string $column Zu prüfende Spalte
+     * @param array $cases Array mit Bedingungen und Ergebnissen
+     *                     Format: [['when' => 'value1', 'then' => 'result1'], ...]
+     * @param mixed $else Ergebnis, wenn keine Bedingung zutrifft
+     * @param string|null $alias Alias für das Ergebnis
+     * @return self
+     */
+    public function selectCase(string $column, array $cases, mixed $else = null, ?string $alias = null): self
+    {
+        $expression = "CASE $column";
+
+        foreach ($cases as $case) {
+            $whenValue = is_string($case['when']) ? "'" . addslashes($case['when']) . "'" : $case['when'];
+            $thenValue = is_string($case['then']) ? "'" . addslashes($case['then']) . "'" : $case['then'];
+            $expression .= " WHEN $whenValue THEN $thenValue";
+        }
+
+        if ($else !== null) {
+            $elseValue = is_string($else) ? "'" . addslashes($else) . "'" : $else;
+            $expression .= " ELSE $elseValue";
+        }
+
+        $expression .= " END";
+
+        if ($alias !== null) {
+            $expression .= " as $alias";
+        }
+
+        if (in_array('*', $this->components['select'])) {
+            $this->components['select'] = [$expression];
+        } else {
+            $this->components['select'][] = $expression;
+        }
+
+        return $this;
+    }
+
+    /**
+     * Selektiert mit COALESCE, um NULL-Werte zu ersetzen
+     *
+     * @param string $column Hauptspalte
+     * @param mixed $default Ersatzwert, wenn die Spalte NULL ist
+     * @param string|null $alias Alias für das Ergebnis
+     * @return self
+     */
+    public function selectCoalesce(string $column, mixed $default, ?string $alias = null): self
+    {
+        $defaultValue = is_string($default) ? "'" . addslashes($default) . "'" : $default;
+        $expression = "COALESCE($column, $defaultValue)";
+
+        if ($alias !== null) {
+            $expression .= " as $alias";
+        }
+
+        if (in_array('*', $this->components['select'])) {
+            $this->components['select'] = [$expression];
+        } else {
+            $this->components['select'][] = $expression;
+        }
+
+        return $this;
+    }
+
+    /**
+     * Selektiert ein JSON-Feld (MySQL JSON Extension)
+     *
+     * @param string $column JSON-Spalte
+     * @param string $path JSON-Pfad (z.B. '$.name')
+     * @param string|null $alias Alias für das Ergebnis
+     * @return self
+     */
+    public function selectJson(string $column, string $path, ?string $alias = null): self
+    {
+        $expression = "JSON_EXTRACT($column, '$path')";
+
+        if ($alias !== null) {
+            $expression .= " as $alias";
+        }
+
+        if (in_array('*', $this->components['select'])) {
+            $this->components['select'] = [$expression];
+        } else {
+            $this->components['select'][] = $expression;
+        }
+
+        return $this;
+    }
+
+    /**
+     * Selektiert mit DATE_FORMAT für Datum-Formatierung
+     *
+     * @param string $column Datum-Spalte
+     * @param string $format MySQL DATE_FORMAT Format
+     * @param string|null $alias Alias für das Ergebnis
+     * @return self
+     */
+    public function selectDateFormat(string $column, string $format, ?string $alias = null): self
+    {
+        $expression = "DATE_FORMAT($column, '$format')";
+
+        if ($alias !== null) {
+            $expression .= " as $alias";
+        }
+
+        if (in_array('*', $this->components['select'])) {
+            $this->components['select'] = [$expression];
+        } else {
+            $this->components['select'][] = $expression;
+        }
+
+        return $this;
+    }
 }
