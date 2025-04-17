@@ -73,6 +73,7 @@ class DatabaseManager
      * @param string $table Tabellenname
      * @param string|null $connection Name der Verbindung oder null für die Standardverbindung
      * @return QueryBuilder
+     * @throws \Exception wenn die Verbindung nicht konfiguriert ist
      */
     public function table(string $table, ?string $connection = null): QueryBuilder
     {

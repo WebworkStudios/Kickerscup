@@ -408,6 +408,35 @@ class QueryBuilder
     }
 
     /**
+     * Führt die Abfrage aus und gibt eine Paginator-Instanz zurück
+     *
+     * @param int $page Seite
+     * @param int $perPage Einträge pro Seite
+     * @param string[]|null $columns Spalten
+     * @param string|null $baseUrl Basis-URL für Links
+     * @return Paginator
+     */
+    public function paginate(int $page, int $perPage, ?array $columns = null, ?string $baseUrl = null): Paginator
+    {
+        if ($columns !== null) {
+            $this->select(...$columns);
+        }
+
+        // Gesamtanzahl der Einträge ermitteln
+        $countBuilder = clone $this;
+        $countBuilder->select = ['COUNT(*) as count'];
+        $countBuilder->orderByClause->clearOrders();
+        $countBuilder->limitOffsetClause->limit(null)->offset(null);
+        $total = (int) $countBuilder->first()['count'];
+
+        // Ergebnisse für die aktuelle Seite abrufen
+        $this->forPage($page, $perPage);
+        $items = $this->get();
+
+        return new Paginator($items, $total, $perPage, $page, $baseUrl);
+    }
+
+    /**
      * Generiert die SQL-Abfrage
      *
      * @return string
@@ -521,7 +550,6 @@ class QueryBuilder
 
         return $result ? $result[$column] : null;
     }
-
     /**
      * Führt die Abfrage aus und gibt die Anzahl der Ergebnisse zurück
      *
@@ -646,6 +674,7 @@ class QueryBuilder
         return $statement->rowCount();
     }
 
+
     /**
      * Führt die Abfrage aus und gibt die Summe einer Spalte zurück
      *
@@ -736,6 +765,34 @@ class QueryBuilder
         }
 
         return $result ? $result[$column] : null;
+    }
+
+    /**
+     * Fügt eine WHERE-Bedingung mit einer Subquery hinzu
+     *
+     * @param string $column Spalte
+     * @param string $operator Operator
+     * @param SubQueryBuilder $subQuery Unterabfrage
+     * @return self
+     */
+    public function whereSubQuery(string $column, string $operator, SubQueryBuilder $subQuery): self
+    {
+        $this->whereClause->whereSubQuery($column, $operator, $subQuery);
+        return $this;
+    }
+
+    /**
+     * Fügt eine WHERE-Bedingung mit einer Subquery und OR hinzu
+     *
+     * @param string $column Spalte
+     * @param string $operator Operator
+     * @param SubQueryBuilder $subQuery Unterabfrage
+     * @return self
+     */
+    public function orWhereSubQuery(string $column, string $operator, SubQueryBuilder $subQuery): self
+    {
+        $this->whereClause->orWhereSubQuery($column, $operator, $subQuery);
+        return $this;
     }
 
     /**

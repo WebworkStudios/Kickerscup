@@ -250,11 +250,34 @@ class WhereClause implements ClauseInterface
                 'null' => $this->buildNullWhere($clauses, $prefix, $where),
                 'notNull' => $this->buildNotNullWhere($clauses, $prefix, $where),
                 'between' => $this->buildBetweenWhere($clauses, $i, $prefix, $where),
+                'subQuery' => $this->buildSubQueryWhere($clauses, $prefix, $where),
                 default => null
             };
         }
 
         return $sql . implode(' ', $clauses);
+    }
+
+    /**
+     * Baut eine WHERE-Bedingung mit einer Subquery
+     *
+     * @param array &$clauses Referenz zu den SQL-Klauseln
+     * @param string $prefix Präfix (AND/OR)
+     * @param array $where WHERE-Definition
+     * @return void
+     */
+    private function buildSubQueryWhere(array &$clauses, string $prefix, array $where): void
+    {
+        /** @var SubQueryBuilder $subQuery */
+        $subQuery = $where['subQuery'];
+
+        // Subquery-Parameter zu den aktuellen Parametern hinzufügen
+        $subQueryBindings = $subQuery->getBindings();
+        foreach ($subQueryBindings as $key => $value) {
+            $this->params[$key] = $value;
+        }
+
+        $clauses[] = "{$prefix}{$where['column']} {$where['operator']} {$subQuery->toSql()}";
     }
 
     /**
@@ -367,6 +390,42 @@ class WhereClause implements ClauseInterface
         $clauses[] = "{$prefix}{$where['column']} BETWEEN :{$minKey} AND :{$maxKey}";
         $this->params[$minKey] = $where['min'];
         $this->params[$maxKey] = $where['max'];
+    }
+
+    // Neue Methode hinzufügen
+    /**
+     * Fügt eine WHERE-Bedingung mit einer Subquery hinzu
+     *
+     * @param string $column Spalte
+     * @param string $operator Operator
+     * @param SubQueryBuilder $subQuery Unterabfrage
+     * @param string|null $boolean Logischer Operator (AND/OR)
+     * @return self
+     */
+    public function whereSubQuery(string $column, string $operator, SubQueryBuilder $subQuery, ?string $boolean = null): self
+    {
+        $this->wheres[] = [
+            'type' => 'subQuery',
+            'column' => $column,
+            'operator' => $operator,
+            'subQuery' => $subQuery,
+            'boolean' => $boolean ?? $this->defaultBoolean,
+        ];
+
+        return $this;
+    }
+
+    /**
+     * Fügt eine WHERE-Bedingung mit einer Subquery und OR hinzu
+     *
+     * @param string $column Spalte
+     * @param string $operator Operator
+     * @param SubQueryBuilder $subQuery Unterabfrage
+     * @return self
+     */
+    public function orWhereSubQuery(string $column, string $operator, SubQueryBuilder $subQuery): self
+    {
+        return $this->whereSubQuery($column, $operator, $subQuery, 'OR');
     }
 
     /**
