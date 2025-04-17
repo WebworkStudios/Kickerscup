@@ -457,6 +457,173 @@ class QueryBuilder
     }
 
     /**
+     * Baut die WHERE-Klausel für die Abfrage
+     *
+     * @return array [string, array] Die WHERE-Klausel und die Parameter
+     */
+    private function buildWhereClause(): array
+    {
+        if (empty($this->components['where'])) {
+            return ['', []];
+        }
+
+        $whereClauses = [];
+        $params = [];
+
+        foreach ($this->components['where'] as $i => $where) {
+            $prefix = $i === 0 ? '' : " {$where['boolean']} ";
+
+            match ($where['type']) {
+                'basic' => function() use (&$whereClauses, &$params, $prefix, $where, $i) {
+                    $key = "where_{$i}";
+                    $whereClauses[] = "{$prefix}{$where['column']} {$where['operator']} :{$key}";
+                    $params[$key] = $where['value'];
+                },
+                'in' => function() use (&$whereClauses, &$params, $prefix, $where, $i) {
+                    if (empty($where['values'])) {
+                        $whereClauses[] = "{$prefix}1 = 0"; // Immer falsch, wenn leeres IN
+                        return;
+                    }
+
+                    $placeholders = [];
+                    foreach ($where['values'] as $j => $value) {
+                        $key = "where_{$i}_{$j}";
+                        $placeholders[] = ":{$key}";
+                        $params[$key] = $value;
+                    }
+
+                    $whereClauses[] = "{$prefix}{$where['column']} IN (" . implode(', ', $placeholders) . ")";
+                },
+                'notIn' => function() use (&$whereClauses, &$params, $prefix, $where, $i) {
+                    if (empty($where['values'])) {
+                        $whereClauses[] = "{$prefix}1 = 1"; // Immer wahr, wenn leeres NOT IN
+                        return;
+                    }
+
+                    $placeholders = [];
+                    foreach ($where['values'] as $j => $value) {
+                        $key = "where_{$i}_{$j}";
+                        $placeholders[] = ":{$key}";
+                        $params[$key] = $value;
+                    }
+
+                    $whereClauses[] = "{$prefix}{$where['column']} NOT IN (" . implode(', ', $placeholders) . ")";
+                },
+                'null' => function() use (&$whereClauses, $prefix, $where) {
+                    $whereClauses[] = "{$prefix}{$where['column']} IS NULL";
+                },
+                'notNull' => function() use (&$whereClauses, $prefix, $where) {
+                    $whereClauses[] = "{$prefix}{$where['column']} IS NOT NULL";
+                },
+                'between' => function() use (&$whereClauses, &$params, $prefix, $where, $i) {
+                    $minKey = "where_{$i}_min";
+                    $maxKey = "where_{$i}_max";
+                    $whereClauses[] = "{$prefix}{$where['column']} BETWEEN :{$minKey} AND :{$maxKey}";
+                    $params[$minKey] = $where['min'];
+                    $params[$maxKey] = $where['max'];
+                },
+                default => null
+            }();
+        }
+
+        return [implode(' ', $whereClauses), $params];
+    }
+
+    /**
+     * Generiert die SQL-Abfrage
+     *
+     * @return string
+     */
+    public function toSql(): string
+    {
+        // SELECT
+        $query = 'SELECT ' . implode(', ', $this->components['select']);
+
+        // FROM
+        $query .= ' FROM ' . $this->components['from'];
+
+        // JOINs
+        if (!empty($this->components['join'])) {
+            foreach ($this->components['join'] as $join) {
+                $query .= sprintf(
+                    ' %s JOIN %s ON %s %s %s',
+                    $join['type'],
+                    $join['table'],
+                    $join['first'],
+                    $join['operator'],
+                    $join['second']
+                );
+            }
+        }
+
+        // WHERE
+        [$where, $whereParams] = $this->buildWhereClause();
+
+        if ($where) {
+            $query .= " WHERE $where";
+            $this->params = array_merge($this->params, $whereParams);
+        }
+
+        // GROUP BY
+        if (!empty($this->components['groupBy'])) {
+            $query .= ' GROUP BY ' . implode(', ', $this->components['groupBy']);
+        }
+
+        // HAVING
+        if (!empty($this->components['having'])) {
+            $havingClauses = [];
+            $havingParams = [];
+
+            foreach ($this->components['having'] as $i => $having) {
+                $key = "having_{$i}";
+                $prefix = $i === 0 ? '' : " {$having['boolean']} ";
+
+                if ($having['type'] === 'basic') {
+                    $havingClauses[] = "{$prefix}{$having['column']} {$having['operator']} :{$key}";
+                    $havingParams[$key] = $having['value'];
+                }
+            }
+
+            if (!empty($havingClauses)) {
+                $query .= ' HAVING ' . implode('', $havingClauses);
+                $this->params = array_merge($this->params, $havingParams);
+            }
+        }
+
+        // ORDER BY
+        if (!empty($this->components['orderBy'])) {
+            $orderClauses = [];
+
+            foreach ($this->components['orderBy'] as $order) {
+                $orderClauses[] = "{$order['column']} {$order['direction']}";
+            }
+
+            $query .= ' ORDER BY ' . implode(', ', $orderClauses);
+        }
+
+        // LIMIT & OFFSET
+        if ($this->components['limit'] !== null) {
+            $query .= " LIMIT {$this->components['limit']}";
+        }
+
+        if ($this->components['offset'] !== null) {
+            $query .= " OFFSET {$this->components['offset']}";
+        }
+
+        return $query;
+    }
+
+    /**
+     * Gibt alle Parameter für die Abfrage zurück
+     *
+     * @return array
+     */
+    public function getBindings(): array
+    {
+        return $this->params;
+    }
+
+    /**
      * Führt die Abfrage aus und gibt die erste Spalte des ersten Ergebnisses zurück
      *
      * @param string $column Spalte
@@ -518,189 +685,125 @@ class QueryBuilder
     }
 
     /**
-     * Generiert die SQL-Abfrage
+     * Führt die Abfrage aus und gibt die Anzahl der Ergebnisse zurück
      *
-     * @return string
+     * @param string $column Spalte
+     * @return int
      */
-    public function toSql(): string
+    public function count(string $column = '*'): int
     {
-        // SELECT
-        $query = 'SELECT ' . implode(', ', $this->components['select']);
+        $this->components['select'] = ["COUNT($column) as count"];
 
-        // FROM
-        $query .= ' FROM ' . $this->components['from'];
+        $result = $this->first();
 
-        // JOINs
-        if (!empty($this->components['join'])) {
-            foreach ($this->components['join'] as $join) {
-                $query .= sprintf(
-                    ' %s JOIN %s ON %s %s %s',
-                    $join['type'],
-                    $join['table'],
-                    $join['first'],
-                    $join['operator'],
-                    $join['second']
-                );
-            }
+        return (int)($result['count'] ?? 0);
+    }
+
+    /**
+     * Führt ein INSERT aus
+     *
+     * @param array $data Daten
+     * @return int Letzte eingefügte ID
+     */
+    public function insert(array $data): int
+    {
+        return $this->connection->insert($this->table, $data);
+    }
+
+    /**
+     * Führt mehrere INSERTs aus
+     *
+     * @param array $data Daten
+     * @return bool
+     */
+    public function insertMany(array $data): bool
+    {
+        if (empty($data)) {
+            return true;
         }
 
-        // WHERE
+        $first = reset($data);
+        $columns = array_keys($first);
+
+        $query = sprintf(
+            'INSERT INTO %s (%s) VALUES ',
+            $this->table,
+            implode(', ', $columns)
+        );
+
+        $valuePlaceholders = [];
+        $values = [];
+
+        foreach ($data as $i => $row) {
+            $rowPlaceholders = [];
+
+            foreach ($columns as $column) {
+                $key = ":{$column}_{$i}";
+                $rowPlaceholders[] = $key;
+                $values[$key] = $row[$column] ?? null;
+            }
+
+            $valuePlaceholders[] = '(' . implode(', ', $rowPlaceholders) . ')';
+        }
+
+        $query .= implode(', ', $valuePlaceholders);
+
+        $this->connection->query($query, $values);
+
+        return true;
+    }
+
+    /**
+     * Führt ein UPDATE aus
+     *
+     * @param array $data Daten
+     * @return int Anzahl der geänderten Zeilen
+     */
+    public function update(array $data): int
+    {
+        $query = sprintf('UPDATE %s SET ', $this->table);
+
+        $set = [];
+        $params = [];
+
+        foreach ($data as $column => $value) {
+            $set[] = "$column = :update_$column";
+            $params["update_$column"] = $value;
+        }
+
+        $query .= implode(', ', $set);
+
+        // WHERE-Klausel hinzufügen
         [$where, $whereParams] = $this->buildWhereClause();
 
         if ($where) {
             $query .= " WHERE $where";
-            $this->params = array_merge($this->params, $whereParams);
+            $params = array_merge($params, $whereParams);
         }
 
-        // GROUP BY
-        if (!empty($this->components['groupBy'])) {
-            $query .= ' GROUP BY ' . implode(', ', $this->components['groupBy']);
+        $statement = $this->connection->query($query, $params);
+
+        return $statement->rowCount();
+    }
+
+    /**
+     * Führt ein DELETE aus
+     *
+     * @return int Anzahl der gelöschten Zeilen
+     */
+    public function delete(): int
+    {
+        $query = sprintf('DELETE FROM %s', $this->table);
+
+        // WHERE-Klausel hinzufügen
+        [$where, $params] = $this->buildWhereClause();
+
+        if ($where) {
+            $query .= " WHERE $where";
         }
 
-        // HAVING
-        if (!empty($this->components['having'])) {
-            $query .= ' HAVING ';
+        $statement = $this->connection->query($query, $params);
 
-            $havingClauses = [];
-            $havingParams = [];
-
-            foreach ($this->components['having'] as $i => $having) {
-                $key = "having_{$i}";
-
-                if ($i > 0) {
-                    $query .= " {$having['boolean']} ";
-                }
-
-                if ($having['type'] === 'basic') {
-                    $havingClauses[] = "{$having['column']} {$having['operator']} :$key";
-                    $havingParams[$key] = $having['value'];
-                }
-            }
-
-            /**
-             * Führt die Abfrage aus und gibt die Anzahl der Ergebnisse zurück
-             *
-             * @param string $column Spalte
-             * @return int
-             */
-            public
-            function count(string $column = '*'): int
-            {
-                $this->components['select'] = ["COUNT($column) as count"];
-
-                $result = $this->first();
-
-                return (int)($result['count'] ?? 0);
-            }
-
-            /**
-             * Führt ein INSERT aus
-             *
-             * @param array $data Daten
-             * @return int Letzte eingefügte ID
-             */
-            public
-            function insert(array $data): int
-            {
-                return $this->connection->insert($this->table, $data);
-            }
-
-            /**
-             * Führt mehrere INSERTs aus
-             *
-             * @param array $data Daten
-             * @return bool
-             */
-            public
-            function insertMany(array $data): bool
-            {
-                if (empty($data)) {
-                    return true;
-                }
-
-                $first = reset($data);
-                $columns = array_keys($first);
-
-                $query = sprintf(
-                    'INSERT INTO %s (%s) VALUES ',
-                    $this->table,
-                    implode(', ', $columns)
-                );
-
-                $valuePlaceholders = [];
-                $values = [];
-
-                foreach ($data as $i => $row) {
-                    $rowPlaceholders = [];
-
-                    foreach ($columns as $column) {
-                        $key = ":{$column}_{$i}";
-                        $rowPlaceholders[] = $key;
-                        $values[$key] = $row[$column] ?? null;
-                    }
-
-                    $valuePlaceholders[] = '(' . implode(', ', $rowPlaceholders) . ')';
-                }
-
-                $query .= implode(', ', $valuePlaceholders);
-
-                $this->connection->query($query, $values);
-
-                return true;
-            }
-
-            /**
-             * Führt ein UPDATE aus
-             *
-             * @param array $data Daten
-             * @return int Anzahl der geänderten Zeilen
-             */
-            public
-            function update(array $data): int
-            {
-                $query = sprintf('UPDATE %s SET ', $this->table);
-
-                $set = [];
-                $params = [];
-
-                foreach ($data as $column => $value) {
-                    $set[] = "$column = :update_$column";
-                    $params["update_$column"] = $value;
-                }
-
-                $query .= implode(', ', $set);
-
-                // WHERE-Klausel hinzufügen
-                [$where, $whereParams] = $this->buildWhereClause();
-
-                if ($where) {
-                    $query .= " WHERE $where";
-                    $params = array_merge($params, $whereParams);
-                }
-
-                $statement = $this->connection->query($query, $params);
-
-                return $statement->rowCount();
-            }
-
-            /**
-             * Führt ein DELETE aus
-             *
-             * @return int Anzahl der gelöschten Zeilen
-             */
-            public
-            function delete(): int
-            {
-                $query = sprintf('DELETE FROM %s', $this->table);
-
-                // WHERE-Klausel hinzufügen
-                [$where, $params] = $this->buildWhereClause();
-
-                if ($where) {
-                    $query .= " WHERE $where";
-                }
-
-                $statement = $this->connection->query($query, $params);
-
-                return $statement->rowCount();
-            }
+        return $statement->rowCount();
+    }
+}
