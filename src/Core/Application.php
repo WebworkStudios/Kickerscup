@@ -39,8 +39,12 @@ class Application
         // Container initialisieren
         $this->container = new Container();
 
+        // Container global verfügbar machen, BEVOR irgendwelche anderen Operationen ausgeführt werden
+        global $container;
+        $container = $this->container;
+
         // Basis-Pfad registrieren
-        $this->container->singleton('base_path', $this->basePath);
+        $this->container->singleton('base_path', fn() => $this->basePath);
 
         // Router initialisieren
         $this->router = $this->container->make(Router::class);
@@ -51,7 +55,6 @@ class Application
         // Routen laden
         $this->loadRoutes();
     }
-
     /**
      * Registriert die Kern-Services
      */

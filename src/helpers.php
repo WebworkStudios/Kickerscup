@@ -25,14 +25,16 @@ $container = null;
 function setContainer(Container $container): void
 {
     global $container;
+    $container = $container;
 }
+
 
 /**
  * Holt einen Service aus dem Container
  *
  * @param string|null $abstract Abstrakter Klassenname oder null für den Container selbst
  * @return mixed Service oder Container
- * @throws \Exception Wenn der Container nicht initialisiert wurde
+ * @throws \Exception Wenn der Container nicht initialisiert ist
  */
 function app(?string $abstract = null): mixed
 {

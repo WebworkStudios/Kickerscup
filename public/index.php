@@ -11,15 +11,13 @@ declare(strict_types=1);
 // Autoloader laden
 require __DIR__ . '/../vendor/autoload.php';
 
-// Fehlerbehandlung für die Entwicklung einschalten
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
+// Umgebungsvariablen laden (optional, falls Sie dotenv nutzen möchten)
+// (new \Dotenv\Dotenv(__DIR__ . '/..'))->load();
 
 // Anwendung erstellen
 $app = new \App\Core\Application(dirname(__DIR__));
 
-// Container-Zugriff global verfügbar machen
+// Globalen Container setzen
 setContainer($app->getContainer());
 
 // Anwendung starten und Response zurückgeben
