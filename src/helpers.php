@@ -25,7 +25,6 @@ $container = null;
 function setContainer(Container $container): void
 {
     global $container;
-    $container = $container;
 }
 
 /**

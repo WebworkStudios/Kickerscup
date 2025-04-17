@@ -6,7 +6,6 @@ namespace App\Core\Container;
 
 use ReflectionClass;
 use ReflectionNamedType;
-use ReflectionParameter;
 
 /**
  * Container für Dependency Injection
@@ -45,19 +44,14 @@ class Container
      * Registriert eine Klasse als Singleton
      *
      * @param string $abstract Abstrakte Klasse oder Interface
-     * @param \Closure|string|null $concrete Konkrete Implementierung
+     * @param mixed $concrete Konkrete Implementierung
      */
-    public function singleton(string $abstract, \Closure|string|mixed $concrete = null): void
+    public function singleton(string $abstract, mixed $concrete = null): void
     {
         // Wenn bereits ein Wert übergeben wurde, diesen direkt als Instanz registrieren
         if (!is_string($concrete) && !($concrete instanceof \Closure)) {
             $this->instances[$abstract] = $concrete;
             return;
-        }
-
-        // Wenn keine konkrete Implementierung angegeben wurde, die abstrakte Klasse selbst verwenden
-        if ($concrete === null) {
-            $concrete = $abstract;
         }
 
         // Als Singleton markieren, indem wir eine Closure mit der konkreten Implementierung speichern
