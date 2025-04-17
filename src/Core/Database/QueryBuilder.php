@@ -647,6 +647,98 @@ class QueryBuilder
     }
 
     /**
+     * Führt die Abfrage aus und gibt die Summe einer Spalte zurück
+     *
+     * @param string $column Spalte
+     * @return float|int
+     */
+    public function sum(string $column): float|int
+    {
+        $this->select = ["SUM($column) as aggregate"];
+
+        $result = $this->first();
+
+        return $result ? (float)($result['aggregate'] ?? 0) : 0;
+    }
+
+    /**
+     * Führt die Abfrage aus und gibt den Durchschnitt einer Spalte zurück
+     *
+     * @param string $column Spalte
+     * @return float|int
+     */
+    public function avg(string $column): float|int
+    {
+        $this->select = ["AVG($column) as aggregate"];
+
+        $result = $this->first();
+
+        return $result ? (float)($result['aggregate'] ?? 0) : 0;
+    }
+
+    /**
+     * Führt die Abfrage aus und gibt den Minimalwert einer Spalte zurück
+     *
+     * @param string $column Spalte
+     * @return mixed
+     */
+    public function min(string $column): mixed
+    {
+        $this->select = ["MIN($column) as aggregate"];
+
+        $result = $this->first();
+
+        return $result ? $result['aggregate'] : null;
+    }
+
+    /**
+     * Führt die Abfrage aus und gibt den Maximalwert einer Spalte zurück
+     *
+     * @param string $column Spalte
+     * @return mixed
+     */
+    public function max(string $column): mixed
+    {
+        $this->select = ["MAX($column) as aggregate"];
+
+        $result = $this->first();
+
+        return $result ? $result['aggregate'] : null;
+    }
+
+    /**
+     * Führt die Abfrage aus und gibt den Modalwert (häufigster Wert) einer Spalte zurück
+     *
+     * @param string $column Spalte
+     * @return mixed
+     */
+    public function mode(string $column): mixed
+    {
+        $subQuery = new QueryBuilder($this->connection, $this->from);
+        $subQuery->select($column, "COUNT(*) as count")
+            ->groupBy($column)
+            ->orderByDesc("count")
+            ->limit(1);
+
+        // Kopieren aller relevanten Klauseln
+        if ($this->whereClause->hasConditions()) {
+            $whereSql = $this->whereClause->toSql();
+            $bindings = $this->whereClause->getBindings();
+
+            // Hier müssen wir manuell die WHERE-Klausel setzen
+            // Da wir keinen direkten Zugriff auf die private whereClause haben
+            $result = $this->connection->selectOne(
+                "SELECT $column FROM ({$subQuery->toSql()}) as sub_query LIMIT 1",
+                array_merge($bindings, $subQuery->getBindings())
+            );
+        } else {
+            $result = $subQuery->first();
+        }
+
+        return $result ? $result[$column] : null;
+    }
+
+    /**
      * Führt ein TRUNCATE aus
      *
      * @return bool

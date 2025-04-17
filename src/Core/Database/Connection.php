@@ -252,7 +252,7 @@ class Connection
     /**
      * Führt eine Funktion in einer Transaktion aus
      *
-     * @param \Closure $callback Funktion, die in der Transaktion ausgeführt werden soll
+     * @param \Closure(self): mixed $callback Funktion, die in der Transaktion ausgeführt werden soll
      * @return mixed
      * @throws \Throwable wenn ein Fehler auftritt
      */

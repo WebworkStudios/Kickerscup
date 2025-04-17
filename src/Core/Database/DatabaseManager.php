@@ -95,7 +95,7 @@ class DatabaseManager
     /**
      * Führt eine Funktion in einer Transaktion aus
      *
-     * @param callable $callback Die Callback-Funktion
+     * @param callable(Connection): mixed $callback Die Callback-Funktion
      * @param string|null $connection Die Verbindung oder null für die Standardverbindung
      * @return mixed Das Ergebnis des Callbacks
      * @throws \Throwable wenn ein Fehler auftritt
