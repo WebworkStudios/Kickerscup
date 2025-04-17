@@ -32,6 +32,38 @@ class FileCache implements Cache
     /**
      * {@inheritdoc}
      */
+    public function clear(): bool
+    {
+        $files = glob($this->path . '*');
+
+        foreach ($files as $file) {
+            if (is_file($file)) {
+                unlink($file);
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function remember(string $key, ?int $ttl, callable $callback): mixed
+    {
+        if ($this->has($key)) {
+            return $this->get($key);
+        }
+
+        $value = $callback();
+
+        $this->set($key, $value, $ttl);
+
+        return $value;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
     public function has(string $key): bool
     {
         $filename = $this->getFilename($key);
@@ -56,6 +88,53 @@ class FileCache implements Cache
         if ($data['expires'] !== null && $data['expires'] < time()) {
             $this->delete($key);
             return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Generiert einen Dateinamen für einen Schlüssel
+     *
+     * @param string $key Schlüssel
+     * @return string Dateiname
+     */
+    private function getFilename(string $key): string
+    {
+        return $this->path . md5($key);
+    }
+
+    /**
+     * Liest eine Datei
+     *
+     * @param string $filename Dateiname
+     * @return string|false Inhalt der Datei oder false bei Fehler
+     */
+    private function readFile(string $filename): string|false
+    {
+        return file_get_contents($filename);
+    }
+
+    /**
+     * Deserialisiert einen Wert
+     *
+     * @param string $value Serialisierter Wert
+     * @return mixed Deserialisierter Wert
+     */
+    private function unserialize(string $value): mixed
+    {
+        return unserialize($value);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function delete(string $key): bool
+    {
+        $filename = $this->getFilename($key);
+
+        if (file_exists($filename)) {
+            return unlink($filename);
         }
 
         return true;
@@ -109,90 +188,6 @@ class FileCache implements Cache
     }
 
     /**
-     * {@inheritdoc}
-     */
-    public function delete(string $key): bool
-    {
-        $filename = $this->getFilename($key);
-
-        if (file_exists($filename)) {
-            return unlink($filename);
-        }
-
-        return true;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function clear(): bool
-    {
-        $files = glob($this->path . '*');
-
-        foreach ($files as $file) {
-            if (is_file($file)) {
-                unlink($file);
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function remember(string $key, ?int $ttl, callable $callback): mixed
-    {
-        if ($this->has($key)) {
-            return $this->get($key);
-        }
-
-        $value = $callback();
-
-        $this->set($key, $value, $ttl);
-
-        return $value;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function deletePattern(string $pattern): bool
-    {
-        $files = glob($this->path . $pattern);
-
-        foreach ($files as $file) {
-            if (is_file($file)) {
-                unlink($file);
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * Generiert einen Dateinamen für einen Schlüssel
-     *
-     * @param string $key Schlüssel
-     * @return string Dateiname
-     */
-    private function getFilename(string $key): string
-    {
-        return $this->path . md5($key);
-    }
-
-    /**
-     * Liest eine Datei
-     *
-     * @param string $filename Dateiname
-     * @return string|false Inhalt der Datei oder false bei Fehler
-     */
-    private function readFile(string $filename): string|false
-    {
-        return file_get_contents($filename);
-    }
-
-    /**
      * Schreibt eine Datei
      *
      * @param string $filename Dateiname
@@ -222,13 +217,18 @@ class FileCache implements Cache
     }
 
     /**
-     * Deserialisiert einen Wert
-     *
-     * @param string $value Serialisierter Wert
-     * @return mixed Deserialisierter Wert
+     * {@inheritdoc}
      */
-    private function unserialize(string $value): mixed
+    public function deletePattern(string $pattern): bool
     {
-        return unserialize($value);
+        $files = glob($this->path . $pattern);
+
+        foreach ($files as $file) {
+            if (is_file($file)) {
+                unlink($file);
+            }
+        }
+
+        return true;
     }
 }

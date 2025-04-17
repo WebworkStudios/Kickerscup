@@ -56,6 +56,34 @@ class Connection
     }
 
     /**
+     * Führt eine SQL-Query aus und gibt alle Ergebnisse zurück
+     *
+     * @param string $query SQL-Query
+     * @param array $params Parameter für die Query
+     * @param int $fetchMode Fetch-Modus für PDO
+     * @return array
+     */
+    public function select(string $query, array $params = [], int $fetchMode = PDO::FETCH_ASSOC): array
+    {
+        return $this->query($query, $params)->fetchAll($fetchMode);
+    }
+
+    /**
+     * Führt eine SQL-Query aus
+     *
+     * @param string $query SQL-Query
+     * @param array $params Parameter für die Query
+     * @return PDOStatement
+     */
+    public function query(string $query, array $params = []): PDOStatement
+    {
+        $statement = $this->getPdo()->prepare($query);
+        $statement->execute($params);
+
+        return $statement;
+    }
+
+    /**
      * Gibt die PDO-Instanz zurück oder erstellt eine neue, wenn noch keine existiert
      *
      * @return PDO
@@ -128,34 +156,6 @@ class Connection
             default:
                 throw new \InvalidArgumentException("Der Datenbanktreiber '{$driver}' wird nicht unterstützt.");
         }
-    }
-
-    /**
-     * Führt eine SQL-Query aus
-     *
-     * @param string $query SQL-Query
-     * @param array $params Parameter für die Query
-     * @return PDOStatement
-     */
-    public function query(string $query, array $params = []): PDOStatement
-    {
-        $statement = $this->getPdo()->prepare($query);
-        $statement->execute($params);
-
-        return $statement;
-    }
-
-    /**
-     * Führt eine SQL-Query aus und gibt alle Ergebnisse zurück
-     *
-     * @param string $query SQL-Query
-     * @param array $params Parameter für die Query
-     * @param int $fetchMode Fetch-Modus für PDO
-     * @return array
-     */
-    public function select(string $query, array $params = [], int $fetchMode = PDO::FETCH_ASSOC): array
-    {
-        return $this->query($query, $params)->fetchAll($fetchMode);
     }
 
     /**
@@ -250,6 +250,30 @@ class Connection
     }
 
     /**
+     * Führt eine Funktion in einer Transaktion aus
+     *
+     * @param \Closure $callback Funktion, die in der Transaktion ausgeführt werden soll
+     * @return mixed
+     * @throws \Throwable wenn ein Fehler auftritt
+     */
+    public function transaction(\Closure $callback): mixed
+    {
+        $this->beginTransaction();
+
+        try {
+            $result = $callback($this);
+
+            $this->commit();
+
+            return $result;
+        } catch (\Throwable $e) {
+            $this->rollBack();
+
+            throw $e;
+        }
+    }
+
+    /**
      * Startet eine Transaktion
      *
      * @return bool
@@ -277,30 +301,6 @@ class Connection
     public function rollBack(): bool
     {
         return $this->getPdo()->rollBack();
-    }
-
-    /**
-     * Führt eine Funktion in einer Transaktion aus
-     *
-     * @param \Closure $callback Funktion, die in der Transaktion ausgeführt werden soll
-     * @return mixed
-     * @throws \Throwable wenn ein Fehler auftritt
-     */
-    public function transaction(\Closure $callback): mixed
-    {
-        $this->beginTransaction();
-
-        try {
-            $result = $callback($this);
-
-            $this->commit();
-
-            return $result;
-        } catch (\Throwable $e) {
-            $this->rollBack();
-
-            throw $e;
-        }
     }
 
     /**

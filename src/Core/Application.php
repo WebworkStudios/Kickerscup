@@ -55,6 +55,7 @@ class Application
         // Routen laden
         $this->loadRoutes();
     }
+
     /**
      * Registriert die Kern-Services
      */
@@ -79,6 +80,7 @@ class Application
             require $routesFile;
         }
     }
+
     /**
      * Verarbeitet den Request und gibt eine Response zurück
      */

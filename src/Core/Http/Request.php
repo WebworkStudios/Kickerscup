@@ -99,29 +99,6 @@ class Request
     }
 
     /**
-     * Gibt einen Header zurück
-     *
-     * @param string $name Name des Headers
-     * @param mixed $default Standardwert, wenn der Header nicht existiert
-     * @return mixed Wert des Headers oder Standardwert
-     */
-    public function getHeader(string $name, mixed $default = null): mixed
-    {
-        return $this->headers[$name] ?? $default;
-    }
-
-    /**
-     * Prüft, ob ein Header existiert
-     *
-     * @param string $name Name des Headers
-     * @return bool True, wenn der Header existiert, sonst false
-     */
-    public function hasHeader(string $name): bool
-    {
-        return isset($this->headers[$name]);
-    }
-
-    /**
      * Gibt alle Cookies zurück
      *
      * @return array Cookies
@@ -221,16 +198,6 @@ class Request
     }
 
     /**
-     * Gibt alle Parameter (GET und POST) zurück
-     *
-     * @return array Alle Parameter
-     */
-    public function all(): array
-    {
-        return array_merge($this->query, $this->request);
-    }
-
-    /**
      * Gibt einen Parameter (GET oder POST) zurück
      *
      * @param string $name Name des Parameters
@@ -240,6 +207,16 @@ class Request
     public function get(string $name, mixed $default = null): mixed
     {
         return $this->all()[$name] ?? $default;
+    }
+
+    /**
+     * Gibt alle Parameter (GET und POST) zurück
+     *
+     * @return array Alle Parameter
+     */
+    public function all(): array
+    {
+        return array_merge($this->query, $this->request);
     }
 
     /**
@@ -316,6 +293,29 @@ class Request
     {
         return $this->hasHeader('X-Requested-With') &&
             strtolower($this->getHeader('X-Requested-With')) === 'xmlhttprequest';
+    }
+
+    /**
+     * Prüft, ob ein Header existiert
+     *
+     * @param string $name Name des Headers
+     * @return bool True, wenn der Header existiert, sonst false
+     */
+    public function hasHeader(string $name): bool
+    {
+        return isset($this->headers[$name]);
+    }
+
+    /**
+     * Gibt einen Header zurück
+     *
+     * @param string $name Name des Headers
+     * @param mixed $default Standardwert, wenn der Header nicht existiert
+     * @return mixed Wert des Headers oder Standardwert
+     */
+    public function getHeader(string $name, mixed $default = null): mixed
+    {
+        return $this->headers[$name] ?? $default;
     }
 
     /**

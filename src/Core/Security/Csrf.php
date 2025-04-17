@@ -15,38 +15,6 @@ class Csrf
     private const SESSION_KEY = 'csrf_token';
 
     /**
-     * Generiert ein CSRF-Token und speichert es in der Session
-     *
-     * @return string
-     */
-    public function generateToken(): string
-    {
-        $token = bin2hex(random_bytes(32));
-
-        if (session_status() !== PHP_SESSION_ACTIVE) {
-            session_start();
-        }
-
-        $_SESSION[self::SESSION_KEY] = $token;
-
-        return $token;
-    }
-
-    /**
-     * Gibt das aktuelle CSRF-Token zurück
-     *
-     * @return string|null
-     */
-    public function getToken(): ?string
-    {
-        if (session_status() !== PHP_SESSION_ACTIVE) {
-            session_start();
-        }
-
-        return $_SESSION[self::SESSION_KEY] ?? null;
-    }
-
-    /**
      * Validiert ein CSRF-Token
      *
      * @param string $token CSRF-Token
@@ -80,6 +48,38 @@ class Csrf
             '<input type="hidden" name="csrf_token" value="%s">',
             htmlspecialchars($token, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
         );
+    }
+
+    /**
+     * Gibt das aktuelle CSRF-Token zurück
+     *
+     * @return string|null
+     */
+    public function getToken(): ?string
+    {
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            session_start();
+        }
+
+        return $_SESSION[self::SESSION_KEY] ?? null;
+    }
+
+    /**
+     * Generiert ein CSRF-Token und speichert es in der Session
+     *
+     * @return string
+     */
+    public function generateToken(): string
+    {
+        $token = bin2hex(random_bytes(32));
+
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            session_start();
+        }
+
+        $_SESSION[self::SESSION_KEY] = $token;
+
+        return $token;
     }
 
     /**

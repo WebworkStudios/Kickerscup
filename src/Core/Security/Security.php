@@ -93,6 +93,23 @@ class Security
     }
 
     /**
+     * Gibt den Verschlüsselungsschlüssel zurück
+     *
+     * @return string
+     */
+    private function getEncryptionKey(): string
+    {
+        // In einer echten Anwendung sollte der Schlüssel aus einer sicheren Quelle stammen
+        $key = getenv('APP_KEY');
+
+        if (empty($key)) {
+            throw new \Exception('Kein Verschlüsselungsschlüssel definiert. Bitte APP_KEY Umgebungsvariable setzen.');
+        }
+
+        return $key;
+    }
+
+    /**
      * Entschlüsselt verschlüsselte Daten
      *
      * @param string $data Verschlüsselte Daten
@@ -155,22 +172,5 @@ class Security
     public function isValidUrl(string $url): bool
     {
         return filter_var($url, FILTER_VALIDATE_URL) !== false;
-    }
-
-    /**
-     * Gibt den Verschlüsselungsschlüssel zurück
-     *
-     * @return string
-     */
-    private function getEncryptionKey(): string
-    {
-        // In einer echten Anwendung sollte der Schlüssel aus einer sicheren Quelle stammen
-        $key = getenv('APP_KEY');
-
-        if (empty($key)) {
-            throw new \Exception('Kein Verschlüsselungsschlüssel definiert. Bitte APP_KEY Umgebungsvariable setzen.');
-        }
-
-        return $key;
     }
 }

@@ -44,35 +44,6 @@ class RedisCache implements Cache
     /**
      * {@inheritdoc}
      */
-    public function get(string $key, mixed $default = null): mixed
-    {
-        $value = $this->redis->get($this->prefix . $key);
-
-        if ($value === null) {
-            return $default;
-        }
-
-        return $this->unserialize($value);
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function set(string $key, mixed $value, ?int $ttl = null): bool
-    {
-        $key = $this->prefix . $key;
-        $value = $this->serialize($value);
-
-        if ($ttl === null) {
-            return $this->redis->set($key, $value) === 'OK';
-        }
-
-        return $this->redis->setex($key, $ttl, $value) === 'OK';
-    }
-
-    /**
-     * {@inheritdoc}
-     */
     public function delete(string $key): bool
     {
         return (bool)$this->redis->del($this->prefix . $key);
@@ -121,15 +92,26 @@ class RedisCache implements Cache
     /**
      * {@inheritdoc}
      */
-    public function deletePattern(string $pattern): bool
+    public function get(string $key, mixed $default = null): mixed
     {
-        $keys = $this->redis->keys($this->prefix . $pattern);
+        $value = $this->redis->get($this->prefix . $key);
 
-        if (!empty($keys)) {
-            return (bool)$this->redis->del($keys);
+        if ($value === null) {
+            return $default;
         }
 
-        return true;
+        return $this->unserialize($value);
+    }
+
+    /**
+     * Deserialisiert einen Wert
+     *
+     * @param string $value Serialisierter Wert
+     * @return mixed Deserialisierter Wert
+     */
+    private function unserialize(string $value): mixed
+    {
+        return unserialize($value);
     }
 
     /**
@@ -144,14 +126,32 @@ class RedisCache implements Cache
     }
 
     /**
-     * Deserialisiert einen Wert
-     *
-     * @param string $value Serialisierter Wert
-     * @return mixed Deserialisierter Wert
+     * {@inheritdoc}
      */
-    private function unserialize(string $value): mixed
+    public function set(string $key, mixed $value, ?int $ttl = null): bool
     {
-        return unserialize($value);
+        $key = $this->prefix . $key;
+        $value = $this->serialize($value);
+
+        if ($ttl === null) {
+            return $this->redis->set($key, $value) === 'OK';
+        }
+
+        return $this->redis->setex($key, $ttl, $value) === 'OK';
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function deletePattern(string $pattern): bool
+    {
+        $keys = $this->redis->keys($this->prefix . $pattern);
+
+        if (!empty($keys)) {
+            return (bool)$this->redis->del($keys);
+        }
+
+        return true;
     }
 
     /**

@@ -11,6 +11,34 @@ namespace App\Core\Routing;
 class Route
 {
     /**
+     * Domain der Route
+     */
+    private ?string $domain = null;
+    /**
+     * Name der Route
+     */
+    private ?string $name = null;
+    /**
+     * Parameter der Route
+     */
+    private array $parameters = [];
+
+    /**
+     * Konstruktor
+     *
+     * @param array $methods HTTP-Methoden
+     * @param string $uri URI der Route
+     * @param \Closure|string|array $action Aktion, die ausgeführt werden soll
+     */
+    public function __construct(
+        private readonly array                 $methods,
+        private readonly string                $uri,
+        private readonly \Closure|string|array $action
+    )
+    {
+    }
+
+    /**
      * Gibt den URI der Route zurück
      *
      * @return string URI
@@ -31,6 +59,16 @@ class Route
     }
 
     /**
+     * Gibt die Domain der Route zurück
+     *
+     * @return string|null Domain oder null, wenn keine gesetzt ist
+     */
+    public function getDomain(): ?string
+    {
+        return $this->domain;
+    }
+
+    /**
      * Setzt die Domain der Route
      *
      * @param string $domain Domain
@@ -44,13 +82,13 @@ class Route
     }
 
     /**
-     * Gibt die Domain der Route zurück
+     * Gibt die Parameter der Route zurück
      *
-     * @return string|null Domain oder null, wenn keine gesetzt ist
+     * @return array Parameter
      */
-    public function getDomain(): ?string
+    public function getParameters(): array
     {
-        return $this->domain;
+        return $this->parameters;
     }
 
     /**
@@ -64,16 +102,6 @@ class Route
         $this->parameters = $parameters;
 
         return $this;
-    }
-
-    /**
-     * Gibt die Parameter der Route zurück
-     *
-     * @return array Parameter
-     */
-    public function getParameters(): array
-    {
-        return $this->parameters;
     }
 
     /**
@@ -97,36 +125,6 @@ class Route
     public function getName(): ?string
     {
         return $this->name;
-    }
-
-    /**
-     * Domain der Route
-     */
-    private ?string $domain = null;
-
-    /**
-     * Name der Route
-     */
-    private ?string $name = null;
-
-    /**
-     * Parameter der Route
-     */
-    private array $parameters = [];
-
-    /**
-     * Konstruktor
-     *
-     * @param array $methods HTTP-Methoden
-     * @param string $uri URI der Route
-     * @param \Closure|string|array $action Aktion, die ausgeführt werden soll
-     */
-    public function __construct(
-        private readonly array                 $methods,
-        private readonly string                $uri,
-        private readonly \Closure|string|array $action
-    )
-    {
     }
 
     /**

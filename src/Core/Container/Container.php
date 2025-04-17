@@ -68,59 +68,6 @@ class Container
     }
 
     /**
-     * Erstellt oder gibt eine Instanz einer Klasse zurück
-     *
-     * @param string $abstract Klasse, die erstellt werden soll
-     * @param array $parameters Zusätzliche Parameter für den Konstruktor
-     * @return mixed Instanz der Klasse
-     */
-    public function make(string $abstract, array $parameters = []): mixed
-    {
-        // Wenn es bereits eine Instanz gibt, diese zurückgeben
-        if (isset($this->instances[$abstract])) {
-            return $this->instances[$abstract];
-        }
-
-        // Wenn es eine Bindung gibt, diese verwenden
-        if (isset($this->bindings[$abstract])) {
-            $concrete = $this->bindings[$abstract];
-
-            // Wenn die Bindung eine Closure ist, diese ausführen
-            if ($concrete instanceof \Closure) {
-                $instance = $concrete($this, $parameters);
-
-                // Wenn es sich um einen Singleton handelt, die Instanz speichern
-                if (array_key_exists($abstract, $this->instances)) {
-                    $this->instances[$abstract] = $instance;
-                }
-
-                return $instance;
-            }
-
-            // Sonst die konkrete Klasse verwenden
-            $abstract = $concrete;
-        }
-
-        // Klasse erstellen
-        $instance = $this->build($abstract, $parameters);
-
-        // Wenn es sich um einen Singleton handelt, die Instanz speichern
-        if (array_key_exists($abstract, $this->instances)) {
-            $this->instances[$abstract] = $instance;
-        }
-
-        return $instance;
-    }
-
-    /**
-     * Prüft, ob eine Bindung existiert
-     */
-    public function has(string $abstract): bool
-    {
-        return isset($this->bindings[$abstract]) || isset($this->instances[$abstract]);
-    }
-
-    /**
      * Baut eine Klasse mit ihren Abhängigkeiten auf
      */
     private function build(string $concrete, array $parameters = []): object
@@ -172,5 +119,58 @@ class Container
 
         // Klasse mit den aufgelösten Abhängigkeiten instanziieren
         return $reflector->newInstanceArgs($dependencies);
+    }
+
+    /**
+     * Erstellt oder gibt eine Instanz einer Klasse zurück
+     *
+     * @param string $abstract Klasse, die erstellt werden soll
+     * @param array $parameters Zusätzliche Parameter für den Konstruktor
+     * @return mixed Instanz der Klasse
+     */
+    public function make(string $abstract, array $parameters = []): mixed
+    {
+        // Wenn es bereits eine Instanz gibt, diese zurückgeben
+        if (isset($this->instances[$abstract])) {
+            return $this->instances[$abstract];
+        }
+
+        // Wenn es eine Bindung gibt, diese verwenden
+        if (isset($this->bindings[$abstract])) {
+            $concrete = $this->bindings[$abstract];
+
+            // Wenn die Bindung eine Closure ist, diese ausführen
+            if ($concrete instanceof \Closure) {
+                $instance = $concrete($this, $parameters);
+
+                // Wenn es sich um einen Singleton handelt, die Instanz speichern
+                if (array_key_exists($abstract, $this->instances)) {
+                    $this->instances[$abstract] = $instance;
+                }
+
+                return $instance;
+            }
+
+            // Sonst die konkrete Klasse verwenden
+            $abstract = $concrete;
+        }
+
+        // Klasse erstellen
+        $instance = $this->build($abstract, $parameters);
+
+        // Wenn es sich um einen Singleton handelt, die Instanz speichern
+        if (array_key_exists($abstract, $this->instances)) {
+            $this->instances[$abstract] = $instance;
+        }
+
+        return $instance;
+    }
+
+    /**
+     * Prüft, ob eine Bindung existiert
+     */
+    public function has(string $abstract): bool
+    {
+        return isset($this->bindings[$abstract]) || isset($this->instances[$abstract]);
     }
 }

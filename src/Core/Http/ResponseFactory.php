@@ -10,19 +10,6 @@ namespace App\Core\Http;
 class ResponseFactory
 {
     /**
-     * Erstellt eine JSON-Response
-     *
-     * @param mixed $data Daten
-     * @param int $statusCode HTTP-Statuscode
-     * @param array $headers HTTP-Header
-     * @return Response
-     */
-    public function json(mixed $data, int $statusCode = 200, array $headers = []): Response
-    {
-        return Response::json($data, $statusCode, $headers);
-    }
-
-    /**
      * Erstellt eine HTML-Response
      *
      * @param string $content HTML-Inhalt
@@ -73,6 +60,19 @@ class ResponseFactory
         return $this->json([
             'error' => $message
         ], 404, $headers);
+    }
+
+    /**
+     * Erstellt eine JSON-Response
+     *
+     * @param mixed $data Daten
+     * @param int $statusCode HTTP-Statuscode
+     * @param array $headers HTTP-Header
+     * @return Response
+     */
+    public function json(mixed $data, int $statusCode = 200, array $headers = []): Response
+    {
+        return Response::json($data, $statusCode, $headers);
     }
 
     /**

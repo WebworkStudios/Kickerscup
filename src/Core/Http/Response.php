@@ -31,6 +31,88 @@ class Response
     }
 
     /**
+     * Erstellt eine JSON-Response
+     *
+     * @param mixed $data Daten
+     * @param int $statusCode HTTP-Statuscode
+     * @param array $headers HTTP-Header
+     * @return self
+     */
+    public static function json(mixed $data, int $statusCode = 200, array $headers = []): self
+    {
+        $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
+        if ($json === false) {
+            throw new \Exception('Fehler beim Konvertieren der Daten zu JSON: ' . json_last_error_msg());
+        }
+
+        return new self(
+            $json,
+            $statusCode,
+            array_merge([
+                'Content-Type' => 'application/json; charset=UTF-8'
+            ], $headers)
+        );
+    }
+
+    /**
+     * Erstellt eine HTML-Response
+     *
+     * @param string $content HTML-Inhalt
+     * @param int $statusCode HTTP-Statuscode
+     * @param array $headers HTTP-Header
+     * @return self
+     */
+    public static function html(string $content, int $statusCode = 200, array $headers = []): self
+    {
+        return new self(
+            $content,
+            $statusCode,
+            array_merge([
+                'Content-Type' => 'text/html; charset=UTF-8'
+            ], $headers)
+        );
+    }
+
+    /**
+     * Erstellt eine Text-Response
+     *
+     * @param string $content Text-Inhalt
+     * @param int $statusCode HTTP-Statuscode
+     * @param array $headers HTTP-Header
+     * @return self
+     */
+    public static function text(string $content, int $statusCode = 200, array $headers = []): self
+    {
+        return new self(
+            $content,
+            $statusCode,
+            array_merge([
+                'Content-Type' => 'text/plain; charset=UTF-8'
+            ], $headers)
+        );
+    }
+
+    /**
+     * Erstellt eine Redirect-Response
+     *
+     * @param string $url URL, zu der weitergeleitet werden soll
+     * @param int $statusCode HTTP-Statuscode (301 oder 302)
+     * @param array $headers HTTP-Header
+     * @return self
+     */
+    public static function redirect(string $url, int $statusCode = 302, array $headers = []): self
+    {
+        return new self(
+            '',
+            $statusCode,
+            array_merge([
+                'Location' => $url
+            ], $headers)
+        );
+    }
+
+    /**
      * Gibt den Response-Body zurück
      *
      * @return string Response-Body
@@ -155,87 +237,5 @@ class Response
 
         // Content senden
         echo $this->content;
-    }
-
-    /**
-     * Erstellt eine JSON-Response
-     *
-     * @param mixed $data Daten
-     * @param int $statusCode HTTP-Statuscode
-     * @param array $headers HTTP-Header
-     * @return self
-     */
-    public static function json(mixed $data, int $statusCode = 200, array $headers = []): self
-    {
-        $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-
-        if ($json === false) {
-            throw new \Exception('Fehler beim Konvertieren der Daten zu JSON: ' . json_last_error_msg());
-        }
-
-        return new self(
-            $json,
-            $statusCode,
-            array_merge([
-                'Content-Type' => 'application/json; charset=UTF-8'
-            ], $headers)
-        );
-    }
-
-    /**
-     * Erstellt eine HTML-Response
-     *
-     * @param string $content HTML-Inhalt
-     * @param int $statusCode HTTP-Statuscode
-     * @param array $headers HTTP-Header
-     * @return self
-     */
-    public static function html(string $content, int $statusCode = 200, array $headers = []): self
-    {
-        return new self(
-            $content,
-            $statusCode,
-            array_merge([
-                'Content-Type' => 'text/html; charset=UTF-8'
-            ], $headers)
-        );
-    }
-
-    /**
-     * Erstellt eine Text-Response
-     *
-     * @param string $content Text-Inhalt
-     * @param int $statusCode HTTP-Statuscode
-     * @param array $headers HTTP-Header
-     * @return self
-     */
-    public static function text(string $content, int $statusCode = 200, array $headers = []): self
-    {
-        return new self(
-            $content,
-            $statusCode,
-            array_merge([
-                'Content-Type' => 'text/plain; charset=UTF-8'
-            ], $headers)
-        );
-    }
-
-    /**
-     * Erstellt eine Redirect-Response
-     *
-     * @param string $url URL, zu der weitergeleitet werden soll
-     * @param int $statusCode HTTP-Statuscode (301 oder 302)
-     * @param array $headers HTTP-Header
-     * @return self
-     */
-    public static function redirect(string $url, int $statusCode = 302, array $headers = []): self
-    {
-        return new self(
-            '',
-            $statusCode,
-            array_merge([
-                'Location' => $url
-            ], $headers)
-        );
     }
 }

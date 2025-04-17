@@ -21,16 +21,10 @@ class RouteCollection implements \Iterator, \Countable
      */
     private int $position = 0;
 
-    /**
-     * Fügt eine Route zur Sammlung hinzu
-     *
-     * @param Route $route Route
-     * @return self
-     */
     public function add(Route $route): self
     {
         $this->routes[] = $route;
-
+        error_log("Route added: " . $route->getUri() . " with methods: " . implode(', ', $route->getMethods()));
         return $this;
     }
 

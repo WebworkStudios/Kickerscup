@@ -63,6 +63,18 @@ class DatabaseManager
     }
 
     /**
+     * Shortcut für connection()->table()
+     *
+     * @param string $table Tabellenname
+     * @param string|null $connection Name der Verbindung oder null für die Standardverbindung
+     * @return QueryBuilder
+     */
+    public function table(string $table, ?string $connection = null): QueryBuilder
+    {
+        return $this->connection($connection)->table($table);
+    }
+
+    /**
      * Gibt eine Verbindung zurück
      *
      * @param string|null $name Name der Verbindung oder null für die Standardverbindung
@@ -87,18 +99,6 @@ class DatabaseManager
         $this->connections[$name] = new Connection($this->configs[$name]);
 
         return $this->connections[$name];
-    }
-
-    /**
-     * Shortcut für connection()->table()
-     *
-     * @param string $table Tabellenname
-     * @param string|null $connection Name der Verbindung oder null für die Standardverbindung
-     * @return QueryBuilder
-     */
-    public function table(string $table, ?string $connection = null): QueryBuilder
-    {
-        return $this->connection($connection)->table($table);
     }
 
     /**

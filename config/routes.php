@@ -8,8 +8,6 @@ declare(strict_types=1);
  * Hier können alle Routen für die Anwendung definiert werden.
  */
 
-use App\Core\Routing\Router;
-
 // Lokale Variable für Router verwenden
 $router = $app->getRouter();
 
@@ -23,6 +21,13 @@ $router->get('/api/status', function ($request) {
         'status' => 'online',
         'version' => '1.0.0',
         'timestamp' => time()
+    ]);
+});
+
+// In config/routes.php
+$router->get('/debug', function ($request) {
+    return response()->json([
+        'message' => 'Debug route works!'
     ]);
 });
 

@@ -8,7 +8,6 @@ declare(strict_types=1);
 
 use App\Core\Container\Container;
 use App\Core\Http\Request;
-use App\Core\Http\Response;
 use App\Core\Http\ResponseFactory;
 
 /**

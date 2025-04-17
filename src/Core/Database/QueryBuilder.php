@@ -3,8 +3,6 @@ declare(strict_types=1);
 
 namespace App\Core\Database;
 
-use PDO;
-
 /**
  * QueryBuilder für SQL-Abfragen
  */
@@ -48,43 +46,10 @@ class QueryBuilder
      */
     public function __construct(
         private readonly Connection $connection,
-        private readonly string $table
-    ) {
+        private readonly string     $table
+    )
+    {
         $this->components['from'] = $table;
-    }
-
-    /**
-     * Setzt die SELECT-Klausel
-     *
-     * @param string ...$columns Spalten
-     * @return self
-     */
-    public function select(string ...$columns): self
-    {
-        $this->components['select'] = $columns;
-
-        return $this;
-    }
-
-    /**
-     * Fügt eine WHERE-Bedingung hinzu
-     *
-     * @param string $column Spalte
-     * @param string $operator Operator
-     * @param mixed $value Wert
-     * @return self
-     */
-    public function where(string $column, string $operator, mixed $value): self
-    {
-        $this->components['where'][] = [
-            'type' => 'basic',
-            'column' => $column,
-            'operator' => $operator,
-            'value' => $value,
-            'boolean' => $this->whereOperator,
-        ];
-
-        return $this;
     }
 
     /**
@@ -107,18 +72,20 @@ class QueryBuilder
     }
 
     /**
-     * Fügt eine WHERE IN-Bedingung hinzu
+     * Fügt eine WHERE-Bedingung hinzu
      *
      * @param string $column Spalte
-     * @param array $values Werte
+     * @param string $operator Operator
+     * @param mixed $value Wert
      * @return self
      */
-    public function whereIn(string $column, array $values): self
+    public function where(string $column, string $operator, mixed $value): self
     {
         $this->components['where'][] = [
-            'type' => 'in',
+            'type' => 'basic',
             'column' => $column,
-            'values' => $values,
+            'operator' => $operator,
+            'value' => $value,
             'boolean' => $this->whereOperator,
         ];
 
@@ -144,16 +111,16 @@ class QueryBuilder
     }
 
     /**
-     * Fügt eine WHERE NOT IN-Bedingung hinzu
+     * Fügt eine WHERE IN-Bedingung hinzu
      *
      * @param string $column Spalte
      * @param array $values Werte
      * @return self
      */
-    public function whereNotIn(string $column, array $values): self
+    public function whereIn(string $column, array $values): self
     {
         $this->components['where'][] = [
-            'type' => 'notIn',
+            'type' => 'in',
             'column' => $column,
             'values' => $values,
             'boolean' => $this->whereOperator,
@@ -181,16 +148,18 @@ class QueryBuilder
     }
 
     /**
-     * Fügt eine WHERE NULL-Bedingung hinzu
+     * Fügt eine WHERE NOT IN-Bedingung hinzu
      *
      * @param string $column Spalte
+     * @param array $values Werte
      * @return self
      */
-    public function whereNull(string $column): self
+    public function whereNotIn(string $column, array $values): self
     {
         $this->components['where'][] = [
-            'type' => 'null',
+            'type' => 'notIn',
             'column' => $column,
+            'values' => $values,
             'boolean' => $this->whereOperator,
         ];
 
@@ -215,15 +184,15 @@ class QueryBuilder
     }
 
     /**
-     * Fügt eine WHERE NOT NULL-Bedingung hinzu
+     * Fügt eine WHERE NULL-Bedingung hinzu
      *
      * @param string $column Spalte
      * @return self
      */
-    public function whereNotNull(string $column): self
+    public function whereNull(string $column): self
     {
         $this->components['where'][] = [
-            'type' => 'notNull',
+            'type' => 'null',
             'column' => $column,
             'boolean' => $this->whereOperator,
         ];
@@ -242,6 +211,42 @@ class QueryBuilder
         $this->whereOperator = 'OR';
 
         $result = $this->whereNotNull($column);
+
+        $this->whereOperator = 'AND';
+
+        return $result;
+    }
+
+    /**
+     * Fügt eine WHERE NOT NULL-Bedingung hinzu
+     *
+     * @param string $column Spalte
+     * @return self
+     */
+    public function whereNotNull(string $column): self
+    {
+        $this->components['where'][] = [
+            'type' => 'notNull',
+            'column' => $column,
+            'boolean' => $this->whereOperator,
+        ];
+
+        return $this;
+    }
+
+    /**
+     * Fügt eine WHERE BETWEEN-Bedingung mit OR hinzu
+     *
+     * @param string $column Spalte
+     * @param mixed $min Minimalwert
+     * @param mixed $max Maximalwert
+     * @return self
+     */
+    public function orWhereBetween(string $column, mixed $min, mixed $max): self
+    {
+        $this->whereOperator = 'OR';
+
+        $result = $this->whereBetween($column, $min, $max);
 
         $this->whereOperator = 'AND';
 
@@ -270,22 +275,17 @@ class QueryBuilder
     }
 
     /**
-     * Fügt eine WHERE BETWEEN-Bedingung mit OR hinzu
+     * Fügt eine LEFT JOIN-Klausel hinzu
      *
-     * @param string $column Spalte
-     * @param mixed $min Minimalwert
-     * @param mixed $max Maximalwert
+     * @param string $table Tabellenname
+     * @param string $first Erste Spalte
+     * @param string $operator Operator
+     * @param string $second Zweite Spalte
      * @return self
      */
-    public function orWhereBetween(string $column, mixed $min, mixed $max): self
+    public function leftJoin(string $table, string $first, string $operator, string $second): self
     {
-        $this->whereOperator = 'OR';
-
-        $result = $this->whereBetween($column, $min, $max);
-
-        $this->whereOperator = 'AND';
-
-        return $result;
+        return $this->join($table, $first, $operator, $second, 'LEFT');
     }
 
     /**
@@ -304,7 +304,8 @@ class QueryBuilder
         string $operator,
         string $second,
         string $type = 'INNER'
-    ): self {
+    ): self
+    {
         $this->components['join'][] = [
             'table' => $table,
             'first' => $first,
@@ -314,20 +315,6 @@ class QueryBuilder
         ];
 
         return $this;
-    }
-
-    /**
-     * Fügt eine LEFT JOIN-Klausel hinzu
-     *
-     * @param string $table Tabellenname
-     * @param string $first Erste Spalte
-     * @param string $operator Operator
-     * @param string $second Zweite Spalte
-     * @return self
-     */
-    public function leftJoin(string $table, string $first, string $operator, string $second): self
-    {
-        return $this->join($table, $first, $operator, $second, 'LEFT');
     }
 
     /**
@@ -358,6 +345,25 @@ class QueryBuilder
     }
 
     /**
+     * Fügt eine HAVING-Bedingung mit OR hinzu
+     *
+     * @param string $column Spalte
+     * @param string $operator Operator
+     * @param mixed $value Wert
+     * @return self
+     */
+    public function orHaving(string $column, string $operator, mixed $value): self
+    {
+        $this->havingOperator = 'OR';
+
+        $result = $this->having($column, $operator, $value);
+
+        $this->havingOperator = 'AND';
+
+        return $result;
+    }
+
+    /**
      * Fügt eine HAVING-Bedingung hinzu
      *
      * @param string $column Spalte
@@ -379,22 +385,14 @@ class QueryBuilder
     }
 
     /**
-     * Fügt eine HAVING-Bedingung mit OR hinzu
+     * Fügt eine ORDER BY DESC-Klausel hinzu
      *
      * @param string $column Spalte
-     * @param string $operator Operator
-     * @param mixed $value Wert
      * @return self
      */
-    public function orHaving(string $column, string $operator, mixed $value): self
+    public function orderByDesc(string $column): self
     {
-        $this->havingOperator = 'OR';
-
-        $result = $this->having($column, $operator, $value);
-
-        $this->havingOperator = 'AND';
-
-        return $result;
+        return $this->orderBy($column, 'DESC');
     }
 
     /**
@@ -421,14 +419,15 @@ class QueryBuilder
     }
 
     /**
-     * Fügt eine ORDER BY DESC-Klausel hinzu
+     * Kombiniert LIMIT und OFFSET
      *
-     * @param string $column Spalte
+     * @param int $page Seite
+     * @param int $perPage Einträge pro Seite
      * @return self
      */
-    public function orderByDesc(string $column): self
+    public function forPage(int $page, int $perPage): self
     {
-        return $this->orderBy($column, 'DESC');
+        return $this->offset(($page - 1) * $perPage)->limit($perPage);
     }
 
     /**
@@ -458,15 +457,46 @@ class QueryBuilder
     }
 
     /**
-     * Kombiniert LIMIT und OFFSET
+     * Führt die Abfrage aus und gibt die erste Spalte des ersten Ergebnisses zurück
      *
-     * @param int $page Seite
-     * @param int $perPage Einträge pro Seite
+     * @param string $column Spalte
+     * @return mixed
+     */
+    public function value(string $column): mixed
+    {
+        $result = $this->first([$column]);
+
+        return $result ? $result[$column] : null;
+    }
+
+    /**
+     * Führt die Abfrage aus und gibt das erste Ergebnis zurück
+     *
+     * @param string[]|null $columns Spalten
+     * @return array|false
+     */
+    public function first(?array $columns = null): array|false
+    {
+        if ($columns !== null) {
+            $this->select(...$columns);
+        }
+
+        $result = $this->limit(1)->get();
+
+        return $result ? $result[0] : false;
+    }
+
+    /**
+     * Setzt die SELECT-Klausel
+     *
+     * @param string ...$columns Spalten
      * @return self
      */
-    public function forPage(int $page, int $perPage): self
+    public function select(string ...$columns): self
     {
-        return $this->offset(($page - 1) * $perPage)->limit($perPage);
+        $this->components['select'] = $columns;
+
+        return $this;
     }
 
     /**
@@ -488,34 +518,64 @@ class QueryBuilder
     }
 
     /**
-     * Führt die Abfrage aus und gibt das erste Ergebnis zurück
+     * Generiert die SQL-Abfrage
      *
-     * @param string[]|null $columns Spalten
-     * @return array|false
+     * @return string
      */
-    public function first(?array $columns = null): array|false
+    public function toSql(): string
     {
-        if ($columns !== null) {
-            $this->select(...$columns);
+        // SELECT
+        $query = 'SELECT ' . implode(', ', $this->components['select']);
+
+        // FROM
+        $query .= ' FROM ' . $this->components['from'];
+
+        // JOINs
+        if (!empty($this->components['join'])) {
+            foreach ($this->components['join'] as $join) {
+                $query .= sprintf(
+                    ' %s JOIN %s ON %s %s %s',
+                    $join['type'],
+                    $join['table'],
+                    $join['first'],
+                    $join['operator'],
+                    $join['second']
+                );
+            }
         }
 
-        $result = $this->limit(1)->get();
+        // WHERE
+        [$where, $whereParams] = $this->buildWhereClause();
 
-        return $result ? $result[0] : false;
-    }
+        if ($where) {
+            $query .= " WHERE $where";
+            $this->params = array_merge($this->params, $whereParams);
+        }
 
-    /**
-     * Führt die Abfrage aus und gibt die erste Spalte des ersten Ergebnisses zurück
-     *
-     * @param string $column Spalte
-     * @return mixed
-     */
-    public function value(string $column): mixed
-    {
-        $result = $this->first([$column]);
+        // GROUP BY
+        if (!empty($this->components['groupBy'])) {
+            $query .= ' GROUP BY ' . implode(', ', $this->components['groupBy']);
+        }
 
-        return $result ? $result[$column] : null;
-    }
+        // HAVING
+        if (!empty($this->components['having'])) {
+            $query .= ' HAVING ';
+
+            $havingClauses = [];
+            $havingParams = [];
+
+            foreach ($this->components['having'] as $i => $having) {
+                $key = "having_{$i}";
+
+                if ($i > 0) {
+                    $query .= " {$having['boolean']} ";
+                }
+
+                if ($having['type'] === 'basic') {
+                    $havingClauses[] = "{$having['column']} {$having['operator']} :$key";
+                    $havingParams[$key] = $having['value'];
+                }
+            }
 
     /**
      * Führt die Abfrage aus und gibt die Anzahl der Ergebnisse zurück
@@ -529,7 +589,7 @@ class QueryBuilder
 
         $result = $this->first();
 
-        return (int) ($result['count'] ?? 0);
+        return (int)($result['count'] ?? 0);
     }
 
     /**
@@ -639,63 +699,3 @@ class QueryBuilder
 
         return $statement->rowCount();
     }
-
-    /**
-     * Generiert die SQL-Abfrage
-     *
-     * @return string
-     */
-    public function toSql(): string
-    {
-        // SELECT
-        $query = 'SELECT ' . implode(', ', $this->components['select']);
-
-        // FROM
-        $query .= ' FROM ' . $this->components['from'];
-
-        // JOINs
-        if (!empty($this->components['join'])) {
-            foreach ($this->components['join'] as $join) {
-                $query .= sprintf(
-                    ' %s JOIN %s ON %s %s %s',
-                    $join['type'],
-                    $join['table'],
-                    $join['first'],
-                    $join['operator'],
-                    $join['second']
-                );
-            }
-        }
-
-        // WHERE
-        [$where, $whereParams] = $this->buildWhereClause();
-
-        if ($where) {
-            $query .= " WHERE $where";
-            $this->params = array_merge($this->params, $whereParams);
-        }
-
-        // GROUP BY
-        if (!empty($this->components['groupBy'])) {
-            $query .= ' GROUP BY ' . implode(', ', $this->components['groupBy']);
-        }
-
-        // HAVING
-        if (!empty($this->components['having'])) {
-            $query .= ' HAVING ';
-
-            $havingClauses = [];
-            $havingParams = [];
-
-            foreach ($this->components['having'] as $i => $having) {
-                $key = "having_{$i}";
-
-                if ($i > 0) {
-                    $query .= " {$having['boolean']} ";
-                }
-
-                if ($having['type'] === 'basic') {
-                    $havingClauses[] = "{$having['column']} {$having['operator']} :$key";
-                    $havingParams[$key] = $having['value'];
-                }
-            }
