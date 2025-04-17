@@ -25,6 +25,11 @@ class DatabaseManager
     private string $defaultConnection = 'default';
 
     /**
+     * QueryBuilderFactory-Instanz
+     */
+    private ?QueryBuilderFactory $factory = null;
+
+    /**
      * Konstruktor
      *
      * @param array $configs Konfigurationen für Verbindungen
@@ -75,6 +80,32 @@ class DatabaseManager
     }
 
     /**
+     * Erstellt eine Unterabfrage
+     *
+     * @param callable $callback Die Callback-Funktion, die einen QueryBuilder erhält
+     * @param string|null $alias Der Alias für die Unterabfrage
+     * @param string|null $connection Die Verbindung oder null für die Standardverbindung
+     * @return SubQueryBuilder
+     */
+    public function subQuery(callable $callback, ?string $alias = null, ?string $connection = null): SubQueryBuilder
+    {
+        return $this->getFactory()->subQuery($callback, $alias, $connection);
+    }
+
+    /**
+     * Führt eine Funktion in einer Transaktion aus
+     *
+     * @param callable $callback Die Callback-Funktion
+     * @param string|null $connection Die Verbindung oder null für die Standardverbindung
+     * @return mixed Das Ergebnis des Callbacks
+     * @throws \Throwable wenn ein Fehler auftritt
+     */
+    public function transaction(callable $callback, ?string $connection = null): mixed
+    {
+        return $this->connection($connection)->transaction($callback);
+    }
+
+    /**
      * Gibt eine Verbindung zurück
      *
      * @param string|null $name Name der Verbindung oder null für die Standardverbindung
@@ -113,5 +144,45 @@ class DatabaseManager
         }
 
         $this->connections = [];
+    }
+
+    /**
+     * Gibt die QueryBuilderFactory zurück oder erstellt sie
+     *
+     * @return QueryBuilderFactory
+     */
+    public function getFactory(): QueryBuilderFactory
+    {
+        if ($this->factory === null) {
+            $this->factory = new QueryBuilderFactory($this);
+        }
+
+        return $this->factory;
+    }
+
+    /**
+     * Führt eine rohe SQL-Abfrage aus
+     *
+     * @param string $query Die SQL-Abfrage
+     * @param array $bindings Die Parameter
+     * @param string|null $connection Die Verbindung oder null für die Standardverbindung
+     * @return array Die Ergebnisse
+     */
+    public function query(string $query, array $bindings = [], ?string $connection = null): array
+    {
+        return $this->connection($connection)->select($query, $bindings);
+    }
+
+    /**
+     * Führt eine Einfügeoperation mit mehreren Datensätzen aus
+     *
+     * @param string $table Die Tabelle
+     * @param array $data Die Daten
+     * @param string|null $connection Die Verbindung oder null für die Standardverbindung
+     * @return bool true bei Erfolg
+     */
+    public function insertBatch(string $table, array $data, ?string $connection = null): bool
+    {
+        return $this->table($table, $connection)->insertMany($data);
     }
 }
