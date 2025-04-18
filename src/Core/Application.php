@@ -9,6 +9,10 @@ use App\Core\Http\Request;
 use App\Core\Http\Response;
 use App\Core\Http\ResponseFactory;
 use App\Core\Routing\Router;
+use App\Core\Security\Csrf;
+use App\Core\Security\Hash;
+use App\Core\Security\Security;
+use App\Core\Security\Session;
 
 /**
  * Hauptklasse der Anwendung
@@ -82,6 +86,42 @@ class Application
                 config('app.fallback_locale', 'en'),
                 $cache
             );
+        });
+
+        $this->container->singleton(Security::class, function($container) {
+            return new Security(
+                $container->make(Session::class),
+                $container->make(Csrf::class),
+                $container->make(Hash::class)
+            );
+        });
+
+        $this->container->singleton(Csrf::class, function($container) {
+            return new Csrf(
+                $container->make(Session::class)
+            );
+        });
+
+
+        // Vor der Cache-Registrierung
+        $cachePath = storage_path('cache');
+        if (!is_dir($cachePath)) {
+            mkdir($cachePath, 0755, true);
+        }
+
+
+        // Cache-Service registrieren
+        $this->container->bind(\App\Core\Cache\Cache::class, function ($container) {
+            $cacheConfig = config('cache.default', 'file');
+
+            if ($cacheConfig === 'redis') {
+                $redisClient = new \Predis\Client(config('database.redis.cache'));
+                return new \App\Core\Cache\RedisCache($redisClient);
+            }
+
+            // Fallback auf File-Cache
+            $cachePath = storage_path('cache');
+            return new \App\Core\Cache\FileCache($cachePath);
         });
 
         // Datenbank-Manager registrieren

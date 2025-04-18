@@ -37,21 +37,29 @@ class GuestbookRepository
 
     public function save(GuestbookEntry $entry): int
     {
-        $data = [
-            'name' => $entry->name,
-            'email' => $entry->email,
-            'message' => $entry->message
-        ];
+        try {
+            $data = [
+                'name' => strip_tags($entry->name),  // HTML-Tags entfernen
+                'email' => filter_var($entry->email, FILTER_SANITIZE_EMAIL),
+                'message' => strip_tags($entry->message)
+            ];
 
-        if ($entry->id) {
-            $this->db->table('guestbook')
-                ->where('id', '=', $entry->id)
-                ->update($data);
+            $id = $this->db->table('guestbook')->insert('guestbook', $data);
 
-            return $entry->id;
+            app_log('Neuer Gästebuch-Eintrag', [
+                'id' => $id,
+                'name' => $data['name'],
+                'email' => $data['email']
+            ], 'info');
+
+            return $id;
+        } catch (\Exception $e) {
+            app_log('Fehler beim Speichern des Gästebuch-Eintrags', [
+                'error' => $e->getMessage()
+            ], 'error');
+
+            throw $e;
         }
-
-        return $this->db->table('guestbook')->insert('guestbook', $data);
     }
 
     public function delete(int $id): bool
