@@ -149,11 +149,11 @@ class Application
             return $this->container->make(ResponseFactory::class)->serverError('Route-Action ist nicht aufrufbar.');
         } catch (\Throwable $e) {
             // Fehler protokollieren und 500 Internal Server Error zurückgeben
-            log('error', $e->getMessage(), [
+            app_log($e->getMessage(), [
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
                 'trace' => $e->getTraceAsString()
-            ]);
+            ], 'error');
 
             return $this->container->make(ResponseFactory::class)->serverError();
         }
