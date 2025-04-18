@@ -60,11 +60,6 @@ class ShowGuestbookAction
     {
         $csrfToken = $this->csrf->generateToken();
 
-        // Temporärer Debug-Code
-        app_log('CSRF Token Debug', [
-            'token' => $csrfToken,
-            'session_csrf' => $this->csrf->getStoredToken(), // Neue Methode hinzufügen
-        ], 'debug');
 
         return <<<HTML
 <!DOCTYPE html>
@@ -146,7 +141,7 @@ class ShowGuestbookAction
 </head>
 <body>
     <h1>Gästebuch</h1>CSRFTOKEN:
-$csrfToken
+${csrfToken}
     <div class="guestbook-entries">
         {$this->renderEntries($pagination->getItems())}
     </div>

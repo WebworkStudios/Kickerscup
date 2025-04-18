@@ -34,14 +34,14 @@ class StoreGuestbookEntryAction
 
         // CSRF-Schutz
         $csrfToken = $request->getPostParam('csrf_token');
-        echo $csrfToken;
-    /**    if (!$this->security->getCsrf()->validateToken($csrfToken)) {
+
+        if (!$this->security->getCsrf()->validateToken($csrfToken)) {
             return $this->createErrorResponse(
                 'Ungültiges Sicherheitstoken. Bitte laden Sie die Seite neu.',
                 403
             );
         }
-**/
+
         // Validierung
         $validation = $this->validator->validate($request->all(), [
             'name' => 'required|string|max:100|alpha_dash',
