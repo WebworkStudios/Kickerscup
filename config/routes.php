@@ -16,6 +16,10 @@ $router->get('/', function ($request) {
     return response()->html('<h1>Willkommen zum Football Manager Framework</h1>');
 });
 
+// Gästebuch-Routen
+$router->get('/guestbook', \App\Actions\Guestbook\ShowGuestbookAction::class)->name('guestbook.show');
+$router->post('/guestbook', \App\Actions\Guestbook\StoreGuestbookEntryAction::class)->name('guestbook.store');
+
 $router->get('/api/status', function ($request) {
     return response()->json([
         'status' => 'online',
