@@ -20,4 +20,12 @@ interface SessionInterface
     public function hasFlash(string $key): bool;
     public function setFingerprint(): void;
     public function validateFingerprint(): bool;
+
+    // Neue Methoden
+    public function isRateLimited(string $key, int $maxAttempts = 5, int $timeWindow = 300): bool;
+    public function rotateAfterLogin(int|string $userId): void;
+    public function lock(int $timeout = 30): bool;
+    public function unlock(): bool;
+    public function setEncrypted(string $key, mixed $value): void;
+    public function getEncrypted(string $key, mixed $default = null): mixed;
 }
