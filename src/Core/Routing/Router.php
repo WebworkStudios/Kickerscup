@@ -306,6 +306,16 @@ class Router
     }
 
     /**
+     * Gibt die RouteCollection zurück
+     *
+     * @return RouteCollection
+     */
+    public function getRoutes(): RouteCollection
+    {
+        return $this->routes;
+    }
+
+    /**
      * Generiert eine URL für eine benannte Route
      *
      * @param string $name Routenname
