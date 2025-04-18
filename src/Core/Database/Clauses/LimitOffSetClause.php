@@ -1,29 +1,28 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Core\Database\Clauses;
 
 /**
- * LIMIT und OFFSET-Klausel für SQL-Abfragen
+ * LIMIT/OFFSET-Klausel für SQL-Abfragen
  */
-class LimitOffsetClause implements ClauseInterface
+class LimitOffsetClause
 {
     /**
-     * LIMIT-Wert
+     * Limit für die Abfrage
      */
     private ?int $limit = null;
 
     /**
-     * OFFSET-Wert
+     * Offset für die Abfrage
      */
     private ?int $offset = null;
 
     /**
-     * Setzt den LIMIT-Wert
+     * Setzt das Limit für die Abfrage
      *
-     * @param int|null $limit Limit oder null für kein Limit
+     * @param int|null $limit Limit
      * @return self
      */
     public function limit(?int $limit): self
@@ -33,9 +32,9 @@ class LimitOffsetClause implements ClauseInterface
     }
 
     /**
-     * Setzt den OFFSET-Wert
+     * Setzt den Offset für die Abfrage
      *
-     * @param int|null $offset Offset oder null für kein Offset
+     * @param int|null $offset Offset
      * @return self
      */
     public function offset(?int $offset): self
@@ -45,29 +44,21 @@ class LimitOffsetClause implements ClauseInterface
     }
 
     /**
-     * Kombiniert LIMIT und OFFSET für Paginierung
+     * Kombiniert Limit und Offset für Paginierung
      *
-     * @param int $page Seite (ab 1)
+     * @param int $page Seitennummer (beginnend bei 1)
      * @param int $perPage Einträge pro Seite
      * @return self
      */
     public function forPage(int $page, int $perPage): self
     {
-        return $this->offset(($page - 1) * $perPage)->limit($perPage);
+        $this->limit = $perPage;
+        $this->offset = ($page - 1) * $perPage;
+        return $this;
     }
 
     /**
-     * Prüft, ob LIMIT oder OFFSET gesetzt ist
-     *
-     * @return bool
-     */
-    public function hasLimitOrOffset(): bool
-    {
-        return $this->limit !== null || $this->offset !== null;
-    }
-
-    /**
-     * Generiert die SQL für die LIMIT/OFFSET-Klausel
+     * Generiert die SQL-Abfrage für die LIMIT/OFFSET-Klausel
      *
      * @return string
      */
@@ -76,23 +67,13 @@ class LimitOffsetClause implements ClauseInterface
         $sql = '';
 
         if ($this->limit !== null) {
-            $sql .= "LIMIT {$this->limit}";
+            $sql .= "LIMIT $this->limit";
         }
 
         if ($this->offset !== null) {
-            $sql .= $this->limit !== null ? " OFFSET {$this->offset}" : "OFFSET {$this->offset}";
+            $sql .= $this->limit !== null ? " OFFSET $this->offset" : "OFFSET $this->offset";
         }
 
         return $sql;
-    }
-
-    /**
-     * Gibt alle Parameter für die Klausel zurück
-     *
-     * @return array
-     */
-    public function getBindings(): array
-    {
-        return [];
     }
 }

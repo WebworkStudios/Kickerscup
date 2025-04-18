@@ -1,6 +1,5 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Core\Database\Clauses;
@@ -8,22 +7,22 @@ namespace App\Core\Database\Clauses;
 /**
  * HAVING-Klausel für SQL-Abfragen
  */
-class HavingClause implements ClauseInterface
+class HavingClause
 {
     /**
-     * HAVING-Bedingungen
+     * Bedingungen der HAVING-Klausel
      */
-    private array $havings = [];
+    private array $conditions = [];
 
     /**
-     * Parameter für die Abfrage
+     * Parameter für die Bedingungen
      */
-    private array $params = [];
+    private array $bindings = [];
 
     /**
-     * Standardoperator für HAVING-Bedingungen
+     * Aktuelle Bindungs-ID
      */
-    private string $defaultBoolean = 'AND';
+    private int $bindingId = 0;
 
     /**
      * Fügt eine HAVING-Bedingung hinzu
@@ -31,20 +30,11 @@ class HavingClause implements ClauseInterface
      * @param string $column Spalte
      * @param string $operator Operator
      * @param mixed $value Wert
-     * @param string|null $boolean Logischer Operator (AND/OR)
-     * @return self
+     * @return void
      */
-    public function having(string $column, string $operator, mixed $value, ?string $boolean = null): self
+    public function having(string $column, string $operator, mixed $value): void
     {
-        $this->havings[] = [
-            'type' => 'basic',
-            'column' => $column,
-            'operator' => $operator,
-            'value' => $value,
-            'boolean' => $boolean ?? $this->defaultBoolean,
-        ];
-
-        return $this;
+        $this->addCondition('AND', $column, $operator, $value);
     }
 
     /**
@@ -53,69 +43,73 @@ class HavingClause implements ClauseInterface
      * @param string $column Spalte
      * @param string $operator Operator
      * @param mixed $value Wert
-     * @return self
+     * @return void
      */
-    public function orHaving(string $column, string $operator, mixed $value): self
+    public function orHaving(string $column, string $operator, mixed $value): void
     {
-        return $this->having($column, $operator, $value, 'OR');
+        $this->addCondition('OR', $column, $operator, $value);
     }
 
     /**
-     * Prüft, ob HAVING-Bedingungen vorhanden sind
+     * Fügt eine Bedingung hinzu
      *
-     * @return bool
+     * @param string $type Typ der Verknüpfung (AND oder OR)
+     * @param string $column Spalte
+     * @param string $operator Operator
+     * @param mixed $value Wert
+     * @return void
      */
-    public function hasConditions(): bool
+    private function addCondition(string $type, string $column, string $operator, mixed $value): void
     {
-        return !empty($this->havings);
+        $binding = $this->createBindingName();
+
+        $this->conditions[] = [
+            'type' => $type,
+            'sql' => "$column $operator :$binding"
+        ];
+
+        $this->bindings[$binding] = $value;
     }
 
     /**
-     * Generiert die SQL für die HAVING-Klausel
+     * Erstellt einen Bindungsnamen
+     *
+     * @return string
+     */
+    private function createBindingName(): string
+    {
+        return 'having_' . (++$this->bindingId);
+    }
+
+    /**
+     * Generiert die SQL-Abfrage für die HAVING-Klausel
      *
      * @return string
      */
     public function toSql(): string
     {
-        if (empty($this->havings)) {
+        if (empty($this->conditions)) {
             return '';
         }
 
         $sql = 'HAVING ';
-        $clauses = [];
+        $isFirst = true;
 
-        foreach ($this->havings as $i => $having) {
-            $prefix = $i === 0 ? '' : " {$having['boolean']} ";
-
-            if ($having['type'] === 'basic') {
-                $key = "having_{$i}";
-                $clauses[] = "{$prefix}{$having['column']} {$having['operator']} :{$key}";
-                $this->params[$key] = $having['value'];
-            }
+        foreach ($this->conditions as $condition) {
+            $sql .= ($isFirst ? '' : " {$condition['type']} ") . $condition['sql'];
+            $isFirst = false;
         }
 
-        return $sql . implode(' ', $clauses);
+        return $sql;
     }
 
     /**
-     * Gibt alle Parameter für die Klausel zurück
+     * Gibt die Parameter für die Abfrage zurück
      *
      * @return array
      */
     public function getBindings(): array
     {
-        return $this->params;
-    }
-
-    /**
-     * Setzt den Standard-Booleanschen Operator
-     *
-     * @param string $operator Der Operator ('AND' oder 'OR')
-     * @return self
-     */
-    public function setDefaultBoolean(string $operator): self
-    {
-        $this->defaultBoolean = strtoupper($operator) === 'OR' ? 'OR' : 'AND';
-        return $this;
+        return $this->bindings;
     }
 }

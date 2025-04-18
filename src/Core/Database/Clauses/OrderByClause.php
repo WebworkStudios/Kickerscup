@@ -1,6 +1,5 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Core\Database\Clauses;
@@ -8,10 +7,10 @@ namespace App\Core\Database\Clauses;
 /**
  * ORDER BY-Klausel für SQL-Abfragen
  */
-class OrderByClause implements ClauseInterface
+class OrderByClause
 {
     /**
-     * ORDER BY-Anweisungen
+     * Sortierungen
      */
     private array $orders = [];
 
@@ -20,58 +19,41 @@ class OrderByClause implements ClauseInterface
      *
      * @param string $column Spalte
      * @param string $direction Richtung (ASC oder DESC)
-     * @return self
+     * @return void
      */
-    public function orderBy(string $column, string $direction = 'ASC'): self
+    public function orderBy(string $column, string $direction = 'ASC'): void
     {
         $direction = strtoupper($direction);
-
         if (!in_array($direction, ['ASC', 'DESC'])) {
             $direction = 'ASC';
         }
 
-        $this->orders[] = [
-            'column' => $column,
-            'direction' => $direction,
-        ];
-
-        return $this;
+        $this->orders[] = "$column $direction";
     }
 
     /**
      * Fügt eine ORDER BY DESC-Klausel hinzu
      *
      * @param string $column Spalte
-     * @return self
+     * @return void
      */
-    public function orderByDesc(string $column): self
+    public function orderByDesc(string $column): void
     {
-        return $this->orderBy($column, 'DESC');
+        $this->orderBy($column, 'DESC');
     }
 
     /**
-     * Prüft, ob ORDER BY-Anweisungen vorhanden sind
+     * Löscht alle Sortierungen
      *
-     * @return bool
+     * @return void
      */
-    public function hasOrders(): bool
-    {
-        return !empty($this->orders);
-    }
-
-    /**
-     * Entfernt alle ORDER BY-Anweisungen
-     *
-     * @return self
-     */
-    public function clearOrders(): self
+    public function clearOrders(): void
     {
         $this->orders = [];
-        return $this;
     }
 
     /**
-     * Generiert die SQL für die ORDER BY-Klausel
+     * Generiert die SQL-Abfrage für die ORDER BY-Klausel
      *
      * @return string
      */
@@ -81,22 +63,6 @@ class OrderByClause implements ClauseInterface
             return '';
         }
 
-        $clauses = [];
-
-        foreach ($this->orders as $order) {
-            $clauses[] = "{$order['column']} {$order['direction']}";
-        }
-
-        return 'ORDER BY ' . implode(', ', $clauses);
-    }
-
-    /**
-     * Gibt alle Parameter für die Klausel zurück
-     *
-     * @return array
-     */
-    public function getBindings(): array
-    {
-        return [];
+        return 'ORDER BY ' . implode(', ', $this->orders);
     }
 }

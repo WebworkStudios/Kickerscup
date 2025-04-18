@@ -1,24 +1,20 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Core\Database;
 
 /**
- * Paginator für Abfrageergebnisse
+ * Paginator für Datenbankergebnisse
+ *
+ * Verwaltet die Paginierung von Datenbankergebnissen
  */
 class Paginator
 {
     /**
-     * Aktuelle Seite
+     * Ergebnisse für die aktuelle Seite
      */
-    private int $currentPage;
-
-    /**
-     * Anzahl der Einträge pro Seite
-     */
-    private int $perPage;
+    private array $items;
 
     /**
      * Gesamtanzahl der Einträge
@@ -26,9 +22,14 @@ class Paginator
     private int $total;
 
     /**
-     * Abfrageergebnisse
+     * Anzahl der Einträge pro Seite
      */
-    private array $items;
+    private int $perPage;
+
+    /**
+     * Aktuelle Seite
+     */
+    private int $currentPage;
 
     /**
      * Basis-URL für Links
@@ -38,19 +39,13 @@ class Paginator
     /**
      * Konstruktor
      *
-     * @param array $items Abfrageergebnisse
+     * @param array $items Ergebnisse für die aktuelle Seite
      * @param int $total Gesamtanzahl der Einträge
      * @param int $perPage Anzahl der Einträge pro Seite
      * @param int $currentPage Aktuelle Seite
      * @param string|null $baseUrl Basis-URL für Links
      */
-    public function __construct(
-        array   $items,
-        int     $total,
-        int     $perPage,
-        int     $currentPage = 1,
-        ?string $baseUrl = null
-    )
+    public function __construct(array $items, int $total, int $perPage, int $currentPage, ?string $baseUrl = null)
     {
         $this->items = $items;
         $this->total = $total;
@@ -60,23 +55,13 @@ class Paginator
     }
 
     /**
-     * Gibt die aktuelle Seite zurück
+     * Gibt die Ergebnisse für die aktuelle Seite zurück
      *
-     * @return int
+     * @return array
      */
-    public function currentPage(): int
+    public function getItems(): array
     {
-        return $this->currentPage;
-    }
-
-    /**
-     * Gibt die Anzahl der Einträge pro Seite zurück
-     *
-     * @return int
-     */
-    public function perPage(): int
-    {
-        return $this->perPage;
+        return $this->items;
     }
 
     /**
@@ -84,29 +69,39 @@ class Paginator
      *
      * @return int
      */
-    public function total(): int
+    public function getTotal(): int
     {
         return $this->total;
     }
 
     /**
-     * Gibt die Abfrageergebnisse zurück
-     *
-     * @return array
-     */
-    public function items(): array
-    {
-        return $this->items;
-    }
-
-    /**
-     * Gibt die Gesamtanzahl der Seiten zurück
+     * Gibt die Anzahl der Einträge pro Seite zurück
      *
      * @return int
      */
-    public function lastPage(): int
+    public function getPerPage(): int
     {
-        return (int)ceil($this->total / $this->perPage);
+        return $this->perPage;
+    }
+
+    /**
+     * Gibt die aktuelle Seite zurück
+     *
+     * @return int
+     */
+    public function getCurrentPage(): int
+    {
+        return $this->currentPage;
+    }
+
+    /**
+     * Gibt die letzte Seite zurück
+     *
+     * @return int
+     */
+    public function getLastPage(): int
+    {
+        return max(1, (int) ceil($this->total / $this->perPage));
     }
 
     /**
@@ -116,114 +111,103 @@ class Paginator
      */
     public function hasMorePages(): bool
     {
-        return $this->currentPage < $this->lastPage();
+        return $this->currentPage < $this->getLastPage();
     }
 
     /**
-     * Gibt die Nummer der nächsten Seite zurück
-     *
-     * @return int|null
-     */
-    public function nextPage(): ?int
-    {
-        return $this->hasMorePages() ? $this->currentPage + 1 : null;
-    }
-
-    /**
-     * Gibt zurück, ob es eine vorherige Seite gibt
+     * Gibt zurück, ob es sich um die erste Seite handelt
      *
      * @return bool
      */
-    public function hasPreviousPages(): bool
+    public function isFirstPage(): bool
     {
-        return $this->currentPage > 1;
+        return $this->currentPage === 1;
     }
 
     /**
-     * Gibt die Nummer der vorherigen Seite zurück
+     * Gibt zurück, ob es sich um die letzte Seite handelt
      *
-     * @return int|null
+     * @return bool
      */
-    public function previousPage(): ?int
+    public function isLastPage(): bool
     {
-        return $this->hasPreviousPages() ? $this->currentPage - 1 : null;
+        return $this->currentPage === $this->getLastPage();
     }
 
     /**
-     * Erzeugt einen URL für eine bestimmte Seite
+     * Gibt den URL für eine Seite zurück
      *
-     * @param int $page Seitennummer
-     * @return string|null URL oder null, wenn keine Basis-URL gesetzt ist
+     * @param int $page Seitenzahl
+     * @return string|null
      */
-    public function url(int $page): ?string
+    public function getUrl(int $page): ?string
     {
         if ($this->baseUrl === null) {
             return null;
         }
 
-        $delimiter = str_contains($this->baseUrl, '?') ? '&' : '?';
-        return "{$this->baseUrl}{$delimiter}page={$page}";
+        $url = $this->baseUrl;
+        $url .= (str_contains($url, '?')) ? '&' : '?';
+        $url .= http_build_query(['page' => $page]);
+
+        return $url;
     }
 
     /**
-     * Erzeugt ein Array mit Seiten-Links
+     * Gibt den URL für die nächste Seite zurück
      *
-     * @param int $window Anzahl der Seiten links und rechts von der aktuellen Seite
-     * @return array<int, string|null> Array mit Seitennummern => URLs
+     * @return string|null
      */
-    public function links(int $window = 2): array
+    public function getNextPageUrl(): ?string
     {
-        if ($this->lastPage() <= 1) {
+        if (!$this->hasMorePages()) {
+            return null;
+        }
+
+        return $this->getUrl($this->currentPage + 1);
+    }
+
+    /**
+     * Gibt den URL für die vorherige Seite zurück
+     *
+     * @return string|null
+     */
+    public function getPreviousPageUrl(): ?string
+    {
+        if ($this->isFirstPage()) {
+            return null;
+        }
+
+        return $this->getUrl($this->currentPage - 1);
+    }
+
+    /**
+     * Generiert ein Array mit Links für die Paginierung
+     *
+     * @param int $onEachSide Anzahl der Links auf jeder Seite
+     * @return array
+     */
+    public function getLinks(int $onEachSide = 3): array
+    {
+        $lastPage = $this->getLastPage();
+
+        if ($lastPage <= 1) {
             return [];
         }
 
+        $from = max(1, $this->currentPage - $onEachSide);
+        $to = min($lastPage, $this->currentPage + $onEachSide);
+
         $links = [];
 
-        // Startseite
-        $links[1] = $this->url(1);
-
-        // Vorherige Seiten
-        $start = max(2, $this->currentPage - $window);
-        for ($i = $start; $i < $this->currentPage; $i++) {
-            $links[$i] = $this->url($i);
-        }
-
-        // Aktuelle Seite
-        if ($this->currentPage > 1 && $this->currentPage < $this->lastPage()) {
-            $links[$this->currentPage] = $this->url($this->currentPage);
-        }
-
-        // Nächste Seiten
-        $end = min($this->lastPage(), $this->currentPage + $window);
-        for ($i = $this->currentPage + 1; $i <= $end; $i++) {
-            $links[$i] = $this->url($i);
-        }
-
-        // Letzte Seite
-        if ($this->lastPage() > $end) {
-            $links[$this->lastPage()] = $this->url($this->lastPage());
+        for ($i = $from; $i <= $to; $i++) {
+            $links[] = [
+                'page' => $i,
+                'url' => $this->getUrl($i),
+                'active' => $i === $this->currentPage,
+            ];
         }
 
         return $links;
-    }
-
-    /**
-     * Konvertiert den Paginator in ein assoziatives Array
-     *
-     * @return array
-     */
-    public function toArray(): array
-    {
-        return [
-            'current_page' => $this->currentPage,
-            'per_page' => $this->perPage,
-            'total' => $this->total,
-            'last_page' => $this->lastPage(),
-            'next_page_url' => $this->hasMorePages() ? $this->url($this->nextPage()) : null,
-            'prev_page_url' => $this->hasPreviousPages() ? $this->url($this->previousPage()) : null,
-            'from' => ($this->currentPage - 1) * $this->perPage + 1,
-            'to' => min($this->currentPage * $this->perPage, $this->total),
-            'data' => $this->items,
-        ];
     }
 }

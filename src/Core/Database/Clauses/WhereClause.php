@@ -4,25 +4,27 @@ declare(strict_types=1);
 
 namespace App\Core\Database\Clauses;
 
+use App\Core\Database\SubQueryBuilder;
+
 /**
  * WHERE-Klausel für SQL-Abfragen
  */
-class WhereClause implements ClauseInterface
+class WhereClause
 {
     /**
-     * WHERE-Bedingungen
+     * Bedingungen der WHERE-Klausel
      */
-    private array $wheres = [];
+    private array $conditions = [];
 
     /**
-     * Parameter für die Abfrage
+     * Parameter für die Bedingungen
      */
-    private array $params = [];
+    private array $bindings = [];
 
     /**
-     * Standardoperator für WHERE-Bedingungen
+     * Aktuelle Bindungs-ID
      */
-    private string $defaultBoolean = 'AND';
+    private int $bindingId = 0;
 
     /**
      * Fügt eine WHERE-Bedingung hinzu
@@ -30,20 +32,11 @@ class WhereClause implements ClauseInterface
      * @param string $column Spalte
      * @param string $operator Operator
      * @param mixed $value Wert
-     * @param string|null $boolean Logischer Operator (AND/OR)
-     * @return self
+     * @return void
      */
-    public function where(string $column, string $operator, mixed $value, ?string $boolean = null): self
+    public function where(string $column, string $operator, mixed $value): void
     {
-        $this->wheres[] = [
-            'type' => 'basic',
-            'column' => $column,
-            'operator' => $operator,
-            'value' => $value,
-            'boolean' => $boolean ?? $this->defaultBoolean,
-        ];
-
-        return $this;
+        $this->addCondition('AND', $column, $operator, $value);
     }
 
     /**
@@ -52,11 +45,11 @@ class WhereClause implements ClauseInterface
      * @param string $column Spalte
      * @param string $operator Operator
      * @param mixed $value Wert
-     * @return self
+     * @return void
      */
-    public function orWhere(string $column, string $operator, mixed $value): self
+    public function orWhere(string $column, string $operator, mixed $value): void
     {
-        return $this->where($column, $operator, $value, 'OR');
+        $this->addCondition('OR', $column, $operator, $value);
     }
 
     /**
@@ -64,19 +57,11 @@ class WhereClause implements ClauseInterface
      *
      * @param string $column Spalte
      * @param array $values Werte
-     * @param string|null $boolean Logischer Operator (AND/OR)
-     * @return self
+     * @return void
      */
-    public function whereIn(string $column, array $values, ?string $boolean = null): self
+    public function whereIn(string $column, array $values): void
     {
-        $this->wheres[] = [
-            'type' => 'in',
-            'column' => $column,
-            'values' => $values,
-            'boolean' => $boolean ?? $this->defaultBoolean,
-        ];
-
-        return $this;
+        $this->addInCondition('AND', $column, $values, 'IN');
     }
 
     /**
@@ -84,11 +69,11 @@ class WhereClause implements ClauseInterface
      *
      * @param string $column Spalte
      * @param array $values Werte
-     * @return self
+     * @return void
      */
-    public function orWhereIn(string $column, array $values): self
+    public function orWhereIn(string $column, array $values): void
     {
-        return $this->whereIn($column, $values, 'OR');
+        $this->addInCondition('OR', $column, $values, 'IN');
     }
 
     /**
@@ -96,19 +81,11 @@ class WhereClause implements ClauseInterface
      *
      * @param string $column Spalte
      * @param array $values Werte
-     * @param string|null $boolean Logischer Operator (AND/OR)
-     * @return self
+     * @return void
      */
-    public function whereNotIn(string $column, array $values, ?string $boolean = null): self
+    public function whereNotIn(string $column, array $values): void
     {
-        $this->wheres[] = [
-            'type' => 'notIn',
-            'column' => $column,
-            'values' => $values,
-            'boolean' => $boolean ?? $this->defaultBoolean,
-        ];
-
-        return $this;
+        $this->addInCondition('AND', $column, $values, 'NOT IN');
     }
 
     /**
@@ -116,69 +93,67 @@ class WhereClause implements ClauseInterface
      *
      * @param string $column Spalte
      * @param array $values Werte
-     * @return self
+     * @return void
      */
-    public function orWhereNotIn(string $column, array $values): self
+    public function orWhereNotIn(string $column, array $values): void
     {
-        return $this->whereNotIn($column, $values, 'OR');
+        $this->addInCondition('OR', $column, $values, 'NOT IN');
     }
 
     /**
      * Fügt eine WHERE NULL-Bedingung hinzu
      *
      * @param string $column Spalte
-     * @param string|null $boolean Logischer Operator (AND/OR)
-     * @return self
+     * @return void
      */
-    public function whereNull(string $column, ?string $boolean = null): self
+    public function whereNull(string $column): void
     {
-        $this->wheres[] = [
-            'type' => 'null',
-            'column' => $column,
-            'boolean' => $boolean ?? $this->defaultBoolean,
+        $this->conditions[] = [
+            'type' => 'AND',
+            'sql' => "$column IS NULL"
         ];
-
-        return $this;
     }
 
     /**
      * Fügt eine WHERE NULL-Bedingung mit OR hinzu
      *
      * @param string $column Spalte
-     * @return self
+     * @return void
      */
-    public function orWhereNull(string $column): self
+    public function orWhereNull(string $column): void
     {
-        return $this->whereNull($column, 'OR');
+        $this->conditions[] = [
+            'type' => 'OR',
+            'sql' => "$column IS NULL"
+        ];
     }
 
     /**
      * Fügt eine WHERE NOT NULL-Bedingung hinzu
      *
      * @param string $column Spalte
-     * @param string|null $boolean Logischer Operator (AND/OR)
-     * @return self
+     * @return void
      */
-    public function whereNotNull(string $column, ?string $boolean = null): self
+    public function whereNotNull(string $column): void
     {
-        $this->wheres[] = [
-            'type' => 'notNull',
-            'column' => $column,
-            'boolean' => $boolean ?? $this->defaultBoolean,
+        $this->conditions[] = [
+            'type' => 'AND',
+            'sql' => "$column IS NOT NULL"
         ];
-
-        return $this;
     }
 
     /**
      * Fügt eine WHERE NOT NULL-Bedingung mit OR hinzu
      *
      * @param string $column Spalte
-     * @return self
+     * @return void
      */
-    public function orWhereNotNull(string $column): self
+    public function orWhereNotNull(string $column): void
     {
-        return $this->whereNotNull($column, 'OR');
+        $this->conditions[] = [
+            'type' => 'OR',
+            'sql' => "$column IS NOT NULL"
+        ];
     }
 
     /**
@@ -187,20 +162,20 @@ class WhereClause implements ClauseInterface
      * @param string $column Spalte
      * @param mixed $min Minimalwert
      * @param mixed $max Maximalwert
-     * @param string|null $boolean Logischer Operator (AND/OR)
-     * @return self
+     * @return void
      */
-    public function whereBetween(string $column, mixed $min, mixed $max, ?string $boolean = null): self
+    public function whereBetween(string $column, mixed $min, mixed $max): void
     {
-        $this->wheres[] = [
-            'type' => 'between',
-            'column' => $column,
-            'min' => $min,
-            'max' => $max,
-            'boolean' => $boolean ?? $this->defaultBoolean,
+        $minBinding = $this->createBindingName();
+        $maxBinding = $this->createBindingName();
+
+        $this->conditions[] = [
+            'type' => 'AND',
+            'sql' => "$column BETWEEN :$minBinding AND :$maxBinding"
         ];
 
-        return $this;
+        $this->bindings[$minBinding] = $min;
+        $this->bindings[$maxBinding] = $max;
     }
 
     /**
@@ -209,210 +184,40 @@ class WhereClause implements ClauseInterface
      * @param string $column Spalte
      * @param mixed $min Minimalwert
      * @param mixed $max Maximalwert
-     * @return self
-     */
-    public function orWhereBetween(string $column, mixed $min, mixed $max): self
-    {
-        return $this->whereBetween($column, $min, $max, 'OR');
-    }
-
-    /**
-     * Prüft, ob WHERE-Bedingungen vorhanden sind
-     *
-     * @return bool
-     */
-    public function hasConditions(): bool
-    {
-        return !empty($this->wheres);
-    }
-
-    /**
-     * Generiert die SQL für die WHERE-Klausel
-     *
-     * @return string
-     */
-    public function toSql(): string
-    {
-        if (empty($this->wheres)) {
-            return '';
-        }
-
-        $sql = 'WHERE ';
-        $clauses = [];
-
-        foreach ($this->wheres as $i => $where) {
-            $prefix = $i === 0 ? '' : " {$where['boolean']} ";
-
-            match ($where['type']) {
-                'basic' => $this->buildBasicWhere($clauses, $i, $prefix, $where),
-                'in' => $this->buildInWhere($clauses, $i, $prefix, $where),
-                'notIn' => $this->buildNotInWhere($clauses, $i, $prefix, $where),
-                'null' => $this->buildNullWhere($clauses, $prefix, $where),
-                'notNull' => $this->buildNotNullWhere($clauses, $prefix, $where),
-                'between' => $this->buildBetweenWhere($clauses, $i, $prefix, $where),
-                'subQuery' => $this->buildSubQueryWhere($clauses, $prefix, $where),
-                default => null
-            };
-        }
-
-        return $sql . implode(' ', $clauses);
-    }
-
-    /**
-     * Baut eine WHERE-Bedingung mit einer Subquery
-     *
-     * @param array &$clauses Referenz zu den SQL-Klauseln
-     * @param string $prefix Präfix (AND/OR)
-     * @param array $where WHERE-Definition
      * @return void
      */
-    private function buildSubQueryWhere(array &$clauses, string $prefix, array $where): void
+    public function orWhereBetween(string $column, mixed $min, mixed $max): void
     {
-        /** @var SubQueryBuilder $subQuery */
-        $subQuery = $where['subQuery'];
+        $minBinding = $this->createBindingName();
+        $maxBinding = $this->createBindingName();
 
-        // Subquery-Parameter zu den aktuellen Parametern hinzufügen
-        $subQueryBindings = $subQuery->getBindings();
-        foreach ($subQueryBindings as $key => $value) {
-            $this->params[$key] = $value;
-        }
+        $this->conditions[] = [
+            'type' => 'OR',
+            'sql' => "$column BETWEEN :$minBinding AND :$maxBinding"
+        ];
 
-        $clauses[] = "{$prefix}{$where['column']} {$where['operator']} {$subQuery->toSql()}";
+        $this->bindings[$minBinding] = $min;
+        $this->bindings[$maxBinding] = $max;
     }
 
-    /**
-     * Baut eine einfache WHERE-Bedingung
-     *
-     * @param array &$clauses Referenz zu den SQL-Klauseln
-     * @param int $i Index
-     * @param string $prefix Präfix (AND/OR)
-     * @param array $where WHERE-Definition
-     * @return void
-     */
-    private function buildBasicWhere(array &$clauses, int $i, string $prefix, array $where): void
-    {
-        $key = "where_{$i}";
-        $clauses[] = "{$prefix}{$where['column']} {$where['operator']} :{$key}";
-        $this->params[$key] = $where['value'];
-    }
-
-    /**
-     * Baut eine WHERE IN-Bedingung
-     *
-     * @param array &$clauses Referenz zu den SQL-Klauseln
-     * @param int $i Index
-     * @param string $prefix Präfix (AND/OR)
-     * @param array $where WHERE-Definition
-     * @return void
-     */
-    private function buildInWhere(array &$clauses, int $i, string $prefix, array $where): void
-    {
-        if (empty($where['values'])) {
-            $clauses[] = "{$prefix}1 = 0"; // Immer falsch, wenn leeres IN
-            return;
-        }
-
-        $placeholders = [];
-        foreach ($where['values'] as $j => $value) {
-            $key = "where_{$i}_{$j}";
-            $placeholders[] = ":{$key}";
-            $this->params[$key] = $value;
-        }
-
-        $clauses[] = "{$prefix}{$where['column']} IN (" . implode(', ', $placeholders) . ")";
-    }
-
-    /**
-     * Baut eine WHERE NOT IN-Bedingung
-     *
-     * @param array &$clauses Referenz zu den SQL-Klauseln
-     * @param int $i Index
-     * @param string $prefix Präfix (AND/OR)
-     * @param array $where WHERE-Definition
-     * @return void
-     */
-    private function buildNotInWhere(array &$clauses, int $i, string $prefix, array $where): void
-    {
-        if (empty($where['values'])) {
-            $clauses[] = "{$prefix}1 = 1"; // Immer wahr, wenn leeres NOT IN
-            return;
-        }
-
-        $placeholders = [];
-        foreach ($where['values'] as $j => $value) {
-            $key = "where_{$i}_{$j}";
-            $placeholders[] = ":{$key}";
-            $this->params[$key] = $value;
-        }
-
-        $clauses[] = "{$prefix}{$where['column']} NOT IN (" . implode(', ', $placeholders) . ")";
-    }
-
-    /**
-     * Baut eine WHERE NULL-Bedingung
-     *
-     * @param array &$clauses Referenz zu den SQL-Klauseln
-     * @param string $prefix Präfix (AND/OR)
-     * @param array $where WHERE-Definition
-     * @return void
-     */
-    private function buildNullWhere(array &$clauses, string $prefix, array $where): void
-    {
-        $clauses[] = "{$prefix}{$where['column']} IS NULL";
-    }
-
-    /**
-     * Baut eine WHERE NOT NULL-Bedingung
-     *
-     * @param array &$clauses Referenz zu den SQL-Klauseln
-     * @param string $prefix Präfix (AND/OR)
-     * @param array $where WHERE-Definition
-     * @return void
-     */
-    private function buildNotNullWhere(array &$clauses, string $prefix, array $where): void
-    {
-        $clauses[] = "{$prefix}{$where['column']} IS NOT NULL";
-    }
-
-    /**
-     * Baut eine WHERE BETWEEN-Bedingung
-     *
-     * @param array &$clauses Referenz zu den SQL-Klauseln
-     * @param int $i Index
-     * @param string $prefix Präfix (AND/OR)
-     * @param array $where WHERE-Definition
-     * @return void
-     */
-    private function buildBetweenWhere(array &$clauses, int $i, string $prefix, array $where): void
-    {
-        $minKey = "where_{$i}_min";
-        $maxKey = "where_{$i}_max";
-        $clauses[] = "{$prefix}{$where['column']} BETWEEN :{$minKey} AND :{$maxKey}";
-        $this->params[$minKey] = $where['min'];
-        $this->params[$maxKey] = $where['max'];
-    }
-
-    // Neue Methode hinzufügen
     /**
      * Fügt eine WHERE-Bedingung mit einer Subquery hinzu
      *
      * @param string $column Spalte
      * @param string $operator Operator
      * @param SubQueryBuilder $subQuery Unterabfrage
-     * @param string|null $boolean Logischer Operator (AND/OR)
-     * @return self
+     * @return void
      */
-    public function whereSubQuery(string $column, string $operator, SubQueryBuilder $subQuery, ?string $boolean = null): self
+    public function whereSubQuery(string $column, string $operator, SubQueryBuilder $subQuery): void
     {
-        $this->wheres[] = [
-            'type' => 'subQuery',
-            'column' => $column,
-            'operator' => $operator,
-            'subQuery' => $subQuery,
-            'boolean' => $boolean ?? $this->defaultBoolean,
+        $sql = "$column $operator (" . $subQuery->toSql() . ")";
+
+        $this->conditions[] = [
+            'type' => 'AND',
+            'sql' => $sql
         ];
 
-        return $this;
+        $this->bindings = array_merge($this->bindings, $subQuery->getBindings());
     }
 
     /**
@@ -421,32 +226,176 @@ class WhereClause implements ClauseInterface
      * @param string $column Spalte
      * @param string $operator Operator
      * @param SubQueryBuilder $subQuery Unterabfrage
-     * @return self
+     * @return void
      */
-    public function orWhereSubQuery(string $column, string $operator, SubQueryBuilder $subQuery): self
+    public function orWhereSubQuery(string $column, string $operator, SubQueryBuilder $subQuery): void
     {
-        return $this->whereSubQuery($column, $operator, $subQuery, 'OR');
+        $sql = "$column $operator (" . $subQuery->toSql() . ")";
+
+        $this->conditions[] = [
+            'type' => 'OR',
+            'sql' => $sql
+        ];
+
+        $this->bindings = array_merge($this->bindings, $subQuery->getBindings());
     }
 
     /**
-     * Gibt alle Parameter für die Klausel zurück
+     * Startet eine gruppierte Bedingung
+     *
+     * @return void
+     */
+    public function beginGroup(): void
+    {
+        $this->conditions[] = [
+            'type' => 'AND',
+            'sql' => '('
+        ];
+    }
+
+    /**
+     * Startet eine gruppierte Bedingung mit OR
+     *
+     * @return void
+     */
+    public function beginOrGroup(): void
+    {
+        $this->conditions[] = [
+            'type' => 'OR',
+            'sql' => '('
+        ];
+    }
+
+    /**
+     * Beendet eine gruppierte Bedingung
+     *
+     * @return void
+     */
+    public function endGroup(): void
+    {
+        $this->conditions[] = [
+            'type' => 'END',
+            'sql' => ')'
+        ];
+    }
+
+    /**
+     * Fügt eine Bedingung hinzu
+     *
+     * @param string $type Typ der Verknüpfung (AND oder OR)
+     * @param string $column Spalte
+     * @param string $operator Operator
+     * @param mixed $value Wert
+     * @return void
+     */
+    private function addCondition(string $type, string $column, string $operator, mixed $value): void
+    {
+        $binding = $this->createBindingName();
+
+        $this->conditions[] = [
+            'type' => $type,
+            'sql' => "$column $operator :$binding"
+        ];
+
+        $this->bindings[$binding] = $value;
+    }
+
+    /**
+     * Fügt eine IN-Bedingung hinzu
+     *
+     * @param string $type Typ der Verknüpfung (AND oder OR)
+     * @param string $column Spalte
+     * @param array $values Werte
+     * @param string $operator Operator (IN oder NOT IN)
+     * @return void
+     */
+    private function addInCondition(string $type, string $column, array $values, string $operator): void
+    {
+        if (empty($values)) {
+            if ($operator === 'IN') {
+                $this->conditions[] = [
+                    'type' => $type,
+                    'sql' => '0 = 1' // Immer falsch für leere IN-Klausel
+                ];
+            } else {
+                $this->conditions[] = [
+                    'type' => $type,
+                    'sql' => '1 = 1' // Immer wahr für leere NOT IN-Klausel
+                ];
+            }
+            return;
+        }
+
+        $bindings = [];
+        foreach ($values as $value) {
+            $binding = $this->createBindingName();
+            $bindings[] = ":$binding";
+            $this->bindings[$binding] = $value;
+        }
+
+        $this->conditions[] = [
+            'type' => $type,
+            'sql' => "$column $operator (" . implode(', ', $bindings) . ")"
+        ];
+    }
+
+    /**
+     * Erstellt einen Bindungsnamen
+     *
+     * @return string
+     */
+    private function createBindingName(): string
+    {
+        return 'where_' . (++$this->bindingId);
+    }
+
+    /**
+     * Generiert die SQL-Abfrage für die WHERE-Klausel
+     *
+     * @return string
+     */
+    public function toSql(): string
+    {
+        if (empty($this->conditions)) {
+            return '';
+        }
+
+        $sql = 'WHERE ';
+        $isFirst = true;
+
+        foreach ($this->conditions as $condition) {
+            if ($condition['sql'] === '(') {
+                $sql .= ($isFirst ? '' : " {$condition['type']} ") . '(';
+                $isFirst = true;
+            } elseif ($condition['sql'] === ')') {
+                $sql .= ')';
+                $isFirst = false;
+            } else {
+                $sql .= ($isFirst ? '' : " {$condition['type']} ") . $condition['sql'];
+                $isFirst = false;
+            }
+        }
+
+        return $sql;
+    }
+
+    /**
+     * Gibt die Parameter für die Abfrage zurück
      *
      * @return array
      */
     public function getBindings(): array
     {
-        return $this->params;
+        return $this->bindings;
     }
 
     /**
-     * Setzt den Standard-Booleanschen Operator
+     * Prüft, ob Bedingungen vorhanden sind
      *
-     * @param string $operator Der Operator ('AND' oder 'OR')
-     * @return self
+     * @return bool
      */
-    public function setDefaultBoolean(string $operator): self
+    public function hasConditions(): bool
     {
-        $this->defaultBoolean = strtoupper($operator) === 'OR' ? 'OR' : 'AND';
-        return $this;
+        return !empty($this->conditions);
     }
 }

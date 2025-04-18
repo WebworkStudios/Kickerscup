@@ -1,50 +1,36 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Core\Database;
 
 /**
- * SubQueryBuilder für SQL-Unterabfragen
- *
- * Diese Klasse ermöglicht die Erstellung von Unterabfragen, die in den
- * Hauptabfragen verwendet werden können.
+ * Builder für Unterabfragen
  */
-class SubQueryBuilder
+class SubQueryBuilder extends QueryBuilder
 {
     /**
-     * Die QueryBuilder-Instanz
+     * SQL für die Unterabfrage
      */
-    private QueryBuilder $query;
+    private string $sql;
 
     /**
-     * Der Alias für die Unterabfrage
+     * Parameter für die Unterabfrage
      */
-    private ?string $alias = null;
+    private array $bindings;
 
     /**
-     * Konstruktor
+     * Konstruktor für eine Unterabfrage mit einem fertigen SQL-Statement
      *
-     * @param QueryBuilder $query Die QueryBuilder-Instanz
-     * @param string|null $alias Der Alias für die Unterabfrage
+     * @param Connection $connection Datenbankverbindung
+     * @param string $sql SQL für die Unterabfrage
+     * @param array $bindings Parameter für die Unterabfrage
      */
-    public function __construct(QueryBuilder $query, ?string $alias = null)
+    public function __construct(Connection $connection, string $sql, array $bindings = [])
     {
-        $this->query = $query;
-        $this->alias = $alias;
-    }
-
-    /**
-     * Setzt den Alias für die Unterabfrage
-     *
-     * @param string $alias Der Alias
-     * @return self
-     */
-    public function as(string $alias): self
-    {
-        $this->alias = $alias;
-        return $this;
+        parent::__construct($connection, '');
+        $this->sql = $sql;
+        $this->bindings = $bindings;
     }
 
     /**
@@ -54,13 +40,7 @@ class SubQueryBuilder
      */
     public function toSql(): string
     {
-        $sql = '(' . $this->query->toSql() . ')';
-
-        if ($this->alias !== null) {
-            $sql .= ' AS ' . $this->alias;
-        }
-
-        return $sql;
+        return $this->sql;
     }
 
     /**
@@ -70,36 +50,6 @@ class SubQueryBuilder
      */
     public function getBindings(): array
     {
-        return $this->query->getBindings();
-    }
-
-    /**
-     * Gibt den QueryBuilder zurück
-     *
-     * @return QueryBuilder
-     */
-    public function getQuery(): QueryBuilder
-    {
-        return $this->query;
-    }
-
-    /**
-     * Gibt den Alias zurück
-     *
-     * @return string|null
-     */
-    public function getAlias(): ?string
-    {
-        return $this->alias;
-    }
-
-    /**
-     * String-Repräsentation der Unterabfrage
-     *
-     * @return string
-     */
-    public function __toString(): string
-    {
-        return $this->toSql();
+        return $this->bindings;
     }
 }

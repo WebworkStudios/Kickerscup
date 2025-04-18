@@ -1,6 +1,5 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Core\Database\Clauses;
@@ -8,10 +7,10 @@ namespace App\Core\Database\Clauses;
 /**
  * GROUP BY-Klausel für SQL-Abfragen
  */
-class GroupByClause implements ClauseInterface
+class GroupByClause
 {
     /**
-     * GROUP BY-Spalten
+     * Zu gruppierende Spalten
      */
     private array $columns = [];
 
@@ -19,26 +18,15 @@ class GroupByClause implements ClauseInterface
      * Fügt eine GROUP BY-Klausel hinzu
      *
      * @param string ...$columns Spalten
-     * @return self
+     * @return void
      */
-    public function groupBy(string ...$columns): self
+    public function groupBy(string ...$columns): void
     {
         $this->columns = array_merge($this->columns, $columns);
-        return $this;
     }
 
     /**
-     * Prüft, ob GROUP BY-Spalten vorhanden sind
-     *
-     * @return bool
-     */
-    public function hasColumns(): bool
-    {
-        return !empty($this->columns);
-    }
-
-    /**
-     * Generiert die SQL für die GROUP BY-Klausel
+     * Generiert die SQL-Abfrage für die GROUP BY-Klausel
      *
      * @return string
      */
@@ -49,15 +37,5 @@ class GroupByClause implements ClauseInterface
         }
 
         return 'GROUP BY ' . implode(', ', $this->columns);
-    }
-
-    /**
-     * Gibt alle Parameter für die Klausel zurück
-     *
-     * @return array
-     */
-    public function getBindings(): array
-    {
-        return [];
     }
 }
