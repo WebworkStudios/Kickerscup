@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Core\Validation;
 
 use App\Core\Database\DatabaseManager;
+use App\Core\Translation\Translator;
 
 /**
  * Validator für Eingabedaten mit PHP 8.4 Features
@@ -24,9 +25,11 @@ readonly class Validator
     /**
      * Konstruktor
      *
+     * @param ?Translator $translator Translator-Instanz
      * @param DatabaseManager|null $db Datenbankmanager für DB-basierte Validierungen
      */
     public function __construct(
+        private ?Translator $translator = null,
         private ?DatabaseManager $db = null
     )
     {
@@ -36,27 +39,37 @@ readonly class Validator
             'alpha', 'alpha_num', 'alpha_dash', 'regex', 'unique', 'exists'
         ];
 
+        // Standard-Fehlermeldungen auf Englisch
+        // (werden nur verwendet, wenn keine Übersetzungen gefunden werden)
         $this->messages = [
-            'required' => 'Das Feld :attribute ist erforderlich.',
-            'string' => 'Das Feld :attribute muss ein String sein.',
-            'email' => 'Das Feld :attribute muss eine gültige E-Mail-Adresse sein.',
-            'numeric' => 'Das Feld :attribute muss eine Zahl sein.',
-            'integer' => 'Das Feld :attribute muss eine Ganzzahl sein.',
-            'boolean' => 'Das Feld :attribute muss einen Wahrheitswert darstellen.',
-            'min' => 'Das Feld :attribute muss mindestens :min Zeichen haben.',
-            'max' => 'Das Feld :attribute darf maximal :max Zeichen haben.',
-            'between' => 'Das Feld :attribute muss zwischen :min und :max liegen.',
-            'in' => 'Der ausgewählte Wert für :attribute ist ungültig.',
-            'not_in' => 'Der ausgewählte Wert für :attribute ist ungültig.',
-            'date' => 'Das Feld :attribute muss ein gültiges Datum sein.',
-            'url' => 'Das Feld :attribute muss eine gültige URL sein.',
-            'alpha' => 'Das Feld :attribute darf nur Buchstaben enthalten.',
-            'alpha_num' => 'Das Feld :attribute darf nur Buchstaben und Zahlen enthalten.',
-            'alpha_dash' => 'Das Feld :attribute darf nur Buchstaben, Zahlen, Bindestriche und Unterstriche enthalten.',
-            'regex' => 'Das Format des Feldes :attribute ist ungültig.',
-            'unique' => 'Der Wert für :attribute wird bereits verwendet.',
-            'exists' => 'Der ausgewählte Wert für :attribute ist ungültig.'
+            'required' => 'The :attribute field is required.',
+            'string' => 'The :attribute field must be a string.',
+            'email' => 'The :attribute field must be a valid email address.',
+            'numeric' => 'The :attribute field must be a number.',
+            'integer' => 'The :attribute field must be an integer.',
+            'boolean' => 'The :attribute field must be a boolean.',
+            'min' => 'The :attribute field must be at least :min characters.',
+            'max' => 'The :attribute field may not be greater than :max characters.',
+            'between' => 'The :attribute field must be between :min and :max.',
+            'in' => 'The selected :attribute is invalid.',
+            'not_in' => 'The selected :attribute is invalid.',
+            'date' => 'The :attribute field must be a valid date.',
+            'url' => 'The :attribute field must be a valid URL.',
+            'alpha' => 'The :attribute field may only contain letters.',
+            'alpha_num' => 'The :attribute field may only contain letters and numbers.',
+            'alpha_dash' => 'The :attribute field may only contain letters, numbers, dashes and underscores.',
+            'regex' => 'The :attribute field format is invalid.',
+            'unique' => 'The :attribute has already been taken.',
+            'exists' => 'The selected :attribute is invalid.'
         ];
+
+        // Translator erstellen, wenn nicht übergeben
+        if ($this->translator === null) {
+            $this->translator = new Translator(
+                config('app.locale', 'de'),
+                config('app.fallback_locale', 'en')
+            );
+        }
     }
 
     /**
@@ -87,41 +100,50 @@ readonly class Validator
             foreach ($fieldRules as $rule) {
                 // Parameter aus der Regel extrahieren
                 $parameters = [];
+                $ruleName = $rule;
 
                 if (is_string($rule)) {
                     if (str_contains($rule, ':')) {
-                        [$rule, $paramStr] = explode(':', $rule, 2);
+                        [$ruleName, $paramStr] = explode(':', $rule, 2);
                         $parameters = explode(',', $paramStr);
                     }
                 } else if (is_array($rule)) {
                     $parameters = array_slice($rule, 1);
-                    $rule = $rule[0];
+                    $ruleName = $rule[0];
                 }
 
                 // Methode für die Regel bestimmen
-                $method = 'validate' . str_replace('_', '', ucwords($rule, '_'));
+                $method = 'validate' . str_replace('_', '', ucwords($ruleName, '_'));
 
                 // Wenn die Methode existiert, die Validierung durchführen
                 if (method_exists($this, $method)) {
                     $result = $this->$method($field, $value, $parameters, $data);
 
                     if ($result !== true) {
-                        // Fehlermeldung bestimmen
-                        $message = $messages["$field.$rule"]
-                            ?? $messages[$rule]
-                            ?? $this->messages[$rule]
-                            ?? "Validation failed for $field with rule $rule.";
+                        // Übersetzung für die Fehlermeldung holen
+                        $translationKey = "validation.$ruleName";
+
+                        // Fehlermeldung bestimmen (Priorität: benutzerdefiniert > übersetzt > Standard)
+                        $message = $messages["$field.$ruleName"] ?? $messages[$ruleName] ?? null;
+
+                        if ($message === null && $this->translator->has($translationKey)) {
+                            $message = $this->translator->get($translationKey);
+                        } else {
+                            $message = $message ?? $this->messages[$ruleName] ?? "Validation failed for $field with rule $ruleName.";
+                        }
 
                         // Parameter in der Fehlermeldung ersetzen
-                        $message = str_replace(':attribute', $field, $message);
+                        $replace = ['attribute' => $field];
 
                         foreach ($parameters as $i => $parameter) {
-                            $message = str_replace(":$i", $parameter, $message);
+                            $replace[$i] = $parameter;
 
                             // Benannte Parameter ersetzen
                             $paramName = ['min', 'max', 'value', 'other'][$i] ?? "param$i";
-                            $message = str_replace(":$paramName", $parameter, $message);
+                            $replace[$paramName] = $parameter;
                         }
+
+                        $message = $this->translator->replaceParameters($message, $replace);
 
                         $errors[$field][] = $message;
                         $isFieldValid = false;

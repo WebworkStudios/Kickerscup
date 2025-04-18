@@ -212,43 +212,53 @@ function asset(string $path): string
  */
 function trans(string $key, array $replace = [], ?string $locale = null): string
 {
-    // Hier eine einfache Implementierung, später erweitern
-    $locale = $locale ?? config('app.locale', 'de');
-    $parts = explode('.', $key);
-    $file = array_shift($parts);
+    static $translator = null;
 
-    $path = resource_path("lang/$locale/$file.php");
-
-    if (!file_exists($path)) {
-        $path = resource_path('lang/' . config('app.fallback_locale', 'en') . "/$file.php");
-
-        if (!file_exists($path)) {
-            return $key;
-        }
-    }
-
-    $translations = require $path;
-
-    $translation = $translations;
-
-    foreach ($parts as $part) {
-        if (!is_array($translation) || !array_key_exists($part, $translation)) {
-            return $key;
+    if ($translator === null) {
+        // Translator-Instanz mit Cache laden
+        $cache = null;
+        if (app()->has('App\Core\Cache\Cache')) {
+            $cache = app('App\Core\Cache\Cache');
         }
 
-        $translation = $translation[$part];
+        $translator = new \App\Core\Translation\Translator(
+            config('app.locale', 'de'),
+            config('app.fallback_locale', 'en'),
+            $cache
+        );
     }
 
-    if (!is_string($translation)) {
-        return $key;
+    return $translator->get($key, $replace, $locale);
+}
+
+/**
+ * Übersetzt einen Text mit Pluralisierung
+ *
+ * @param string $key Schlüssel
+ * @param int $number Anzahl für Pluralentscheidung
+ * @param array $replace Zu ersetzende Werte
+ * @param string|null $locale Sprache
+ * @return string Übersetzter Text
+ * @throws Exception
+ */
+function trans_choice(string $key, int $number, array $replace = [], ?string $locale = null): string
+{
+    static $translator = null;
+
+    if ($translator === null) {
+        $cache = null;
+        if (app()->has('App\Core\Cache\Cache')) {
+            $cache = app('App\Core\Cache\Cache');
+        }
+
+        $translator = new \App\Core\Translation\Translator(
+            config('app.locale', 'de'),
+            config('app.fallback_locale', 'en'),
+            $cache
+        );
     }
 
-    // Platzhalter ersetzen
-    foreach ($replace as $search => $value) {
-        $translation = str_replace(':' . $search, $value, $translation);
-    }
-
-    return $translation;
+    return $translator->choice($key, $number, $replace, $locale);
 }
 
 /**

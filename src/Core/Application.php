@@ -66,8 +66,21 @@ class Application
 
         // Router als Singleton registrieren
         $this->container->singleton(Router::class, fn() => $this->router);
-    }
 
+        // Translator als Singleton registrieren
+        $this->container->singleton(\App\Core\Translation\Translator::class, function ($container) {
+            $cache = null;
+            if ($container->has('App\Core\Cache\Cache')) {
+                $cache = $container->make('App\Core\Cache\Cache');
+            }
+
+            return new \App\Core\Translation\Translator(
+                config('app.locale', 'de'),
+                config('app.fallback_locale', 'en'),
+                $cache
+            );
+        });
+    }
     /**
      * Lädt die Routen aus der Konfigurationsdatei
      */
