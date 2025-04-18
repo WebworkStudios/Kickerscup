@@ -10,6 +10,11 @@ namespace App\Core\Security;
 class Security
 {
     /**
+     * Session-Management
+     */
+    private Session $session;
+
+    /**
      * CSRF-Schutz
      */
     private Csrf $csrf;
@@ -75,94 +80,158 @@ class Security
     }
 
     /**
-     * Verschlüsselt sensible Daten
+     * Verschlüsselt sensible Daten mit AES-256-GCM (authentifizierte Verschlüsselung)
      *
      * @param string $data Zu verschlüsselnde Daten
      * @param string|null $key Optionaler Schlüssel
-     * @return string Verschlüsselte Daten
+     * @return string Verschlüsselte Daten im Format: base64(nonce|ciphertext|tag)
+     * @throws \Exception Wenn die Verschlüsselung fehlschlägt
      */
     public function encrypt(string $data, ?string $key = null): string
     {
         $key = $key ?? $this->getEncryptionKey();
-
-        $ivLength = openssl_cipher_iv_length('aes-256-cbc');
-        $iv = openssl_random_pseudo_bytes($ivLength);
-
-        $encrypted = openssl_encrypt(
+        
+        // Nonce/IV generieren (12 Bytes für GCM empfohlen)
+        $nonce = random_bytes(12);
+        
+        // Tag-Variable für den Auth-Tag
+        $tag = '';
+        
+        // Verschlüsseln mit AES-256-GCM
+        $ciphertext = openssl_encrypt(
             $data,
-            'aes-256-cbc',
+            'aes-256-gcm',
             $key,
             OPENSSL_RAW_DATA,
-            $iv
+            $nonce,
+            $tag,
+            '',   // AAD (zusätzliche authentifizierte Daten)
+            16    // Tag-Länge: 16 Bytes (128 Bits)
         );
-
-        if ($encrypted === false) {
+        
+        if ($ciphertext === false) {
             throw new \Exception('Fehler beim Verschlüsseln der Daten: ' . openssl_error_string());
         }
-
-        // IV und verschlüsselte Daten kombinieren und als base64 zurückgeben
-        return base64_encode($iv . $encrypted);
+        
+        // Nonce, Ciphertext und Auth-Tag kombinieren und als base64 zurückgeben
+        return base64_encode($nonce . $ciphertext . $tag);
     }
 
     /**
-     * Gibt den Verschlüsselungsschlüssel zurück
+     * Entschlüsselt verschlüsselte Daten mit AES-256-GCM
      *
-     * @return string
-     */
-    private function getEncryptionKey(): string
-    {
-        // In einer echten Anwendung sollte der Schlüssel aus einer sicheren Quelle stammen
-        $key = getenv('APP_KEY');
-
-        if (empty($key)) {
-            throw new \Exception('Kein Verschlüsselungsschlüssel definiert. Bitte APP_KEY Umgebungsvariable setzen.');
-        }
-
-        return $key;
-    }
-
-    /**
-     * Entschlüsselt verschlüsselte Daten
-     *
-     * @param string $data Verschlüsselte Daten
+     * @param string $data Verschlüsselte Daten im Format: base64(nonce|ciphertext|tag)
      * @param string|null $key Optionaler Schlüssel
      * @return string Entschlüsselte Daten
+     * @throws \Exception Wenn die Entschlüsselung fehlschlägt oder die Daten manipuliert wurden
      */
     public function decrypt(string $data, ?string $key = null): string
     {
         $key = $key ?? $this->getEncryptionKey();
-
-        $data = base64_decode($data);
-
-        $ivLength = openssl_cipher_iv_length('aes-256-cbc');
-        $iv = substr($data, 0, $ivLength);
-        $encrypted = substr($data, $ivLength);
-
+        
+        // Base64-Decodierung
+        $raw = base64_decode($data, true);
+        if ($raw === false) {
+            throw new \Exception('Ungültiges Format der verschlüsselten Daten');
+        }
+        
+        // Nonce extrahieren (12 Bytes)
+        $nonceSize = 12;
+        $nonce = substr($raw, 0, $nonceSize);
+        
+        // Auth-Tag extrahieren (16 Bytes, am Ende)
+        $tagSize = 16;
+        $tag = substr($raw, -$tagSize);
+        
+        // Ciphertext extrahieren (zwischen Nonce und Tag)
+        $ciphertext = substr($raw, $nonceSize, -$tagSize);
+        
+        // Entschlüsseln mit AES-256-GCM
         $decrypted = openssl_decrypt(
-            $encrypted,
-            'aes-256-cbc',
+            $ciphertext,
+            'aes-256-gcm',
             $key,
             OPENSSL_RAW_DATA,
-            $iv
+            $nonce,
+            $tag
         );
-
+        
         if ($decrypted === false) {
-            throw new \Exception('Fehler beim Entschlüsseln der Daten: ' . openssl_error_string());
+            throw new \Exception('Fehler beim Entschlüsseln der Daten: Die Daten wurden möglicherweise manipuliert');
         }
-
+        
         return $decrypted;
     }
 
     /**
-     * Generiert einen kryptografisch sicheren Token
-     *
-     * @param int $length Länge des Tokens
-     * @return string Token
+     * Gibt den Verschlüsselungsschlüssel zurück oder generiert einen neuen
+     * 
+     * @param bool $forceRegenerate Erzwingt die Neugenerierung des Schlüssels
+     * @return string Verschlüsselungsschlüssel
+     * @throws \Exception Wenn kein Schlüssel gefunden wird oder generiert werden kann
      */
-    public function generateToken(int $length = 32): string
+    private function getEncryptionKey(bool $forceRegenerate = false): string
     {
-        return bin2hex(random_bytes($length / 2));
+        $keyInEnv = getenv('APP_KEY');
+        $keyFile = getenv('APP_KEY_PATH') ?: __DIR__ . '/../../../config/encryption_key.php';
+        
+        // Wenn Neugenerierung erzwungen wird oder kein Schlüssel in der Umgebungsvariable ist
+        if ($forceRegenerate || empty($keyInEnv)) {
+            // Generiere einen neuen Schlüssel (32 Bytes für AES-256)
+            $newKey = bin2hex(random_bytes(32));
+            
+            // Wenn die APP_KEY Umgebungsvariable nicht gesetzt ist, speichere den Schlüssel in einer Datei
+            if (empty($keyInEnv)) {
+            $keyContent = "<?php\n// Automatisch generierter Verschlüsselungsschlüssel\nreturn '" . $newKey . "';\n";
+            
+            // Speichern des Schlüssels in der Datei
+            if (!file_put_contents($keyFile, $keyContent)) {
+                throw new \Exception('Konnte den Verschlüsselungsschlüssel nicht speichern. Bitte überprüfen Sie die Schreibrechte.');
+            }
+            
+            // Die Datei sollte nur für den Webserver lesbar sein
+            chmod($keyFile, 0600);
+        }
+        
+        return $newKey;
     }
+    
+    // Versuche den Schlüssel aus der Umgebungsvariable zu lesen
+    if (!empty($keyInEnv)) {
+        return $keyInEnv;
+    }
+    
+    // Versuche den Schlüssel aus der Datei zu lesen
+    if (file_exists($keyFile)) {
+        $keyFromFile = include $keyFile;
+        if (!empty($keyFromFile)) {
+            return $keyFromFile;
+        }
+    }
+    
+    throw new \Exception('Kein Verschlüsselungsschlüssel definiert. Bitte APP_KEY Umgebungsvariable setzen oder Schlüsseldatei erstellen.');
+}
+
+/**
+ * Generiert einen neuen Verschlüsselungsschlüssel und speichert ihn
+ * 
+ * @return string Der neue Schlüssel
+ */
+public function rotateEncryptionKey(): string
+{
+    return $this->getEncryptionKey(true);
+}
+
+/**
+ * Generiert einen kryptografisch sicheren Token
+ *
+ * @param int $length Länge des Tokens in Bytes (wird zu doppelt so vielen Hex-Zeichen)
+ * @return string Token als Hex-String
+ */
+public function generateToken(int $length = 32): string
+{
+    return bin2hex(random_bytes($length));
+}
 
     /**
      * Überprüft, ob eine E-Mail-Adresse gültig ist
