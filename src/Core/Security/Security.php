@@ -22,13 +22,25 @@ class Security
     /**
      * Konstruktor
      *
+     * @param Session $session Session-Management
      * @param Csrf $csrf CSRF-Schutz
      * @param Hash $hash Hash-Funktionen
      */
-    public function __construct(Csrf $csrf, Hash $hash)
+    public function __construct(Session $session, Csrf $csrf, Hash $hash)
     {
+        $this->session = $session;
         $this->csrf = $csrf;
         $this->hash = $hash;
+    }
+
+    /**
+     * Gibt die Session-Instanz zurück
+     *
+     * @return Session
+     */
+    public function getSession(): Session
+    {
+        return $this->session;
     }
 
     /**

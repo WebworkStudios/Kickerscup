@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Core\Security;
 
 /**
- * CSRF-Schutz
+ * CSRF-Schutzklasse
  */
 class Csrf
 {
@@ -13,6 +13,21 @@ class Csrf
      * Session-Key für CSRF-Token
      */
     private const SESSION_KEY = 'csrf_token';
+    
+    /**
+     * Session-Management
+     */
+    private Session $session;
+    
+    /**
+     * Konstruktor
+     *
+     * @param Session $session Session-Management
+     */
+    public function __construct(Session $session)
+    {
+        $this->session = $session;
+    }
 
     /**
      * Validiert ein CSRF-Token
@@ -22,11 +37,7 @@ class Csrf
      */
     public function validateToken(string $token): bool
     {
-        if (session_status() !== PHP_SESSION_ACTIVE) {
-            session_start();
-        }
-
-        $storedToken = $_SESSION[self::SESSION_KEY] ?? null;
+        $storedToken = $this->session->get(self::SESSION_KEY);
 
         if ($storedToken === null) {
             return false;
@@ -57,11 +68,7 @@ class Csrf
      */
     public function getToken(): ?string
     {
-        if (session_status() !== PHP_SESSION_ACTIVE) {
-            session_start();
-        }
-
-        return $_SESSION[self::SESSION_KEY] ?? null;
+        return $this->session->get(self::SESSION_KEY);
     }
 
     /**
@@ -72,13 +79,7 @@ class Csrf
     public function generateToken(): string
     {
         $token = bin2hex(random_bytes(32));
-
-        if (session_status() !== PHP_SESSION_ACTIVE) {
-            session_start();
-        }
-
-        $_SESSION[self::SESSION_KEY] = $token;
-
+        $this->session->set(self::SESSION_KEY, $token);
         return $token;
     }
 
