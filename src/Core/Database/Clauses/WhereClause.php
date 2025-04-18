@@ -40,6 +40,37 @@ class WhereClause
     }
 
     /**
+     * Fügt eine Bedingung hinzu
+     *
+     * @param string $type Typ der Verknüpfung (AND oder OR)
+     * @param string $column Spalte
+     * @param string $operator Operator
+     * @param mixed $value Wert
+     * @return void
+     */
+    private function addCondition(string $type, string $column, string $operator, mixed $value): void
+    {
+        $binding = $this->createBindingName();
+
+        $this->conditions[] = [
+            'type' => $type,
+            'sql' => "$column $operator :$binding"
+        ];
+
+        $this->bindings[$binding] = $value;
+    }
+
+    /**
+     * Erstellt einen Bindungsnamen
+     *
+     * @return string
+     */
+    private function createBindingName(): string
+    {
+        return 'where_' . (++$this->bindingId);
+    }
+
+    /**
      * Fügt eine WHERE-Bedingung mit OR hinzu
      *
      * @param string $column Spalte
@@ -62,6 +93,45 @@ class WhereClause
     public function whereIn(string $column, array $values): void
     {
         $this->addInCondition('AND', $column, $values, 'IN');
+    }
+
+    /**
+     * Fügt eine IN-Bedingung hinzu
+     *
+     * @param string $type Typ der Verknüpfung (AND oder OR)
+     * @param string $column Spalte
+     * @param array $values Werte
+     * @param string $operator Operator (IN oder NOT IN)
+     * @return void
+     */
+    private function addInCondition(string $type, string $column, array $values, string $operator): void
+    {
+        if (empty($values)) {
+            if ($operator === 'IN') {
+                $this->conditions[] = [
+                    'type' => $type,
+                    'sql' => '0 = 1' // Immer falsch für leere IN-Klausel
+                ];
+            } else {
+                $this->conditions[] = [
+                    'type' => $type,
+                    'sql' => '1 = 1' // Immer wahr für leere NOT IN-Klausel
+                ];
+            }
+            return;
+        }
+
+        $bindings = [];
+        foreach ($values as $value) {
+            $binding = $this->createBindingName();
+            $bindings[] = ":$binding";
+            $this->bindings[$binding] = $value;
+        }
+
+        $this->conditions[] = [
+            'type' => $type,
+            'sql' => "$column $operator (" . implode(', ', $bindings) . ")"
+        ];
     }
 
     /**
@@ -221,6 +291,46 @@ class WhereClause
     }
 
     /**
+     * Generiert die SQL-Abfrage für die WHERE-Klausel
+     *
+     * @return string
+     */
+    public function toSql(): string
+    {
+        if (empty($this->conditions)) {
+            return '';
+        }
+
+        $sql = 'WHERE ';
+        $isFirst = true;
+
+        foreach ($this->conditions as $condition) {
+            if ($condition['sql'] === '(') {
+                $sql .= ($isFirst ? '' : " {$condition['type']} ") . '(';
+                $isFirst = true;
+            } elseif ($condition['sql'] === ')') {
+                $sql .= ')';
+                $isFirst = false;
+            } else {
+                $sql .= ($isFirst ? '' : " {$condition['type']} ") . $condition['sql'];
+                $isFirst = false;
+            }
+        }
+
+        return $sql;
+    }
+
+    /**
+     * Gibt die Parameter für die Abfrage zurück
+     *
+     * @return array
+     */
+    public function getBindings(): array
+    {
+        return $this->bindings;
+    }
+
+    /**
      * Fügt eine WHERE-Bedingung mit einer Subquery und OR hinzu
      *
      * @param string $column Spalte
@@ -277,116 +387,6 @@ class WhereClause
             'type' => 'END',
             'sql' => ')'
         ];
-    }
-
-    /**
-     * Fügt eine Bedingung hinzu
-     *
-     * @param string $type Typ der Verknüpfung (AND oder OR)
-     * @param string $column Spalte
-     * @param string $operator Operator
-     * @param mixed $value Wert
-     * @return void
-     */
-    private function addCondition(string $type, string $column, string $operator, mixed $value): void
-    {
-        $binding = $this->createBindingName();
-
-        $this->conditions[] = [
-            'type' => $type,
-            'sql' => "$column $operator :$binding"
-        ];
-
-        $this->bindings[$binding] = $value;
-    }
-
-    /**
-     * Fügt eine IN-Bedingung hinzu
-     *
-     * @param string $type Typ der Verknüpfung (AND oder OR)
-     * @param string $column Spalte
-     * @param array $values Werte
-     * @param string $operator Operator (IN oder NOT IN)
-     * @return void
-     */
-    private function addInCondition(string $type, string $column, array $values, string $operator): void
-    {
-        if (empty($values)) {
-            if ($operator === 'IN') {
-                $this->conditions[] = [
-                    'type' => $type,
-                    'sql' => '0 = 1' // Immer falsch für leere IN-Klausel
-                ];
-            } else {
-                $this->conditions[] = [
-                    'type' => $type,
-                    'sql' => '1 = 1' // Immer wahr für leere NOT IN-Klausel
-                ];
-            }
-            return;
-        }
-
-        $bindings = [];
-        foreach ($values as $value) {
-            $binding = $this->createBindingName();
-            $bindings[] = ":$binding";
-            $this->bindings[$binding] = $value;
-        }
-
-        $this->conditions[] = [
-            'type' => $type,
-            'sql' => "$column $operator (" . implode(', ', $bindings) . ")"
-        ];
-    }
-
-    /**
-     * Erstellt einen Bindungsnamen
-     *
-     * @return string
-     */
-    private function createBindingName(): string
-    {
-        return 'where_' . (++$this->bindingId);
-    }
-
-    /**
-     * Generiert die SQL-Abfrage für die WHERE-Klausel
-     *
-     * @return string
-     */
-    public function toSql(): string
-    {
-        if (empty($this->conditions)) {
-            return '';
-        }
-
-        $sql = 'WHERE ';
-        $isFirst = true;
-
-        foreach ($this->conditions as $condition) {
-            if ($condition['sql'] === '(') {
-                $sql .= ($isFirst ? '' : " {$condition['type']} ") . '(';
-                $isFirst = true;
-            } elseif ($condition['sql'] === ')') {
-                $sql .= ')';
-                $isFirst = false;
-            } else {
-                $sql .= ($isFirst ? '' : " {$condition['type']} ") . $condition['sql'];
-                $isFirst = false;
-            }
-        }
-
-        return $sql;
-    }
-
-    /**
-     * Gibt die Parameter für die Abfrage zurück
-     *
-     * @return array
-     */
-    public function getBindings(): array
-    {
-        return $this->bindings;
     }
 
     /**

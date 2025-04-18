@@ -359,6 +359,7 @@ function csrf_field(): string
 
     return '<input type="hidden" name="csrf_token" value="' . e($token) . '">';
 }
+
 /**
  * Generiert einen CSRF-Token
  *

@@ -93,18 +93,6 @@ class Application
             return $dbManager;
         });
     }
-    /**
-     * Lädt die Routen aus der Konfigurationsdatei
-     */
-    private function loadRoutes(): void
-    {
-        $routesFile = $this->basePath . '/config/routes.php';
-        $app = $this;
-
-        if (file_exists($routesFile)) {
-            require $routesFile;
-        }
-    }
 
     /**
      * Initialisiert die Datenbankverbindung
@@ -123,6 +111,19 @@ class Application
         } catch (\Exception $e) {
             app_log('Datenbankverbindung konnte nicht hergestellt werden: ' . $e->getMessage(), [], 'error');
             return false;
+        }
+    }
+
+    /**
+     * Lädt die Routen aus der Konfigurationsdatei
+     */
+    private function loadRoutes(): void
+    {
+        $routesFile = $this->basePath . '/config/routes.php';
+        $app = $this;
+
+        if (file_exists($routesFile)) {
+            require $routesFile;
         }
     }
 

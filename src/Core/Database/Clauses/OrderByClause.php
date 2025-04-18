@@ -15,6 +15,17 @@ class OrderByClause
     private array $orders = [];
 
     /**
+     * Fügt eine ORDER BY DESC-Klausel hinzu
+     *
+     * @param string $column Spalte
+     * @return void
+     */
+    public function orderByDesc(string $column): void
+    {
+        $this->orderBy($column, 'DESC');
+    }
+
+    /**
      * Fügt eine ORDER BY-Klausel hinzu
      *
      * @param string $column Spalte
@@ -29,17 +40,6 @@ class OrderByClause
         }
 
         $this->orders[] = "$column $direction";
-    }
-
-    /**
-     * Fügt eine ORDER BY DESC-Klausel hinzu
-     *
-     * @param string $column Spalte
-     * @return void
-     */
-    public function orderByDesc(string $column): void
-    {
-        $this->orderBy($column, 'DESC');
     }
 
     /**

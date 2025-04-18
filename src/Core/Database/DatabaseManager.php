@@ -78,19 +78,6 @@ class DatabaseManager
     }
 
     /**
-     * Shortcut für connection()->table()
-     *
-     * @param string $table Tabellenname
-     * @param string|null $connection Name der Verbindung oder null für die Standardverbindung
-     * @return QueryBuilder
-     * @throws \Exception wenn die Verbindung nicht konfiguriert ist
-     */
-    public function table(string $table, ?string $connection = null): QueryBuilder
-    {
-        return $this->connection($connection)->table($table);
-    }
-
-    /**
      * Erstellt eine Unterabfrage
      *
      * @param callable $callback Die Callback-Funktion, die einen QueryBuilder erhält
@@ -101,6 +88,20 @@ class DatabaseManager
     public function subQuery(callable $callback, ?string $alias = null, ?string $connection = null): SubQueryBuilder
     {
         return $this->getFactory()->subQuery($callback, $alias, $connection);
+    }
+
+    /**
+     * Gibt die QueryBuilderFactory zurück oder erstellt sie
+     *
+     * @return QueryBuilderFactory
+     */
+    public function getFactory(): QueryBuilderFactory
+    {
+        if ($this->factory === null) {
+            $this->factory = new QueryBuilderFactory($this);
+        }
+
+        return $this->factory;
     }
 
     /**
@@ -132,16 +133,16 @@ class DatabaseManager
             if (!isset($this->configs[$name])) {
                 throw new \Exception("Datenbankverbindung '{$name}' ist nicht konfiguriert.");
             }
-        
+
             $this->connections[$name] = new Connection($this->configs[$name]);
         }
-    
+
         // Zeitstempel aktualisieren
         $this->connectionLastUsed[$name] = time();
-    
+
         // Inaktive Verbindungen überprüfen und ggf. schließen
         $this->cleanInactiveConnections();
-    
+
         return $this->connections[$name];
     }
 
@@ -151,7 +152,7 @@ class DatabaseManager
     private function cleanInactiveConnections(): void
     {
         $now = time();
-    
+
         foreach ($this->connectionLastUsed as $name => $lastUsed) {
             if ($now - $lastUsed > $this->connectionTimeout) {
                 // Verbindung schließen
@@ -159,7 +160,7 @@ class DatabaseManager
                     $this->connections[$name]->disconnect();
                     unset($this->connections[$name]);
                 }
-            
+
                 // Aus den Zeitstempeln entfernen
                 unset($this->connectionLastUsed[$name]);
             }
@@ -178,20 +179,6 @@ class DatabaseManager
         }
 
         $this->connections = [];
-    }
-
-    /**
-     * Gibt die QueryBuilderFactory zurück oder erstellt sie
-     *
-     * @return QueryBuilderFactory
-     */
-    public function getFactory(): QueryBuilderFactory
-    {
-        if ($this->factory === null) {
-            $this->factory = new QueryBuilderFactory($this);
-        }
-
-        return $this->factory;
     }
 
     /**
@@ -218,5 +205,18 @@ class DatabaseManager
     public function insertBatch(string $table, array $data, ?string $connection = null): bool
     {
         return $this->table($table, $connection)->insertMany($data);
+    }
+
+    /**
+     * Shortcut für connection()->table()
+     *
+     * @param string $table Tabellenname
+     * @param string|null $connection Name der Verbindung oder null für die Standardverbindung
+     * @return QueryBuilder
+     * @throws \Exception wenn die Verbindung nicht konfiguriert ist
+     */
+    public function table(string $table, ?string $connection = null): QueryBuilder
+    {
+        return $this->connection($connection)->table($table);
     }
 }

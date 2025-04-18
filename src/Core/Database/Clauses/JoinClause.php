@@ -25,6 +25,20 @@ class JoinClause
     private int $bindingId = 0;
 
     /**
+     * Fügt einen LEFT JOIN hinzu
+     *
+     * @param string $table Tabellenname
+     * @param string $first Erste Spalte
+     * @param string $operator Operator
+     * @param string $second Zweite Spalte
+     * @return void
+     */
+    public function leftJoin(string $table, string $first, string $operator, string $second): void
+    {
+        $this->join($table, $first, $operator, $second, 'LEFT');
+    }
+
+    /**
      * Fügt einen JOIN hinzu
      *
      * @param string $table Tabellenname
@@ -40,22 +54,9 @@ class JoinClause
         string $operator,
         string $second,
         string $type = 'INNER'
-    ): void {
-        $this->joins[] = "$type JOIN $table ON $first $operator $second";
-    }
-
-    /**
-     * Fügt einen LEFT JOIN hinzu
-     *
-     * @param string $table Tabellenname
-     * @param string $first Erste Spalte
-     * @param string $operator Operator
-     * @param string $second Zweite Spalte
-     * @return void
-     */
-    public function leftJoin(string $table, string $first, string $operator, string $second): void
+    ): void
     {
-        $this->join($table, $first, $operator, $second, 'LEFT');
+        $this->joins[] = "$type JOIN $table ON $first $operator $second";
     }
 
     /**

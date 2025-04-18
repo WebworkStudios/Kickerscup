@@ -1,6 +1,5 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Actions\Guestbook;
@@ -20,6 +19,7 @@ class StoreGuestbookEntryAction
     {
     }
 
+    // Hinzufügen der __invoke()-Methode
     public function __invoke(Request $request): Response
     {
         // Validierung

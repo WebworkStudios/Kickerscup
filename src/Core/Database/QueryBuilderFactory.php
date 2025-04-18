@@ -29,18 +29,6 @@ class QueryBuilderFactory
     }
 
     /**
-     * Erstellt einen QueryBuilder für eine Tabelle
-     *
-     * @param string $table Die Tabelle
-     * @param string|null $connection Die Verbindung oder null für die Standardverbindung
-     * @return QueryBuilder
-     */
-    public function table(string $table, ?string $connection = null): QueryBuilder
-    {
-        return $this->dbManager->table($table, $connection);
-    }
-
-    /**
      * Erstellt eine Unterabfrage
      *
      * @param callable(QueryBuilder): void $callback Die Callback-Funktion, die einen QueryBuilder erhält
@@ -61,29 +49,15 @@ class QueryBuilderFactory
     }
 
     /**
-     * Führt eine Funktion in einer Transaktion aus
+     * Erstellt einen QueryBuilder für eine Tabelle
      *
-     * @param callable(Connection): mixed $callback Die Callback-Funktion
+     * @param string $table Die Tabelle
      * @param string|null $connection Die Verbindung oder null für die Standardverbindung
-     * @return mixed Das Ergebnis des Callbacks
-     * @throws \Throwable wenn ein Fehler auftritt
+     * @return QueryBuilder
      */
-    public function transaction(callable $callback, ?string $connection = null): mixed
+    public function table(string $table, ?string $connection = null): QueryBuilder
     {
-        return $this->dbManager->connection($connection)->transaction($callback);
-    }
-
-    /**
-     * Führt eine rohe SQL-Abfrage aus
-     *
-     * @param string $query Die SQL-Abfrage
-     * @param array $bindings Die Parameter
-     * @param string|null $connection Die Verbindung oder null für die Standardverbindung
-     * @return array Die Ergebnisse
-     */
-    public function query(string $query, array $bindings = [], ?string $connection = null): array
-    {
-        return $this->dbManager->connection($connection)->select($query, $bindings);
+        return $this->dbManager->table($table, $connection);
     }
 
     /**
@@ -98,6 +72,19 @@ class QueryBuilderFactory
     {
         $results = $this->query($query, $bindings, $connection);
         return $results ? $results[0] : false;
+    }
+
+    /**
+     * Führt eine rohe SQL-Abfrage aus
+     *
+     * @param string $query Die SQL-Abfrage
+     * @param array $bindings Die Parameter
+     * @param string|null $connection Die Verbindung oder null für die Standardverbindung
+     * @return array Die Ergebnisse
+     */
+    public function query(string $query, array $bindings = [], ?string $connection = null): array
+    {
+        return $this->dbManager->connection($connection)->select($query, $bindings);
     }
 
     /**
@@ -165,6 +152,19 @@ class QueryBuilderFactory
         }, $connection);
 
         return $affected;
+    }
+
+    /**
+     * Führt eine Funktion in einer Transaktion aus
+     *
+     * @param callable(Connection): mixed $callback Die Callback-Funktion
+     * @param string|null $connection Die Verbindung oder null für die Standardverbindung
+     * @return mixed Das Ergebnis des Callbacks
+     * @throws \Throwable wenn ein Fehler auftritt
+     */
+    public function transaction(callable $callback, ?string $connection = null): mixed
+    {
+        return $this->dbManager->connection($connection)->transaction($callback);
     }
 
     /**

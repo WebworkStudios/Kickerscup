@@ -13,12 +13,12 @@ class DatabaseException extends \Exception
      * SQL-Abfrage, die den Fehler verursacht hat
      */
     protected ?string $query = null;
-    
+
     /**
      * Parameter für die SQL-Abfrage
      */
     protected array $params = [];
-    
+
     /**
      * Konstruktor
      *
@@ -29,18 +29,19 @@ class DatabaseException extends \Exception
      * @param array $params Parameter für die SQL-Abfrage
      */
     public function __construct(
-        string $message,
-        int $code = 0,
+        string      $message,
+        int         $code = 0,
         ?\Throwable $previous = null,
-        ?string $query = null,
-        array $params = []
-    ) {
+        ?string     $query = null,
+        array       $params = []
+    )
+    {
         parent::__construct($message, $code, $previous);
-        
+
         $this->query = $query;
         $this->params = $params;
     }
-    
+
     /**
      * Gibt die SQL-Abfrage zurück
      */
@@ -48,7 +49,7 @@ class DatabaseException extends \Exception
     {
         return $this->query;
     }
-    
+
     /**
      * Gibt die Parameter für die SQL-Abfrage zurück
      */

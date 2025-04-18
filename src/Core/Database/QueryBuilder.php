@@ -4,13 +4,12 @@ declare(strict_types=1);
 
 namespace App\Core\Database;
 
-use App\Core\Database\Clauses\WhereClause;
-use App\Core\Database\Clauses\JoinClause;
 use App\Core\Database\Clauses\GroupByClause;
 use App\Core\Database\Clauses\HavingClause;
-use App\Core\Database\Clauses\OrderByClause;
+use App\Core\Database\Clauses\JoinClause;
 use App\Core\Database\Clauses\LimitOffsetClause;
-use PDO;
+use App\Core\Database\Clauses\OrderByClause;
+use App\Core\Database\Clauses\WhereClause;
 
 /**
  * QueryBuilder für SQL-Abfragen
@@ -75,6 +74,8 @@ class QueryBuilder
      */
     private array $unionAll = [];
 
+    private array $connectionConfig;
+
     /**
      * Konstruktor
      *
@@ -86,37 +87,15 @@ class QueryBuilder
         $this->connection = $connection;
         $this->from = $table;
 
-        // Initialisieren der Klauseln
+        // Hole die Verbindungskonfiguration von der Connection
+        $this->connectionConfig = $connection->getConnectionConfig();
+
+        // Restlicher Konstruktor bleibt unverändert
         $this->joinClause = new JoinClause();
         $this->groupByClause = new GroupByClause();
         $this->havingClause = new HavingClause();
         $this->orderByClause = new OrderByClause();
         $this->limitOffsetClause = new LimitOffsetClause();
-    }
-
-    /**
-     * Gibt die WHERE-Klausel zurück oder erstellt eine neue
-     * 
-     * @return WhereClause
-     */
-    private function getWhereClause(): WhereClause
-    {
-        if ($this->whereClause === null) {
-            $this->whereClause = new WhereClause();
-        }
-        return $this->whereClause;
-    }
-
-    /**
-     * Fügt eine SELECT-Klausel hinzu
-     *
-     * @param string ...$columns Spalten
-     * @return self
-     */
-    public function select(string ...$columns): self
-    {
-        $this->select = $columns;
-        return $this;
     }
 
     /**
@@ -131,6 +110,19 @@ class QueryBuilder
     {
         $this->getWhereClause()->where($column, $operator, $value);
         return $this;
+    }
+
+    /**
+     * Gibt die WHERE-Klausel zurück oder erstellt eine neue
+     *
+     * @return WhereClause
+     */
+    private function getWhereClause(): WhereClause
+    {
+        if ($this->whereClause === null) {
+            $this->whereClause = new WhereClause();
+        }
+        return $this->whereClause;
     }
 
     /**
@@ -328,18 +320,6 @@ class QueryBuilder
     }
 
     /**
-     * Fügt eine GROUP BY-Klausel hinzu
-     *
-     * @param string ...$columns Spalten
-     * @return self
-     */
-    public function groupBy(string ...$columns): self
-    {
-        $this->groupByClause->groupBy(...$columns);
-        return $this;
-    }
-
-    /**
      * Fügt eine HAVING-Bedingung hinzu
      *
      * @param string $column Spalte
@@ -381,55 +361,6 @@ class QueryBuilder
     }
 
     /**
-     * Fügt eine ORDER BY DESC-Klausel hinzu
-     *
-     * @param string $column Spalte
-     * @return self
-     */
-    public function orderByDesc(string $column): self
-    {
-        $this->orderByClause->orderByDesc($column);
-        return $this;
-    }
-
-    /**
-     * Setzt eine LIMIT-Klausel
-     *
-     * @param int $limit Limit
-     * @return self
-     */
-    public function limit(int $limit): self
-    {
-        $this->limitOffsetClause->limit($limit);
-        return $this;
-    }
-
-    /**
-     * Setzt eine OFFSET-Klausel
-     *
-     * @param int $offset Offset
-     * @return self
-     */
-    public function offset(int $offset): self
-    {
-        $this->limitOffsetClause->offset($offset);
-        return $this;
-    }
-
-    /**
-     * Kombiniert LIMIT und OFFSET
-     *
-     * @param int $page Seite
-     * @param int $perPage Einträge pro Seite
-     * @return self
-     */
-    public function forPage(int $page, int $perPage): self
-    {
-        $this->limitOffsetClause->forPage($page, $perPage);
-        return $this;
-    }
-
-    /**
      * Führt die Abfrage aus und gibt eine Paginator-Instanz zurück
      *
      * @param int $page Seite
@@ -449,13 +380,86 @@ class QueryBuilder
         $countBuilder->select = ['COUNT(*) as count'];
         $countBuilder->orderByClause->clearOrders();
         $countBuilder->limitOffsetClause->limit(null)->offset(null);
-        $total = (int) $countBuilder->first()['count'];
+        $total = (int)$countBuilder->first()['count'];
 
         // Ergebnisse für die aktuelle Seite abrufen
         $this->forPage($page, $perPage);
         $items = $this->get();
 
         return new Paginator($items, $total, $perPage, $page, $baseUrl);
+    }
+
+    /**
+     * Fügt eine SELECT-Klausel hinzu
+     *
+     * @param string ...$columns Spalten
+     * @return self
+     */
+    public function select(string ...$columns): self
+    {
+        $this->select = $columns;
+        return $this;
+    }
+
+    /**
+     * Setzt eine OFFSET-Klausel
+     *
+     * @param int $offset Offset
+     * @return self
+     */
+    public function offset(int $offset): self
+    {
+        $this->limitOffsetClause->offset($offset);
+        return $this;
+    }
+
+    /**
+     * Setzt eine LIMIT-Klausel
+     *
+     * @param int $limit Limit
+     * @return self
+     */
+    public function limit(int $limit): self
+    {
+        $this->limitOffsetClause->limit($limit);
+        return $this;
+    }
+
+    /**
+     * Führt die Abfrage aus und gibt das erste Ergebnis zurück
+     *
+     * @param string[]|null $columns Spalten
+     * @return array|false
+     */
+    public function first(?array $columns = null): array|false
+    {
+        if ($columns !== null) {
+            $this->select(...$columns);
+        }
+
+        $this->limitOffsetClause->limit(1);
+
+        $result = $this->get();
+
+        return $result ? $result[0] : false;
+    }
+
+    /**
+     * Führt die Abfrage aus und gibt alle Ergebnisse zurück
+     *
+     * @param string[]|null $columns Spalten
+     * @return array
+     */
+    public function get(?array $columns = null): array
+    {
+        if ($columns !== null) {
+            $this->select(...$columns);
+        }
+
+        return $this->connection->select(
+            $this->toSql(),
+            $this->getBindings()
+        );
     }
 
     /**
@@ -531,41 +535,18 @@ class QueryBuilder
             $this->havingClause->getBindings()
         );
     }
-    /**
-     * Führt die Abfrage aus und gibt alle Ergebnisse zurück
-     *
-     * @param string[]|null $columns Spalten
-     * @return array
-     */
-    public function get(?array $columns = null): array
-    {
-        if ($columns !== null) {
-            $this->select(...$columns);
-        }
-
-        return $this->connection->select(
-            $this->toSql(),
-            $this->getBindings()
-        );
-    }
 
     /**
-     * Führt die Abfrage aus und gibt das erste Ergebnis zurück
+     * Kombiniert LIMIT und OFFSET
      *
-     * @param string[]|null $columns Spalten
-     * @return array|false
+     * @param int $page Seite
+     * @param int $perPage Einträge pro Seite
+     * @return self
      */
-    public function first(?array $columns = null): array|false
+    public function forPage(int $page, int $perPage): self
     {
-        if ($columns !== null) {
-            $this->select(...$columns);
-        }
-
-        $this->limitOffsetClause->limit(1);
-
-        $result = $this->get();
-
-        return $result ? $result[0] : false;
+        $this->limitOffsetClause->forPage($page, $perPage);
+        return $this;
     }
 
     /**
@@ -580,6 +561,7 @@ class QueryBuilder
 
         return $result ? $result[$column] : null;
     }
+
     /**
      * Führt die Abfrage aus und gibt die Anzahl der Ergebnisse zurück
      *
@@ -613,35 +595,43 @@ class QueryBuilder
             implode(', ', $placeholders)
         );
 
-        $this->query($query, $data);
+        $statement = $this->connection->query($query, $data);
 
-        return (int)$this->getPdo()->lastInsertId();
+        return (int)$this->connection->getPdo()->lastInsertId();
     }
 
     /**
-     * Überprüft und maskiert einen Spaltennamen
+     * Überprüft und maskiert einen Tabellennamen
      *
-     * @param string $column Spaltenname
-     * @return string Maskierter Spaltenname
+     * @param string $table Tabellenname
+     * @return string Maskierter Tabellenname
+     * @throws \InvalidArgumentException wenn der Tabellenname ungültig ist
      */
-    private function sanitizeColumnName(string $column): string
+    private function sanitizeTableName(string $table): string
     {
-        // Validieren des Spaltennamens mit einem strengen Pattern
-        if (!preg_match('/^[a-zA-Z0-9_]+$/', $column)) {
-            throw new \InvalidArgumentException("Ungültiger Spaltenname: '{$column}'");
+        // Validieren des Tabellennamens mit einem strengen Pattern
+        if (!preg_match('/^[a-zA-Z0-9_]+$/', $table)) {
+            throw new \InvalidArgumentException("Ungültiger Tabellenname: '{$table}'");
         }
-        
+
         // Mit Backticks umgeben (MySQL-spezifisch)
-        if ($this->config['driver'] === 'mysql') {
-            return "`{$column}`";
+        $driver = $this->connectionConfig['driver'] ?? 'mysql';
+
+        if ($driver === 'mysql') {
+            return "`{$table}`";
         }
-        
+
         // Für PostgreSQL mit Anführungszeichen umgeben
-        if ($this->config['driver'] === 'pgsql') {
-            return "\"{$column}\"";
+        if ($driver === 'pgsql') {
+            return "\"{$table}\"";
         }
-        
-        return $column;
+
+        return $table;
+    }
+
+    public function query(string $query, array $params = []): \PDOStatement
+    {
+        return $this->connection->query($query, $params);
     }
 
     /**
@@ -744,7 +734,6 @@ class QueryBuilder
         return $statement->rowCount();
     }
 
-
     /**
      * Führt die Abfrage aus und gibt die Summe einer Spalte zurück
      *
@@ -834,6 +823,30 @@ class QueryBuilder
         }
 
         return $result ? $result[$column] : null;
+    }
+
+    /**
+     * Fügt eine ORDER BY DESC-Klausel hinzu
+     *
+     * @param string $column Spalte
+     * @return self
+     */
+    public function orderByDesc(string $column): self
+    {
+        $this->orderByClause->orderByDesc($column);
+        return $this;
+    }
+
+    /**
+     * Fügt eine GROUP BY-Klausel hinzu
+     *
+     * @param string ...$columns Spalten
+     * @return self
+     */
+    public function groupBy(string ...$columns): self
+    {
+        $this->groupByClause->groupBy(...$columns);
+        return $this;
     }
 
     /**
@@ -950,33 +963,6 @@ class QueryBuilder
     }
 
     /**
-     * Überprüft und maskiert einen Tabellennamen
-     *
-     * @param string $table Tabellenname
-     * @return string Maskierter Tabellenname
-     * @throws \InvalidArgumentException wenn der Tabellenname ungültig ist
-     */
-    private function sanitizeTableName(string $table): string
-    {
-        // Validieren des Tabellennamens mit einem strengen Pattern
-        if (!preg_match('/^[a-zA-Z0-9_]+$/', $table)) {
-            throw new \InvalidArgumentException("Ungültiger Tabellenname: '{$table}'");
-        }
-
-        // Mit Backticks umgeben (MySQL-spezifisch)
-        if ($this->config['driver'] === 'mysql') {
-            return "`{$table}`";
-        }
-
-        // Für PostgreSQL mit Anführungszeichen umgeben
-        if ($this->config['driver'] === 'pgsql') {
-            return "\"{$table}\"";
-        }
-
-        return $table;
-    }
-
-    /**
      * Führt ein UPDATE aus
      *
      * @param string $table Tabellenname
@@ -987,32 +973,60 @@ class QueryBuilder
     public function updateWhere(string $table, array $data, array $conditions): int
     {
         $set = array_map(fn($column) => $this->sanitizeColumnName($column) . " = :set_$column", array_keys($data));
-        
+
         // Prepared-Statement-Parameter für SET-Klausel vorbereiten (mit Präfix)
         $setParams = [];
         foreach ($data as $key => $value) {
             $setParams["set_$key"] = $value;
         }
-        
+
         // WHERE-Bedingungen als sichere Prepared-Statement-Parameter
         $whereClause = [];
         $whereParams = [];
-        
+
         foreach ($conditions as $key => $value) {
             $whereClause[] = $this->sanitizeColumnName($key) . " = :where_$key";
             $whereParams["where_$key"] = $value;
         }
-        
+
         $query = sprintf(
             'UPDATE %s SET %s WHERE %s',
             $this->sanitizeTableName($table),
             implode(', ', $set),
             implode(' AND ', $whereClause)
         );
-        
+
         $statement = $this->query($query, array_merge($setParams, $whereParams));
-        
+
         return $statement->rowCount();
+    }
+
+    /**
+     * Überprüft und maskiert einen Spaltennamen
+     *
+     * @param string $column Spaltenname
+     * @return string Maskierter Spaltenname
+     */
+    private function sanitizeColumnName(string $column): string
+    {
+        // Validieren des Spaltennamens mit einem strengen Pattern
+        if (!preg_match('/^[a-zA-Z0-9_]+$/', $column)) {
+            throw new \InvalidArgumentException("Ungültiger Spaltenname: '{$column}'");
+        }
+
+        // Mit Backticks umgeben (MySQL-spezifisch)
+        $driver = $this->connectionConfig['driver'] ?? 'mysql';
+
+        if ($driver === 'mysql') {
+            return "`{$column}`";
+        }
+
+        // Für PostgreSQL mit Anführungszeichen umgeben
+        if ($driver === 'pgsql') {
+            return "\"{$column}\"";
+        }
+
+        return $column;
     }
 
     /**
@@ -1027,20 +1041,20 @@ class QueryBuilder
         // WHERE-Bedingungen als sichere Prepared-Statement-Parameter
         $whereClause = [];
         $whereParams = [];
-        
+
         foreach ($conditions as $key => $value) {
             $whereClause[] = $this->sanitizeColumnName($key) . " = :where_$key";
             $whereParams["where_$key"] = $value;
         }
-        
+
         $query = sprintf(
             'DELETE FROM %s WHERE %s',
             $this->sanitizeTableName($table),
             implode(' AND ', $whereClause)
         );
-        
+
         $statement = $this->query($query, $whereParams);
-        
+
         return $statement->rowCount();
     }
 }

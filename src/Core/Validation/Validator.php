@@ -29,7 +29,7 @@ readonly class Validator
      * @param DatabaseManager|null $db Datenbankmanager für DB-basierte Validierungen
      */
     public function __construct(
-        private ?Translator $translator = null,
+        private ?Translator      $translator = null,
         private ?DatabaseManager $db = null
     )
     {
@@ -264,6 +264,28 @@ readonly class Validator
     }
 
     /**
+     * Validiert, ob ein Wert zwischen zwei Werten liegt
+     *
+     * @param string $field Feldname
+     * @param mixed $value Wert
+     * @param array $parameters Parameter
+     * @param array $data Alle Daten
+     * @return bool
+     */
+    protected function validateBetween(string $field, mixed $value, array $parameters, array $data): bool
+    {
+        if (count($parameters) < 2) {
+            return false;
+        }
+
+        $min = (int)$parameters[0];
+        $max = (int)$parameters[1];
+
+        return $this->validateMin($field, $value, [$min], $data) &&
+            $this->validateMax($field, $value, [$max], $data);
+    }
+
+    /**
      * Validiert, ob ein Wert eine minimale Länge hat
      *
      * @param string $field Feldname
@@ -325,28 +347,6 @@ readonly class Validator
         }
 
         return false;
-    }
-
-    /**
-     * Validiert, ob ein Wert zwischen zwei Werten liegt
-     *
-     * @param string $field Feldname
-     * @param mixed $value Wert
-     * @param array $parameters Parameter
-     * @param array $data Alle Daten
-     * @return bool
-     */
-    protected function validateBetween(string $field, mixed $value, array $parameters, array $data): bool
-    {
-        if (count($parameters) < 2) {
-            return false;
-        }
-
-        $min = (int)$parameters[0];
-        $max = (int)$parameters[1];
-
-        return $this->validateMin($field, $value, [$min], $data) &&
-            $this->validateMax($field, $value, [$max], $data);
     }
 
     /**

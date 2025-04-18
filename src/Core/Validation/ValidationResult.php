@@ -23,16 +23,6 @@ readonly class ValidationResult
     }
 
     /**
-     * Prüft, ob die Validierung erfolgreich war
-     *
-     * @return bool True, wenn erfolgreich, sonst false
-     */
-    public function isValid(): bool
-    {
-        return empty($this->errors);
-    }
-
-    /**
      * Prüft, ob die Validierung fehlgeschlagen ist
      *
      * @return bool True, wenn fehlgeschlagen, sonst false
@@ -40,6 +30,16 @@ readonly class ValidationResult
     public function fails(): bool
     {
         return !$this->isValid();
+    }
+
+    /**
+     * Prüft, ob die Validierung erfolgreich war
+     *
+     * @return bool True, wenn erfolgreich, sonst false
+     */
+    public function isValid(): bool
+    {
+        return empty($this->errors);
     }
 
     /**

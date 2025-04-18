@@ -271,6 +271,11 @@ class Connection
         return $statement->rowCount();
     }
 
+    public function getConnectionConfig(): array
+    {
+        return $this->config;
+    }
+
     /**
      * Führt eine Funktion in einer Transaktion aus
      *

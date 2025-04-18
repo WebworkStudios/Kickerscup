@@ -42,70 +42,11 @@ class Csrf
      */
     public function __construct(
         Session $session,
-        ?int $tokenLifetime = null
-    ) {
+        ?int    $tokenLifetime = null
+    )
+    {
         $this->session = $session;
         $this->tokenLifetime = $tokenLifetime ?? self::DEFAULT_TOKEN_LIFETIME;
-    }
-
-    /**
-     * Validiert ein CSRF-Token
-     *
-     * @param string $token CSRF-Token
-     * @param string|null $formId Optional: Formular-ID für spezifische Token-Validierung
-     * @return bool True, wenn gültig, sonst false
-     */
-    public function validateToken(string $token, ?string $formId = null): bool
-    {
-        // Überprüfung des benutzerspezifischen Tokens, wenn formId angegeben wurde
-        if ($formId !== null) {
-            return $this->validateFormToken($token, $formId);
-        }
-
-        // Prüfe, ob Token in der Session existiert
-        $storedToken = $this->session->get(self::SESSION_KEY);
-        if ($storedToken === null) {
-            return false;
-        }
-
-        // Prüfe, ob Token abgelaufen ist
-        $expiryTime = $this->session->get(self::SESSION_KEY_EXPIRY);
-        if ($expiryTime !== null && time() > $expiryTime) {
-            // Token abgelaufen, generiere ein neues
-            $this->generateToken();
-            return false;
-        }
-
-        // Vergleiche Token mit constant-time Vergleich gegen Timing-Attacken
-        return hash_equals($storedToken, $token);
-    }
-
-    /**
-     * Validiert ein formularspezifisches CSRF-Token
-     *
-     * @param string $token CSRF-Token
-     * @param string $formId Formular-ID
-     * @return bool True, wenn gültig, sonst false
-     */
-    private function validateFormToken(string $token, string $formId): bool
-    {
-        $tokens = $this->session->get(self::SESSION_KEY_PER_FORM, []);
-
-        if (!isset($tokens[$formId])) {
-            return false;
-        }
-
-        [$storedToken, $expiryTime] = $tokens[$formId];
-
-        // Prüfe, ob Token abgelaufen ist
-        if (time() > $expiryTime) {
-            // Entferne abgelaufenes Token
-            unset($tokens[$formId]);
-            $this->session->set(self::SESSION_KEY_PER_FORM, $tokens);
-            return false;
-        }
-
-        return hash_equals($storedToken, $token);
     }
 
     /**
@@ -124,25 +65,6 @@ class Csrf
             '<input type="hidden" name="csrf_token" value="%s">',
             htmlspecialchars($token, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
         );
-    }
-
-    /**
-     * Gibt das aktuelle CSRF-Token zurück
-     *
-     * @return string|null
-     */
-    public function getToken(): ?string
-    {
-        $token = $this->session->get(self::SESSION_KEY);
-        $expiryTime = $this->session->get(self::SESSION_KEY_EXPIRY);
-
-        // Überprüfe, ob Token abgelaufen ist
-        if ($token !== null && $expiryTime !== null && time() > $expiryTime) {
-            // Token ist abgelaufen, generiere ein neues
-            return $this->generateToken();
-        }
-
-        return $token;
     }
 
     /**
@@ -166,22 +88,6 @@ class Csrf
 
         // Generiere ein neues Token für dieses Formular
         return $this->generateFormToken($formId);
-    }
-
-    /**
-     * Generiert ein CSRF-Token und speichert es in der Session
-     *
-     * @return string
-     */
-    public function generateToken(): string
-    {
-        $token = $this->createTokenString();
-        $expiryTime = time() + $this->tokenLifetime;
-
-        $this->session->set(self::SESSION_KEY, $token);
-        $this->session->set(self::SESSION_KEY_EXPIRY, $expiryTime);
-
-        return $token;
     }
 
     /**
@@ -209,17 +115,6 @@ class Csrf
     }
 
     /**
-     * Erstellt einen kryptographisch sicheren Token-String
-     *
-     * @return string
-     */
-    private function createTokenString(): string
-    {
-        // 32 Bytes erzeugen 64 Hex-Zeichen, die sicherer sind als base64
-        return bin2hex(random_bytes(32));
-    }
-
-    /**
      * Entfernt abgelaufene formularspezifische Tokens
      *
      * @return void
@@ -236,6 +131,52 @@ class Csrf
         );
 
         $this->session->set(self::SESSION_KEY_PER_FORM, $tokens);
+    }
+
+    /**
+     * Erstellt einen kryptographisch sicheren Token-String
+     *
+     * @return string
+     */
+    private function createTokenString(): string
+    {
+        // 32 Bytes erzeugen 64 Hex-Zeichen, die sicherer sind als base64
+        return bin2hex(random_bytes(32));
+    }
+
+    /**
+     * Gibt das aktuelle CSRF-Token zurück
+     *
+     * @return string|null
+     */
+    public function getToken(): ?string
+    {
+        $token = $this->session->get(self::SESSION_KEY);
+        $expiryTime = $this->session->get(self::SESSION_KEY_EXPIRY);
+
+        // Überprüfe, ob Token abgelaufen ist
+        if ($token !== null && $expiryTime !== null && time() > $expiryTime) {
+            // Token ist abgelaufen, generiere ein neues
+            return $this->generateToken();
+        }
+
+        return $token;
+    }
+
+    /**
+     * Generiert ein CSRF-Token und speichert es in der Session
+     *
+     * @return string
+     */
+    public function generateToken(): string
+    {
+        $token = $this->createTokenString();
+        $expiryTime = time() + $this->tokenLifetime;
+
+        $this->session->set(self::SESSION_KEY, $token);
+        $this->session->set(self::SESSION_KEY_EXPIRY, $expiryTime);
+
+        return $token;
     }
 
     /**
@@ -322,6 +263,66 @@ class Csrf
         }
 
         return $this->validateToken($token);
+    }
+
+    /**
+     * Validiert ein CSRF-Token
+     *
+     * @param string $token CSRF-Token
+     * @param string|null $formId Optional: Formular-ID für spezifische Token-Validierung
+     * @return bool True, wenn gültig, sonst false
+     */
+    public function validateToken(string $token, ?string $formId = null): bool
+    {
+        // Überprüfung des benutzerspezifischen Tokens, wenn formId angegeben wurde
+        if ($formId !== null) {
+            return $this->validateFormToken($token, $formId);
+        }
+
+        // Prüfe, ob Token in der Session existiert
+        $storedToken = $this->session->get(self::SESSION_KEY);
+        if ($storedToken === null) {
+            return false;
+        }
+
+        // Prüfe, ob Token abgelaufen ist
+        $expiryTime = $this->session->get(self::SESSION_KEY_EXPIRY);
+        if ($expiryTime !== null && time() > $expiryTime) {
+            // Token abgelaufen, generiere ein neues
+            $this->generateToken();
+            return false;
+        }
+
+        // Vergleiche Token mit constant-time Vergleich gegen Timing-Attacken
+        return hash_equals($storedToken, $token);
+    }
+
+    /**
+     * Validiert ein formularspezifisches CSRF-Token
+     *
+     * @param string $token CSRF-Token
+     * @param string $formId Formular-ID
+     * @return bool True, wenn gültig, sonst false
+     */
+    private function validateFormToken(string $token, string $formId): bool
+    {
+        $tokens = $this->session->get(self::SESSION_KEY_PER_FORM, []);
+
+        if (!isset($tokens[$formId])) {
+            return false;
+        }
+
+        [$storedToken, $expiryTime] = $tokens[$formId];
+
+        // Prüfe, ob Token abgelaufen ist
+        if (time() > $expiryTime) {
+            // Entferne abgelaufenes Token
+            unset($tokens[$formId]);
+            $this->session->set(self::SESSION_KEY_PER_FORM, $tokens);
+            return false;
+        }
+
+        return hash_equals($storedToken, $token);
     }
 
     /**

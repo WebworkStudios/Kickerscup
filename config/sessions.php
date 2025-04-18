@@ -48,7 +48,7 @@ return [
         'password' => env('REDIS_PASSWORD', null),
         'database' => (int)env('REDIS_DB', 0),       // Standard-Redis-DB
         'prefix' => 'session:',                      // Präfix für Session-Keys
-        
+
         /**
          * Verbindungsoptionen
          */
@@ -58,7 +58,7 @@ return [
             'retry_interval' => 100,                 // in Millisekunden
             'tcp_keepalive' => true,                 // TCP Keepalive aktivieren
         ],
-        
+
         /**
          * Sentinel-Konfiguration für Hochverfügbarkeit
          * Deaktiviert standardmäßig
@@ -71,7 +71,7 @@ return [
                 // ['host' => '127.0.0.1', 'port' => 26380],
             ],
         ],
-        
+
         /**
          * Cluster-Konfiguration für horizontale Skalierung
          * Deaktiviert standardmäßig
@@ -84,7 +84,7 @@ return [
             ],
         ],
     ],
-    
+
     /**
      * Session-Fingerprinting für erhöhte Sicherheit
      */
@@ -95,7 +95,7 @@ return [
             // 'app_version' => '1.0',
         ],
     ],
-    
+
     /**
      * Flash-Message-Konfiguration
      */

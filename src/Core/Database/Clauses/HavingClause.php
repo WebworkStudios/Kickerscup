@@ -38,19 +38,6 @@ class HavingClause
     }
 
     /**
-     * Fügt eine HAVING-Bedingung mit OR hinzu
-     *
-     * @param string $column Spalte
-     * @param string $operator Operator
-     * @param mixed $value Wert
-     * @return void
-     */
-    public function orHaving(string $column, string $operator, mixed $value): void
-    {
-        $this->addCondition('OR', $column, $operator, $value);
-    }
-
-    /**
      * Fügt eine Bedingung hinzu
      *
      * @param string $type Typ der Verknüpfung (AND oder OR)
@@ -79,6 +66,19 @@ class HavingClause
     private function createBindingName(): string
     {
         return 'having_' . (++$this->bindingId);
+    }
+
+    /**
+     * Fügt eine HAVING-Bedingung mit OR hinzu
+     *
+     * @param string $column Spalte
+     * @param string $operator Operator
+     * @param mixed $value Wert
+     * @return void
+     */
+    public function orHaving(string $column, string $operator, mixed $value): void
+    {
+        $this->addCondition('OR', $column, $operator, $value);
     }
 
     /**

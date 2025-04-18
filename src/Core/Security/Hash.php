@@ -47,6 +47,17 @@ class Hash
     }
 
     /**
+     * Überprüft, ob ein Passwort-Algorithmus verfügbar ist
+     *
+     * @param string|int $algo Der Algorithmus (PASSWORD_ARGON2ID, etc.)
+     * @return bool True wenn verfügbar, sonst false
+     */
+    public function isAlgoAvailable(string|int $algo): bool
+    {
+        return in_array($algo, password_algos(), true);
+    }
+
+    /**
      * Überprüft ein Passwort
      *
      * @param string $password Passwort
@@ -136,17 +147,6 @@ class Hash
     }
 
     /**
-     * Überprüft, ob ein Passwort-Algorithmus verfügbar ist
-     *
-     * @param string|int $algo Der Algorithmus (PASSWORD_ARGON2ID, etc.)
-     * @return bool True wenn verfügbar, sonst false
-     */
-    public function isAlgoAvailable(string|int $algo): bool
-    {
-        return in_array($algo, password_algos(), true);
-    }
-
-    /**
      * Analysiert, ob die aktuellen Argon2id-Kosten für die Hardware geeignet sind
      * Gibt eine Empfehlung zurück, wenn die Kosten angepasst werden sollten
      *
@@ -179,8 +179,7 @@ class Hash
         if ($duration < $targetTime * 0.8) {
             $recommendedOptions['time_cost'] = min($currentOptions['time_cost'] + 1, 10);
             $needsAdjustment = true;
-        }
-        // Wenn die Hash-Dauer zu lang ist (> 120% des Ziels), Kosten reduzieren
+        } // Wenn die Hash-Dauer zu lang ist (> 120% des Ziels), Kosten reduzieren
         elseif ($duration > $targetTime * 1.2) {
             $recommendedOptions['time_cost'] = max($currentOptions['time_cost'] - 1, 3);
             $needsAdjustment = true;

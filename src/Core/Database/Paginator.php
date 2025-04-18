@@ -95,13 +95,37 @@ class Paginator
     }
 
     /**
+     * Gibt zurück, ob es sich um die letzte Seite handelt
+     *
+     * @return bool
+     */
+    public function isLastPage(): bool
+    {
+        return $this->currentPage === $this->getLastPage();
+    }
+
+    /**
      * Gibt die letzte Seite zurück
      *
      * @return int
      */
     public function getLastPage(): int
     {
-        return max(1, (int) ceil($this->total / $this->perPage));
+        return max(1, (int)ceil($this->total / $this->perPage));
+    }
+
+    /**
+     * Gibt den URL für die nächste Seite zurück
+     *
+     * @return string|null
+     */
+    public function getNextPageUrl(): ?string
+    {
+        if (!$this->hasMorePages()) {
+            return null;
+        }
+
+        return $this->getUrl($this->currentPage + 1);
     }
 
     /**
@@ -112,26 +136,6 @@ class Paginator
     public function hasMorePages(): bool
     {
         return $this->currentPage < $this->getLastPage();
-    }
-
-    /**
-     * Gibt zurück, ob es sich um die erste Seite handelt
-     *
-     * @return bool
-     */
-    public function isFirstPage(): bool
-    {
-        return $this->currentPage === 1;
-    }
-
-    /**
-     * Gibt zurück, ob es sich um die letzte Seite handelt
-     *
-     * @return bool
-     */
-    public function isLastPage(): bool
-    {
-        return $this->currentPage === $this->getLastPage();
     }
 
     /**
@@ -154,20 +158,6 @@ class Paginator
     }
 
     /**
-     * Gibt den URL für die nächste Seite zurück
-     *
-     * @return string|null
-     */
-    public function getNextPageUrl(): ?string
-    {
-        if (!$this->hasMorePages()) {
-            return null;
-        }
-
-        return $this->getUrl($this->currentPage + 1);
-    }
-
-    /**
      * Gibt den URL für die vorherige Seite zurück
      *
      * @return string|null
@@ -179,6 +169,16 @@ class Paginator
         }
 
         return $this->getUrl($this->currentPage - 1);
+    }
+
+    /**
+     * Gibt zurück, ob es sich um die erste Seite handelt
+     *
+     * @return bool
+     */
+    public function isFirstPage(): bool
+    {
+        return $this->currentPage === 1;
     }
 
     /**

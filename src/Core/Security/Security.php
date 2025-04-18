@@ -122,54 +122,8 @@ class Security
     }
 
     /**
-     * Entschlüsselt verschlüsselte Daten mit AES-256-GCM
-     *
-     * @param string $data Verschlüsselte Daten im Format: base64(nonce|ciphertext|tag)
-     * @param string|null $key Optionaler Schlüssel
-     * @return string Entschlüsselte Daten
-     * @throws \Exception Wenn die Entschlüsselung fehlschlägt oder die Daten manipuliert wurden
-     */
-    public function decrypt(string $data, ?string $key = null): string
-    {
-        $key = $key ?? $this->getEncryptionKey();
-        
-        // Base64-Decodierung
-        $raw = base64_decode($data, true);
-        if ($raw === false) {
-            throw new \Exception('Ungültiges Format der verschlüsselten Daten');
-        }
-        
-        // Nonce extrahieren (12 Bytes)
-        $nonceSize = 12;
-        $nonce = substr($raw, 0, $nonceSize);
-        
-        // Auth-Tag extrahieren (16 Bytes, am Ende)
-        $tagSize = 16;
-        $tag = substr($raw, -$tagSize);
-        
-        // Ciphertext extrahieren (zwischen Nonce und Tag)
-        $ciphertext = substr($raw, $nonceSize, -$tagSize);
-        
-        // Entschlüsseln mit AES-256-GCM
-        $decrypted = openssl_decrypt(
-            $ciphertext,
-            'aes-256-gcm',
-            $key,
-            OPENSSL_RAW_DATA,
-            $nonce,
-            $tag
-        );
-        
-        if ($decrypted === false) {
-            throw new \Exception('Fehler beim Entschlüsseln der Daten: Die Daten wurden möglicherweise manipuliert');
-        }
-        
-        return $decrypted;
-    }
-
-    /**
      * Gibt den Verschlüsselungsschlüssel zurück oder generiert einen neuen
-     * 
+     *
      * @param bool $forceRegenerate Erzwingt die Neugenerierung des Schlüssels
      * @return string Verschlüsselungsschlüssel
      * @throws \Exception Wenn kein Schlüssel gefunden wird oder generiert werden kann
@@ -225,27 +179,72 @@ class Security
         throw new \Exception('Kein Verschlüsselungsschlüssel definiert. Bitte APP_KEY Umgebungsvariable setzen oder Schlüsseldatei erstellen.');
     }
 
+    /**
+     * Entschlüsselt verschlüsselte Daten mit AES-256-GCM
+     *
+     * @param string $data Verschlüsselte Daten im Format: base64(nonce|ciphertext|tag)
+     * @param string|null $key Optionaler Schlüssel
+     * @return string Entschlüsselte Daten
+     * @throws \Exception Wenn die Entschlüsselung fehlschlägt oder die Daten manipuliert wurden
+     */
+    public function decrypt(string $data, ?string $key = null): string
+    {
+        $key = $key ?? $this->getEncryptionKey();
 
-/**
- * Generiert einen neuen Verschlüsselungsschlüssel und speichert ihn
- * 
- * @return string Der neue Schlüssel
- */
-public function rotateEncryptionKey(): string
-{
-    return $this->getEncryptionKey(true);
-}
+        // Base64-Decodierung
+        $raw = base64_decode($data, true);
+        if ($raw === false) {
+            throw new \Exception('Ungültiges Format der verschlüsselten Daten');
+        }
 
-/**
- * Generiert einen kryptografisch sicheren Token
- *
- * @param int $length Länge des Tokens in Bytes (wird zu doppelt so vielen Hex-Zeichen)
- * @return string Token als Hex-String
- */
-public function generateToken(int $length = 32): string
-{
-    return bin2hex(random_bytes($length));
-}
+        // Nonce extrahieren (12 Bytes)
+        $nonceSize = 12;
+        $nonce = substr($raw, 0, $nonceSize);
+
+        // Auth-Tag extrahieren (16 Bytes, am Ende)
+        $tagSize = 16;
+        $tag = substr($raw, -$tagSize);
+
+        // Ciphertext extrahieren (zwischen Nonce und Tag)
+        $ciphertext = substr($raw, $nonceSize, -$tagSize);
+
+        // Entschlüsseln mit AES-256-GCM
+        $decrypted = openssl_decrypt(
+            $ciphertext,
+            'aes-256-gcm',
+            $key,
+            OPENSSL_RAW_DATA,
+            $nonce,
+            $tag
+        );
+
+        if ($decrypted === false) {
+            throw new \Exception('Fehler beim Entschlüsseln der Daten: Die Daten wurden möglicherweise manipuliert');
+        }
+
+        return $decrypted;
+    }
+
+    /**
+     * Generiert einen neuen Verschlüsselungsschlüssel und speichert ihn
+     *
+     * @return string Der neue Schlüssel
+     */
+    public function rotateEncryptionKey(): string
+    {
+        return $this->getEncryptionKey(true);
+    }
+
+    /**
+     * Generiert einen kryptografisch sicheren Token
+     *
+     * @param int $length Länge des Tokens in Bytes (wird zu doppelt so vielen Hex-Zeichen)
+     * @return string Token als Hex-String
+     */
+    public function generateToken(int $length = 32): string
+    {
+        return bin2hex(random_bytes($length));
+    }
 
     /**
      * Überprüft, ob eine E-Mail-Adresse gültig ist

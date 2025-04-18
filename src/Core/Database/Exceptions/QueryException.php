@@ -36,12 +36,13 @@ class QueryException extends \Exception
      * @param array $params Die Parameter, die für die Query verwendet wurden
      */
     public function __construct(
-        string $message,
-        int $code,
+        string       $message,
+        int          $code,
         PDOException $pdoException,
-        string $query,
-        array $params = []
-    ) {
+        string       $query,
+        array        $params = []
+    )
+    {
         parent::__construct($message, $code, $pdoException);
         $this->pdoException = $pdoException;
         $this->query = $query;
