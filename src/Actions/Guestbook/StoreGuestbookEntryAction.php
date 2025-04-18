@@ -24,7 +24,7 @@ class StoreGuestbookEntryAction
     {
         // Validierung
         $validation = $this->validator->validate($request->all(), [
-            'name' => 'required|string|max:100',
+            'name' => 'required|string|min:3|max:100',
             'email' => 'required|email|max:255',
             'message' => 'required|string'
         ]);

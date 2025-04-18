@@ -11,7 +11,7 @@ use App\Core\Cache\Cache;
  * Translator-Klasse für Mehrsprachigkeit
  * Verwaltet Übersetzungen mit Caching für optimale Performance
  */
-readonly class Translator
+class Translator
 {
     /**
      * Cache-Schlüssel-Präfix
@@ -34,7 +34,7 @@ readonly class Translator
      *
      * @var array<string, array<string, array<string, string>>>
      */
-    private array $loaded;
+    private array $loaded = [];
 
     /**
      * Konstruktor
@@ -47,12 +47,10 @@ readonly class Translator
         string $locale = 'de',
         string $fallbackLocale = 'en',
         ?Cache $cache = null
-    )
-    {
+    ) {
         $this->locale = $locale;
         $this->fallbackLocale = $fallbackLocale;
         $this->cache = $cache;
-        $this->loaded = [];
     }
 
     /**
@@ -201,7 +199,7 @@ readonly class Translator
      * @param array $replace Zu ersetzende Parameter
      * @return string Text mit ersetzten Parametern
      */
-    private function replaceParameters(string $translation, array $replace): string
+    public function replaceParameters(string $translation, array $replace): string
     {
         if (empty($replace)) {
             return $translation;
