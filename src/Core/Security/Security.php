@@ -89,14 +89,18 @@ class Security
      */
     public function encrypt(string $data, ?string $key = null): string
     {
+        if (empty($data)) {
+            throw new \InvalidArgumentException('Zu verschlüsselnde Daten dürfen nicht leer sein');
+        }
+
         $key = $key ?? $this->getEncryptionKey();
-        
+
         // Nonce/IV generieren (12 Bytes für GCM empfohlen)
         $nonce = random_bytes(12);
-        
+
         // Tag-Variable für den Auth-Tag
         $tag = '';
-        
+
         // Verschlüsseln mit AES-256-GCM
         $ciphertext = openssl_encrypt(
             $data,
@@ -108,11 +112,11 @@ class Security
             '',   // AAD (zusätzliche authentifizierte Daten)
             16    // Tag-Länge: 16 Bytes (128 Bits)
         );
-        
+
         if ($ciphertext === false) {
             throw new \Exception('Fehler beim Verschlüsseln der Daten: ' . openssl_error_string());
         }
-        
+
         // Nonce, Ciphertext und Auth-Tag kombinieren und als base64 zurückgeben
         return base64_encode($nonce . $ciphertext . $tag);
     }
@@ -174,43 +178,53 @@ class Security
     {
         $keyInEnv = getenv('APP_KEY');
         $keyFile = getenv('APP_KEY_PATH') ?: __DIR__ . '/../../../config/encryption_key.php';
-        
+
         // Wenn Neugenerierung erzwungen wird oder kein Schlüssel in der Umgebungsvariable ist
         if ($forceRegenerate || empty($keyInEnv)) {
             // Generiere einen neuen Schlüssel (32 Bytes für AES-256)
             $newKey = bin2hex(random_bytes(32));
-            
+
             // Wenn die APP_KEY Umgebungsvariable nicht gesetzt ist, speichere den Schlüssel in einer Datei
             if (empty($keyInEnv)) {
-            $keyContent = "<?php\n// Automatisch generierter Verschlüsselungsschlüssel\nreturn '" . $newKey . "';\n";
-            
-            // Speichern des Schlüssels in der Datei
-            if (!file_put_contents($keyFile, $keyContent)) {
-                throw new \Exception('Konnte den Verschlüsselungsschlüssel nicht speichern. Bitte überprüfen Sie die Schreibrechte.');
+                $keyContent = "<?php\n// Automatisch generierter Verschlüsselungsschlüssel\nreturn '" . $newKey . "';\n";
+
+                // Temporäre Datei erstellen
+                $tempFile = $keyFile . '.temp.' . bin2hex(random_bytes(8));
+
+                // Speichern des Schlüssels in der temporären Datei
+                if (!file_put_contents($tempFile, $keyContent, LOCK_EX)) {
+                    throw new \Exception('Konnte den Verschlüsselungsschlüssel nicht speichern. Bitte überprüfen Sie die Schreibrechte.');
+                }
+
+                // Die Datei sollte nur für den Webserver lesbar sein
+                chmod($tempFile, 0600);
+
+                // Atomares Umbenennen (verhindert Race-Conditions)
+                if (!rename($tempFile, $keyFile)) {
+                    @unlink($tempFile); // Aufräumen im Fehlerfall
+                    throw new \Exception('Konnte den Verschlüsselungsschlüssel nicht speichern (Umbenennung fehlgeschlagen).');
+                }
             }
-            
-            // Die Datei sollte nur für den Webserver lesbar sein
-            chmod($keyFile, 0600);
+
+            return $newKey;
         }
-        
-        return $newKey;
-    }
-    
-    // Versuche den Schlüssel aus der Umgebungsvariable zu lesen
-    if (!empty($keyInEnv)) {
-        return $keyInEnv;
-    }
-    
-    // Versuche den Schlüssel aus der Datei zu lesen
-    if (file_exists($keyFile)) {
-        $keyFromFile = include $keyFile;
-        if (!empty($keyFromFile)) {
-            return $keyFromFile;
+
+        // Versuche den Schlüssel aus der Umgebungsvariable zu lesen
+        if (!empty($keyInEnv)) {
+            return $keyInEnv;
         }
+
+        // Versuche den Schlüssel aus der Datei zu lesen
+        if (file_exists($keyFile)) {
+            $keyFromFile = include $keyFile;
+            if (!empty($keyFromFile)) {
+                return $keyFromFile;
+            }
+        }
+
+        throw new \Exception('Kein Verschlüsselungsschlüssel definiert. Bitte APP_KEY Umgebungsvariable setzen oder Schlüsseldatei erstellen.');
     }
-    
-    throw new \Exception('Kein Verschlüsselungsschlüssel definiert. Bitte APP_KEY Umgebungsvariable setzen oder Schlüsseldatei erstellen.');
-}
+
 
 /**
  * Generiert einen neuen Verschlüsselungsschlüssel und speichert ihn

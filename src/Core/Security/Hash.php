@@ -10,18 +10,26 @@ namespace App\Core\Security;
 class Hash
 {
     /**
+     * Standardeinstellungen für Argon2id
+     */
+    private const ARGON_OPTIONS = [
+        'memory_cost' => 65536, // 64 MB
+        'time_cost' => 4,       // 4 Iterationen
+        'threads' => 1          // 1 Thread (für Parallelisierungs-Resistenz)
+    ];
+
+    /**
      * Hasht ein Passwort mit Argon2id
      *
      * @param string $password Passwort
+     * @param array|null $options Optionale Argon2id-Parameter
      * @return string Gehashtes Passwort
      */
-    public function password(string $password): string
+    public function password(string $password, ?array $options = null): string
     {
-        return password_hash($password, PASSWORD_ARGON2ID, [
-            'memory_cost' => 65536, // 64 MB
-            'time_cost' => 4,       // 4 Iterationen
-            'threads' => 1          // 1 Thread (für Parallelisierungs-Resistenz)
-        ]);
+        $options ??= self::ARGON_OPTIONS;
+
+        return password_hash($password, PASSWORD_ARGON2ID, $options);
     }
 
     /**
@@ -40,15 +48,14 @@ class Hash
      * Prüft, ob ein Passwort-Hash neu gehasht werden sollte
      *
      * @param string $hash Hash
+     * @param array|null $options Optionale Argon2id-Parameter
      * @return bool True, wenn neu gehasht werden sollte, sonst false
      */
-    public function needsRehash(string $hash): bool
+    public function needsRehash(string $hash, ?array $options = null): bool
     {
-        return password_needs_rehash($hash, PASSWORD_ARGON2ID, [
-            'memory_cost' => 65536,
-            'time_cost' => 4,
-            'threads' => 1
-        ]);
+        $options ??= self::ARGON_OPTIONS;
+
+        return password_needs_rehash($hash, PASSWORD_ARGON2ID, $options);
     }
 
     /**
@@ -74,5 +81,19 @@ class Hash
     public function make(string $data, string $algo = 'sha256'): string
     {
         return hash($algo, $data);
+    }
+
+    /**
+     * Generiert einen zufälligen String
+     *
+     * @param int $length Länge des Strings
+     * @param bool $rawOutput Raw-Bytes zurückgeben
+     * @return string Zufälliger String
+     */
+    public function random(int $length = 32, bool $rawOutput = false): string
+    {
+        $randomBytes = random_bytes($length);
+
+        return $rawOutput ? $randomBytes : bin2hex($randomBytes);
     }
 }

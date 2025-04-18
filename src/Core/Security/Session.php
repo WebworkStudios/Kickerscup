@@ -10,7 +10,7 @@ use Exception;
 /**
  * Session Management Klasse
  */
-class Session
+class Session implements SessionInterface
 {
     /**
      * Session Konfiguration
