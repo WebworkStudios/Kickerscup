@@ -478,9 +478,11 @@ class QueryBuilder
         }
 
         // WHERE
-        $whereSql = $this->whereClause->toSql();
-        if ($whereSql) {
-            $query .= ' ' . $whereSql;
+        if ($this->whereClause !== null) {
+            $whereSql = $this->whereClause->toSql();
+            if ($whereSql) {
+                $query .= ' ' . $whereSql;
+            }
         }
 
         // GROUP BY
@@ -517,13 +519,18 @@ class QueryBuilder
      */
     public function getBindings(): array
     {
+        $bindings = [];
+
+        if ($this->whereClause !== null) {
+            $bindings = array_merge($bindings, $this->whereClause->getBindings());
+        }
+
         return array_merge(
-            $this->whereClause->getBindings(),
+            $bindings,
             $this->joinClause->getBindings(),
             $this->havingClause->getBindings()
         );
     }
-
     /**
      * Führt die Abfrage aus und gibt alle Ergebnisse zurück
      *
@@ -722,12 +729,14 @@ class QueryBuilder
         $query = sprintf('DELETE FROM %s', $this->from);
 
         // WHERE-Klausel hinzufügen
-        $whereSql = $this->whereClause->toSql();
         $params = [];
 
-        if ($whereSql) {
-            $query .= ' ' . $whereSql;
-            $params = $this->whereClause->getBindings();
+        if ($this->whereClause !== null) {
+            $whereSql = $this->whereClause->toSql();
+            if ($whereSql) {
+                $query .= ' ' . $whereSql;
+                $params = $this->whereClause->getBindings();
+            }
         }
 
         $statement = $this->connection->query($query, $params);

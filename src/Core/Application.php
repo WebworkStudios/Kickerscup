@@ -52,6 +52,9 @@ class Application
         // Kern-Services registrieren
         $this->registerCoreServices();
 
+        // Datenbank initialisieren
+        $this->initializeDatabase();
+
         // Routen laden
         $this->loadRoutes();
     }
@@ -80,6 +83,15 @@ class Application
                 $cache
             );
         });
+
+        // Datenbank-Manager registrieren
+        $this->container->singleton(\App\Core\Database\DatabaseManager::class, function ($container) {
+            $config = config('database.connections', []);
+            $defaultConnection = config('database.default', 'default');
+
+            $dbManager = new \App\Core\Database\DatabaseManager($config, $defaultConnection);
+            return $dbManager;
+        });
     }
     /**
      * Lädt die Routen aus der Konfigurationsdatei
@@ -91,6 +103,26 @@ class Application
 
         if (file_exists($routesFile)) {
             require $routesFile;
+        }
+    }
+
+    /**
+     * Initialisiert die Datenbankverbindung
+     *
+     * @return bool
+     */
+    private function initializeDatabase(): bool
+    {
+        try {
+            $dbManager = $this->container->make(\App\Core\Database\DatabaseManager::class);
+
+            // Prüfen, ob die Verbindung hergestellt werden kann
+            $dbManager->connection()->getPdo();
+
+            return true;
+        } catch (\Exception $e) {
+            app_log('Datenbankverbindung konnte nicht hergestellt werden: ' . $e->getMessage(), [], 'error');
+            return false;
         }
     }
 
