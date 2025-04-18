@@ -30,6 +30,16 @@ class DatabaseManager
     private ?QueryBuilderFactory $factory = null;
 
     /**
+     * Verbindungs-Timeout in Sekunden
+     */
+    private int $connectionTimeout = 300; // 5 Minuten
+
+    /**
+     * Zeitstempel der letzten Nutzung für Verbindungen
+     */
+    private array $connectionLastUsed = [];
+
+    /**
      * Konstruktor
      *
      * @param array $configs Konfigurationen für Verbindungen
@@ -107,7 +117,7 @@ class DatabaseManager
     }
 
     /**
-     * Gibt eine Verbindung zurück
+     * Gibt eine Verbindung zurück und aktualisiert den Zeitstempel der letzten Nutzung
      *
      * @param string|null $name Name der Verbindung oder null für die Standardverbindung
      * @return Connection
@@ -117,20 +127,43 @@ class DatabaseManager
     {
         $name = $name ?? $this->defaultConnection;
 
-        // Wenn die Verbindung bereits existiert, zurückgeben
-        if (isset($this->connections[$name])) {
-            return $this->connections[$name];
+        // Wenn die Verbindung nicht existiert, erstellen
+        if (!isset($this->connections[$name])) {
+            if (!isset($this->configs[$name])) {
+                throw new \Exception("Datenbankverbindung '{$name}' ist nicht konfiguriert.");
+            }
+        
+            $this->connections[$name] = new Connection($this->configs[$name]);
         }
-
-        // Wenn die Verbindung nicht konfiguriert ist, Exception werfen
-        if (!isset($this->configs[$name])) {
-            throw new \Exception("Datenbankverbindung '{$name}' ist nicht konfiguriert.");
-        }
-
-        // Verbindung erstellen
-        $this->connections[$name] = new Connection($this->configs[$name]);
-
+    
+        // Zeitstempel aktualisieren
+        $this->connectionLastUsed[$name] = time();
+    
+        // Inaktive Verbindungen überprüfen und ggf. schließen
+        $this->cleanInactiveConnections();
+    
         return $this->connections[$name];
+    }
+
+    /**
+     * Schließt inaktive Verbindungen
+     */
+    private function cleanInactiveConnections(): void
+    {
+        $now = time();
+    
+        foreach ($this->connectionLastUsed as $name => $lastUsed) {
+            if ($now - $lastUsed > $this->connectionTimeout) {
+                // Verbindung schließen
+                if (isset($this->connections[$name])) {
+                    $this->connections[$name]->disconnect();
+                    unset($this->connections[$name]);
+                }
+            
+                // Aus den Zeitstempeln entfernen
+                unset($this->connectionLastUsed[$name]);
+            }
+        }
     }
 
     /**

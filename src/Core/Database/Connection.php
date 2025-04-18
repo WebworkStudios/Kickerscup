@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Core\Database;
 
+use App\Core\Database\Exceptions\QueryException;
 use PDO;
 use PDOException;
 use PDOStatement;
@@ -37,13 +38,14 @@ class Connection
         'password' => '',
         'charset' => 'utf8mb4',
         'collation' => 'utf8mb4_unicode_ci',
+        'persistent' => false,  // Standardmäßig deaktiviert
         'options' => [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES => false,
-            PDO::ATTR_PERSISTENT => true
+            PDO::ATTR_EMULATE_PREPARES => false
         ]
     ];
+
 
     /**
      * Konstruktor
@@ -74,14 +76,26 @@ class Connection
      * @param string $query SQL-Query
      * @param array $params Parameter für die Query
      * @return PDOStatement
+     * @throws QueryException wenn die Abfrage fehlschlägt
      */
     public function query(string $query, array $params = []): PDOStatement
     {
-        $statement = $this->getPdo()->prepare($query);
-        $statement->execute($params);
+        try {
+            $statement = $this->getPdo()->prepare($query);
+            $statement->execute($params);
 
-        return $statement;
+            return $statement;
+        } catch (PDOException $e) {
+            throw new QueryException(
+                "Fehler bei der Ausführung der SQL-Abfrage: {$e->getMessage()}",
+                (int)$e->getCode(),
+                $e,
+                $query,
+                $params
+            );
+        }
     }
+
 
     /**
      * Gibt die PDO-Instanz zurück oder erstellt eine neue, wenn noch keine existiert
@@ -101,11 +115,18 @@ class Connection
      * Stellt eine Verbindung zur Datenbank her
      *
      * @return void
-     * @throws PDOException wenn die Verbindung nicht hergestellt werden kann
+     * @throws ConnectionException wenn die Verbindung nicht hergestellt werden kann
      */
     private function connect(): void
     {
         $dsn = $this->createDsn();
+        $options = $this->config['options'];
+
+        // Persistente Verbindungen nur aktivieren, wenn explizit konfiguriert
+        if ($this->config['persistent']) {
+            $options[PDO::ATTR_PERSISTENT] = true;
+        }
+
 
         try {
             $this->pdo = new PDO(
@@ -115,13 +136,14 @@ class Connection
                 $this->config['options']
             );
         } catch (PDOException $e) {
-            throw new PDOException(
+            throw new ConnectionException(
                 "Fehler beim Verbinden zur Datenbank: {$e->getMessage()}",
                 (int)$e->getCode(),
                 $e
             );
         }
     }
+
 
     /**
      * Erstellt den DSN für die Verbindung

@@ -594,9 +594,47 @@ class QueryBuilder
      * @param array $data Daten
      * @return int Letzte eingefügte ID
      */
-    public function insert(array $data): int
+    public function insert(string $table, array $data): int
     {
-        return $this->connection->insert($this->from, $data);
+        $columns = array_keys($data);
+        $placeholders = array_map(fn($column) => ":$column", $columns);
+
+        $query = sprintf(
+            'INSERT INTO %s (%s) VALUES (%s)',
+            $this->sanitizeTableName($table),
+            implode(', ', array_map([$this, 'sanitizeColumnName'], $columns)),
+            implode(', ', $placeholders)
+        );
+
+        $this->query($query, $data);
+
+        return (int)$this->getPdo()->lastInsertId();
+    }
+
+    /**
+     * Überprüft und maskiert einen Spaltennamen
+     *
+     * @param string $column Spaltenname
+     * @return string Maskierter Spaltenname
+     */
+    private function sanitizeColumnName(string $column): string
+    {
+        // Validieren des Spaltennamens mit einem strengen Pattern
+        if (!preg_match('/^[a-zA-Z0-9_]+$/', $column)) {
+            throw new \InvalidArgumentException("Ungültiger Spaltenname: '{$column}'");
+        }
+        
+        // Mit Backticks umgeben (MySQL-spezifisch)
+        if ($this->config['driver'] === 'mysql') {
+            return "`{$column}`";
+        }
+        
+        // Für PostgreSQL mit Anführungszeichen umgeben
+        if ($this->config['driver'] === 'pgsql') {
+            return "\"{$column}\"";
+        }
+        
+        return $column;
     }
 
     /**
@@ -900,5 +938,100 @@ class QueryBuilder
         $this->unions[] = $query;
         $this->unionAll[] = true;
         return $this;
+    }
+
+    /**
+     * Überprüft und maskiert einen Tabellennamen
+     *
+     * @param string $table Tabellenname
+     * @return string Maskierter Tabellenname
+     * @throws \InvalidArgumentException wenn der Tabellenname ungültig ist
+     */
+    private function sanitizeTableName(string $table): string
+    {
+        // Validieren des Tabellennamens mit einem strengen Pattern
+        if (!preg_match('/^[a-zA-Z0-9_]+$/', $table)) {
+            throw new \InvalidArgumentException("Ungültiger Tabellenname: '{$table}'");
+        }
+
+        // Mit Backticks umgeben (MySQL-spezifisch)
+        if ($this->config['driver'] === 'mysql') {
+            return "`{$table}`";
+        }
+
+        // Für PostgreSQL mit Anführungszeichen umgeben
+        if ($this->config['driver'] === 'pgsql') {
+            return "\"{$table}\"";
+        }
+
+        return $table;
+    }
+
+    /**
+     * Führt ein UPDATE aus
+     *
+     * @param string $table Tabellenname
+     * @param array $data Daten
+     * @param array $conditions Bedingungen für WHERE-Klausel als Schlüssel-Wert-Paare
+     * @return int Anzahl der geänderten Zeilen
+     */
+    public function updateWhere(string $table, array $data, array $conditions): int
+    {
+        $set = array_map(fn($column) => $this->sanitizeColumnName($column) . " = :set_$column", array_keys($data));
+        
+        // Prepared-Statement-Parameter für SET-Klausel vorbereiten (mit Präfix)
+        $setParams = [];
+        foreach ($data as $key => $value) {
+            $setParams["set_$key"] = $value;
+        }
+        
+        // WHERE-Bedingungen als sichere Prepared-Statement-Parameter
+        $whereClause = [];
+        $whereParams = [];
+        
+        foreach ($conditions as $key => $value) {
+            $whereClause[] = $this->sanitizeColumnName($key) . " = :where_$key";
+            $whereParams["where_$key"] = $value;
+        }
+        
+        $query = sprintf(
+            'UPDATE %s SET %s WHERE %s',
+            $this->sanitizeTableName($table),
+            implode(', ', $set),
+            implode(' AND ', $whereClause)
+        );
+        
+        $statement = $this->query($query, array_merge($setParams, $whereParams));
+        
+        return $statement->rowCount();
+    }
+
+    /**
+     * Führt ein DELETE aus
+     *
+     * @param string $table Tabellenname
+     * @param array $conditions Bedingungen für WHERE-Klausel als Schlüssel-Wert-Paare
+     * @return int Anzahl der gelöschten Zeilen
+     */
+    public function deleteWhere(string $table, array $conditions): int
+    {
+        // WHERE-Bedingungen als sichere Prepared-Statement-Parameter
+        $whereClause = [];
+        $whereParams = [];
+        
+        foreach ($conditions as $key => $value) {
+            $whereClause[] = $this->sanitizeColumnName($key) . " = :where_$key";
+            $whereParams["where_$key"] = $value;
+        }
+        
+        $query = sprintf(
+            'DELETE FROM %s WHERE %s',
+            $this->sanitizeTableName($table),
+            implode(' AND ', $whereClause)
+        );
+        
+        $statement = $this->query($query, $whereParams);
+        
+        return $statement->rowCount();
     }
 }
