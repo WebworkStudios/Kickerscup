@@ -38,7 +38,7 @@ class QueryBuilder
     /**
      * WHERE-Klausel
      */
-    private WhereClause $whereClause;
+    private ?WhereClause $whereClause = null;
 
     /**
      * JOIN-Klausel
@@ -66,6 +66,16 @@ class QueryBuilder
     private LimitOffsetClause $limitOffsetClause;
 
     /**
+     * @var array<QueryBuilder> $unions
+     */
+    private array $unions = [];
+
+    /**
+     * @var array<bool> $unionAll
+     */
+    private array $unionAll = [];
+
+    /**
      * Konstruktor
      *
      * @param Connection $connection Datenbankverbindung
@@ -77,7 +87,6 @@ class QueryBuilder
         $this->from = $table;
 
         // Initialisieren der Klauseln
-        $this->whereClause = new WhereClause();
         $this->joinClause = new JoinClause();
         $this->groupByClause = new GroupByClause();
         $this->havingClause = new HavingClause();
@@ -86,7 +95,20 @@ class QueryBuilder
     }
 
     /**
-     * Setzt die SELECT-Klausel
+     * Gibt die WHERE-Klausel zurück oder erstellt eine neue
+     * 
+     * @return WhereClause
+     */
+    private function getWhereClause(): WhereClause
+    {
+        if ($this->whereClause === null) {
+            $this->whereClause = new WhereClause();
+        }
+        return $this->whereClause;
+    }
+
+    /**
+     * Fügt eine SELECT-Klausel hinzu
      *
      * @param string ...$columns Spalten
      * @return self
@@ -107,7 +129,7 @@ class QueryBuilder
      */
     public function where(string $column, string $operator, mixed $value): self
     {
-        $this->whereClause->where($column, $operator, $value);
+        $this->getWhereClause()->where($column, $operator, $value);
         return $this;
     }
 
@@ -497,6 +519,7 @@ class QueryBuilder
     {
         return array_merge(
             $this->whereClause->getBindings(),
+            $this->joinClause->getBindings(),
             $this->havingClause->getBindings()
         );
     }
@@ -709,9 +732,9 @@ class QueryBuilder
      * Führt die Abfrage aus und gibt den Minimalwert einer Spalte zurück
      *
      * @param string $column Spalte
-     * @return mixed
+     * @return float|int|string|null
      */
-    public function min(string $column): mixed
+    public function min(string $column): float|int|string|null
     {
         $this->select = ["MIN($column) as aggregate"];
 
@@ -724,9 +747,9 @@ class QueryBuilder
      * Führt die Abfrage aus und gibt den Maximalwert einer Spalte zurück
      *
      * @param string $column Spalte
-     * @return mixed
+     * @return float|int|string|null
      */
-    public function max(string $column): mixed
+    public function max(string $column): float|int|string|null
     {
         $this->select = ["MAX($column) as aggregate"];
 
@@ -754,10 +777,9 @@ class QueryBuilder
             $whereSql = $this->whereClause->toSql();
             $bindings = $this->whereClause->getBindings();
 
-            // Hier müssen wir manuell die WHERE-Klausel setzen
-            // Da wir keinen direkten Zugriff auf die private whereClause haben
+            // Parameter-Bindung statt direktes Einsetzen des Spaltennamens
             $result = $this->connection->selectOne(
-                "SELECT $column FROM ({$subQuery->toSql()}) as sub_query LIMIT 1",
+                "SELECT t1.{$column} FROM ({$subQuery->toSql()}) as t1 LIMIT 1",
                 array_merge($bindings, $subQuery->getBindings())
             );
         } else {
@@ -824,5 +846,59 @@ class QueryBuilder
     public function getConnection(): Connection
     {
         return $this->connection;
+    }
+
+    /**
+     * Startet eine gruppierte Bedingung mit WHERE
+     *
+     * @param callable $callback Callback-Funktion
+     * @return self
+     */
+    public function whereGroup(callable $callback): self
+    {
+        $this->whereClause->beginGroup();
+        $callback($this);
+        $this->whereClause->endGroup();
+        return $this;
+    }
+
+    /**
+     * Startet eine gruppierte Bedingung mit OR WHERE
+     *
+     * @param callable $callback Callback-Funktion
+     * @return self
+     */
+    public function orWhereGroup(callable $callback): self
+    {
+        $this->whereClause->beginOrGroup();
+        $callback($this);
+        $this->whereClause->endGroup();
+        return $this;
+    }
+
+    /**
+     * Führt eine UNION durch
+     *
+     * @param QueryBuilder $query
+     * @return self
+     */
+    public function union(QueryBuilder $query): self
+    {
+        $this->unions[] = $query;
+        $this->unionAll[] = false;
+        return $this;
+    }
+
+    /**
+     * Führt eine UNION ALL durch
+     *
+     * @param QueryBuilder $query
+     * @return self
+     */
+    public function unionAll(QueryBuilder $query): self
+    {
+        $this->unions[] = $query;
+        $this->unionAll[] = true;
+        return $this;
     }
 }
