@@ -354,9 +354,11 @@ function csrf_field(): string
 {
     $token = app()->make('App\Core\Security\Csrf')->getToken();
 
+    // Sicherstellen, dass der Token nicht null ist
+    $token = $token ?? '';
+
     return '<input type="hidden" name="csrf_token" value="' . e($token) . '">';
 }
-
 /**
  * Generiert einen CSRF-Token
  *
