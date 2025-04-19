@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace App\Core\Routing;
 
 use App\Core\Http\Request;
+use App\Core\Http\Response;
+use App\Core\Http\ResponseFactory;
 
 /**
- * Router-Klasse für das Routing
- *
- * Verwaltet Routen und löst eingehende Requests auf
+ * Router-Klasse für API-Routing mit Subdomain-Unterstützung
  */
 class Router
 {
@@ -46,35 +46,6 @@ class Router
     public function get(string $uri, \Closure|string|array $action): Route
     {
         return $this->addRoute(['GET', 'HEAD'], $uri, $action);
-    }
-
-    /**
-     * Fügt eine Route hinzu
-     *
-     * @param array $methods HTTP-Methoden
-     * @param string $uri URI der Route
-     * @param \Closure|string|array $action Aktion, die ausgeführt werden soll
-     * @return Route Die erstellte Route
-     */
-    private function addRoute(array $methods, string $uri, \Closure|string|array $action): Route
-    {
-        // Präfix hinzufügen, falls vorhanden
-        if ($this->currentPrefix !== null) {
-            $uri = rtrim($this->currentPrefix, '/') . '/' . ltrim($uri, '/');
-        }
-
-        // Route erstellen
-        $route = new Route($methods, $uri, $action);
-
-        // Domain setzen, falls vorhanden
-        if ($this->currentDomain !== null) {
-            $route->setDomain($this->currentDomain);
-        }
-
-        // Route zur Sammlung hinzufügen
-        $this->routes->add($route);
-
-        return $route;
     }
 
     /**
@@ -126,18 +97,6 @@ class Router
     }
 
     /**
-     * Definiert eine OPTIONS-Route
-     *
-     * @param string $uri URI der Route
-     * @param \Closure|string|array $action Aktion, die ausgeführt werden soll
-     * @return Route Die erstellte Route
-     */
-    public function options(string $uri, \Closure|string|array $action): Route
-    {
-        return $this->addRoute(['OPTIONS'], $uri, $action);
-    }
-
-    /**
      * Definiert eine Route für alle HTTP-Methoden
      *
      * @param string $uri URI der Route
@@ -146,50 +105,67 @@ class Router
      */
     public function any(string $uri, \Closure|string|array $action): Route
     {
-        return $this->addRoute(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], $uri, $action);
+        return $this->addRoute([
+            'GET', 'HEAD', 'POST', 'PUT',
+            'PATCH', 'DELETE', 'OPTIONS'
+        ], $uri, $action);
     }
 
     /**
-     * Definiert eine Route für bestimmte HTTP-Methoden
+     * Fügt eine Route hinzu
      *
      * @param array $methods HTTP-Methoden
      * @param string $uri URI der Route
      * @param \Closure|string|array $action Aktion, die ausgeführt werden soll
      * @return Route Die erstellte Route
      */
-    public function match(array $methods, string $uri, \Closure|string|array $action): Route
+    private function addRoute(array $methods, string $uri, \Closure|string|array $action): Route
     {
-        return $this->addRoute($methods, $uri, $action);
+        // Präfix hinzufügen, falls vorhanden
+        if ($this->currentPrefix !== null) {
+            $uri = rtrim($this->currentPrefix, '/') . '/' . ltrim($uri, '/');
+        }
+
+        // Route erstellen
+        $route = new Route($methods, $uri, $action);
+
+        // Domain setzen, falls vorhanden
+        if ($this->currentDomain !== null) {
+            $route->setDomain($this->currentDomain);
+        }
+
+        // Route zur Sammlung hinzufügen
+        $this->routes->add($route);
+
+        return $route;
     }
 
     /**
      * Setzt die Domain für die nächsten Routen
      *
-     * @param string $domain Domain (z.B. 'api.example.com')
+     * @param string $domain Domain (z.B. 'api.example.com', 'v1.service.com')
      * @return self
      */
     public function domain(string $domain): self
     {
         $this->currentDomain = $domain;
-
         return $this;
     }
 
     /**
      * Setzt den Präfix für die nächsten Routen
      *
-     * @param string $prefix Präfix (z.B. '/admin')
+     * @param string $prefix Präfix (z.B. '/api', '/v1')
      * @return self
      */
     public function prefix(string $prefix): self
     {
         $this->currentPrefix = $prefix;
-
         return $this;
     }
 
     /**
-     * Gruppiert Routen
+     * Gruppiert Routen mit optionaler Domain und Prefix
      *
      * @param \Closure $callback Callback, der weitere Routen definiert
      * @return void
@@ -205,65 +181,58 @@ class Router
         $this->currentPrefix = $previousPrefix;
     }
 
+    /**
+     * Löst eine Route für einen Request auf
+     *
+     * @param Request $request Eingehender Request
+     * @return Route|null Gefundene Route oder null
+     */
     public function resolve(Request $request): ?Route
     {
-        // Request-Methode und -URI abrufen
         $method = $request->getMethod();
-        $uri = $request->getUri();
+        $uri = $this->normalizeUri($request->getUri());
         $host = $request->getHost();
 
-        // Debug-Ausgabe
-        error_log("Method: $method, URI: $uri, Host: $host");
+        // Debug-Logging kann entfernt oder angepasst werden
+        error_log("Resolving route: Method=$method, URI=$uri, Host=$host");
 
-        // URI normalisieren
-        $uri = $this->normalizeUri($uri);
-        error_log("Normalized URI: $uri");
-
-        // Passende Route suchen
         foreach ($this->routes as $route) {
-            error_log("Checking route: " . $route->getUri() . " with methods: " . implode(', ', $route->getMethods()));
-
-            // Prüfen, ob die Methode passt
+            // Methoden prüfen
             if (!in_array($method, $route->getMethods())) {
-                error_log("Method doesn't match");
                 continue;
             }
 
-            // Prüfen, ob die Domain passt (falls vorhanden)
+            // Domain prüfen (wenn definiert)
             $routeDomain = $route->getDomain();
             if ($routeDomain !== null && $routeDomain !== $host) {
-                error_log("Domain doesn't match");
                 continue;
             }
 
-            // Pattern erstellen und prüfen, ob der URI passt
+            // Route-Pattern generieren und prüfen
             $pattern = $this->createRoutePattern($route->getUri());
-            error_log("Pattern: $pattern");
 
             if (preg_match($pattern, $uri, $matches)) {
-                error_log("Pattern matches!");
-                // Benannte Parameter extrahieren
+                // Parameter extrahieren
                 $parameters = $this->extractParameters($route->getUri(), $matches);
-
-                // Parameter zur Route hinzufügen
                 $route->setParameters($parameters);
 
                 return $route;
-            } else {
-                error_log("Pattern doesn't match");
             }
         }
 
-        error_log("No matching route found");
         return null;
     }
 
+    /**
+     * Normalisiert den URI
+     *
+     * @param string $uri Ursprünglicher URI
+     * @return string Normalisierter URI
+     */
     private function normalizeUri(string $uri): string
     {
-        // Query-String entfernen
+        // Query-String entfernen und führenden/abschließenden Slash normalisieren
         $uri = parse_url($uri, PHP_URL_PATH) ?: '/';
-
-        // Führenden und abschließenden Slash hinzufügen
         return '/' . trim($uri, '/');
     }
 
@@ -275,10 +244,8 @@ class Router
      */
     private function createRoutePattern(string $uri): string
     {
-        // Dynamische Platzhalter ersetzen ({id} -> ([^/]+))
+        // Dynamische Platzhalter in Regex-Gruppen umwandeln
         $pattern = preg_replace('/\{([a-zA-Z0-9_]+)\}/', '(?P<$1>[^/]+)', $uri);
-
-        // Pattern zu einer vollständigen Regex machen
         return '#^' . $pattern . '$#';
     }
 
@@ -291,11 +258,9 @@ class Router
      */
     private function extractParameters(string $routeUri, array $matches): array
     {
-        // Parameter aus der Route extrahieren
         preg_match_all('/\{([a-zA-Z0-9_]+)\}/', $routeUri, $parameterNames);
 
         $parameters = [];
-
         foreach ($parameterNames[1] as $name) {
             if (isset($matches[$name])) {
                 $parameters[$name] = $matches[$name];
@@ -313,53 +278,5 @@ class Router
     public function getRoutes(): RouteCollection
     {
         return $this->routes;
-    }
-
-    /**
-     * Generiert eine URL für eine benannte Route
-     *
-     * @param string $name Routenname
-     * @param array $parameters Parameter
-     * @return string URL
-     * @throws \Exception Wenn die Route nicht gefunden wurde
-     */
-    public function generateUrl(string $name, array $parameters = []): string
-    {
-        // Benannte Route suchen
-        $route = $this->findRouteByName($name);
-
-        if ($route === null) {
-            throw new \Exception("Route mit Namen '$name' nicht gefunden");
-        }
-
-        // URL generieren
-        $uri = $route->getUri();
-
-        // Parameter in die URL einsetzen
-        foreach ($parameters as $paramName => $paramValue) {
-            $uri = preg_replace('/\{' . $paramName . '\}/', (string)$paramValue, $uri);
-        }
-
-        // Basis-URL hinzufügen
-        $baseUrl = config('app.url', '');
-
-        // Domain berücksichtigen
-        $domain = $route->getDomain();
-        if ($domain !== null) {
-            return 'http://' . $domain . $uri;
-        }
-
-        return $baseUrl . $uri;
-    }
-
-    /**
-     * Findet eine Route anhand ihres Namens
-     *
-     * @param string $name Routenname
-     * @return Route|null Route oder null, wenn keine gefunden wurde
-     */
-    private function findRouteByName(string $name): ?Route
-    {
-        return $this->routes->findByName($name);
     }
 }

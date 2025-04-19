@@ -5,28 +5,30 @@ declare(strict_types=1);
 namespace App\Core\Http;
 
 /**
- * Response-Klasse
+ * API-Optimierte Response-Klasse
  *
- * Repräsentiert eine HTTP-Response
+ * Fokussiert auf JSON-Responses und API-Kommunikation
  */
 class Response
 {
     /**
      * Konstruktor
      *
-     * @param string $content Response-Body
+     * @param mixed $content Response-Body
      * @param int $statusCode HTTP-Statuscode
      * @param array $headers HTTP-Header
      */
     public function __construct(
-        private string $content = '',
-        private int    $statusCode = 200,
-        private array  $headers = []
+        private mixed $content = '',
+        private int   $statusCode = 200,
+        private array $headers = []
     )
     {
-        // Standard-Header setzen
+        // Standardheader für API-Responses
         $this->headers = array_merge([
-            'Content-Type' => 'text/html; charset=UTF-8'
+            'Content-Type' => 'application/json; charset=UTF-8',
+            'X-Content-Type-Options' => 'nosniff',
+            'X-Frame-Options' => 'DENY'
         ], $this->headers);
     }
 
@@ -35,16 +37,13 @@ class Response
      *
      * @param mixed $data Daten
      * @param int $statusCode HTTP-Statuscode
-     * @param array $headers HTTP-Header
+     * @param array $headers Zusätzliche HTTP-Header
      * @return self
      */
     public static function json(mixed $data, int $statusCode = 200, array $headers = []): self
     {
-        $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-
-        if ($json === false) {
-            throw new \Exception('Fehler beim Konvertieren der Daten zu JSON: ' . json_last_error_msg());
-        }
+        // Verbesserte JSON-Kodierung mit Fehlerbehandlung
+        $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 
         return new self(
             $json,
@@ -56,44 +55,47 @@ class Response
     }
 
     /**
-     * Erstellt eine Redirect-Response
+     * Erstellt eine API-Error-Response
      *
-     * @param string $url URL, zu der weitergeleitet werden soll
-     * @param int $statusCode HTTP-Statuscode (301 oder 302)
-     * @param array $headers HTTP-Header
+     * @param string $message Fehlermeldung
+     * @param int $statusCode HTTP-Statuscode
+     * @param array $details Zusätzliche Fehlerdetails
      * @return self
      */
-    public static function redirect(string $url, int $statusCode = 302, array $headers = []): self
-    {
-        return new self(
-            '',
-            $statusCode,
-            array_merge([
-                'Location' => $url
-            ], $headers)
-        );
+    public static function error(
+        string $message,
+        int $statusCode = 400,
+        array $details = []
+    ): self {
+        $errorResponse = [
+            'error' => true,
+            'message' => $message,
+            'details' => $details,
+            'timestamp' => time()
+        ];
+
+        return self::json($errorResponse, $statusCode);
     }
 
     /**
-     * Gibt den Response-Body zurück
+     * Gibt den Response-Inhalt zurück
      *
-     * @return string Response-Body
+     * @return mixed Response-Body
      */
-    public function getContent(): string
+    public function getContent(): mixed
     {
         return $this->content;
     }
 
     /**
-     * Setzt den Response-Body
+     * Setzt den Response-Inhalt
      *
-     * @param string $content Response-Body
+     * @param mixed $content Response-Body
      * @return self
      */
-    public function setContent(string $content): self
+    public function setContent(mixed $content): self
     {
         $this->content = $content;
-
         return $this;
     }
 
@@ -116,7 +118,6 @@ class Response
     public function setStatusCode(int $statusCode): self
     {
         $this->statusCode = $statusCode;
-
         return $this;
     }
 
@@ -131,11 +132,11 @@ class Response
     }
 
     /**
-     * Gibt einen Header zurück
+     * Gibt einen spezifischen Header zurück
      *
-     * @param string $name Name des Headers
-     * @param mixed $default Standardwert, wenn der Header nicht existiert
-     * @return mixed Wert des Headers oder Standardwert
+     * @param string $name Header-Name
+     * @param mixed $default Standardwert
+     * @return mixed Header-Wert
      */
     public function getHeader(string $name, mixed $default = null): mixed
     {
@@ -145,40 +146,13 @@ class Response
     /**
      * Setzt einen Header
      *
-     * @param string $name Name des Headers
-     * @param string $value Wert des Headers
+     * @param string $name Header-Name
+     * @param string $value Header-Wert
      * @return self
      */
     public function setHeader(string $name, string $value): self
     {
         $this->headers[$name] = $value;
-
-        return $this;
-    }
-
-    /**
-     * Setzt mehrere Header
-     *
-     * @param array $headers Header
-     * @return self
-     */
-    public function setHeaders(array $headers): self
-    {
-        $this->headers = array_merge($this->headers, $headers);
-
-        return $this;
-    }
-
-    /**
-     * Entfernt einen Header
-     *
-     * @param string $name Name des Headers
-     * @return self
-     */
-    public function removeHeader(string $name): self
-    {
-        unset($this->headers[$name]);
-
         return $this;
     }
 
@@ -192,12 +166,12 @@ class Response
         // HTTP-Statuscode setzen
         http_response_code($this->statusCode);
 
-        // Header setzen
+        // Header senden
         foreach ($this->headers as $name => $value) {
-            header($name . ': ' . $value, true);
+            header("$name: $value", true);
         }
 
         // Content senden
-        echo $this->content;
+        echo is_string($this->content) ? $this->content : json_encode($this->content);
     }
 }

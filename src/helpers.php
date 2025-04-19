@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Hilfsfunktionen für das Framework
+ * API-optimierte Hilfsfunktionen für das Framework
  */
 
 use App\Core\Container\Container;
@@ -25,8 +25,8 @@ $container = null;
 function setContainer(Container $container): void
 {
     global $container;
+    $container = $container;
 }
-
 
 /**
  * Holt einen Service aus dem Container
@@ -40,16 +40,11 @@ function app(?string $abstract = null): mixed
     global $container;
 
     if ($container === null) {
-        throw new Exception('Container is not initialized. Make sure setContainer() is called before using app().');
+        throw new Exception('Container is not initialized. Call setContainer() first.');
     }
 
-    if ($abstract === null) {
-        return $container;
-    }
-
-    return $container->make($abstract);
+    return $abstract === null ? $container : $container->make($abstract);
 }
-
 
 /**
  * Holt einen Konfigurationswert
@@ -65,7 +60,6 @@ function config(string $key, mixed $default = null): mixed
     $parts = explode('.', $key);
     $file = array_shift($parts);
 
-    // Konfiguration aus dem Cache laden, wenn vorhanden
     if (!isset($configCache[$file])) {
         $configPath = dirname(__DIR__) . '/config/' . $file . '.php';
 
@@ -111,7 +105,6 @@ function env(string $key, mixed $default = null): mixed
         'empty', '(empty)' => '',
         default => $value,
     };
-
 }
 
 /**
@@ -147,15 +140,13 @@ function base_path(string $path = ''): string
 {
     $basePath = app('base_path');
 
-    if (empty($path)) {
-        return $basePath;
-    }
-
-    return $basePath . '/' . ltrim($path, '/');
+    return empty($path)
+        ? $basePath
+        : $basePath . '/' . ltrim($path, '/');
 }
 
 /**
- * Gibt den Storage-Pfad oder einen Unterpfad zurück
+ * Gibt den Storage-Pfad zurück
  *
  * @param string $path Pfad
  * @return string Vollständiger Pfad
@@ -167,150 +158,45 @@ function storage_path(string $path = ''): string
 }
 
 /**
- * Übersetzt einen Text
+ * Übersetzt einen Text (für API minimiert)
  *
  * @param string $key Schlüssel
  * @param array $replace Zu ersetzende Werte
- * @param string|null $locale Sprache
  * @return string Übersetzter Text
  * @throws Exception
  */
-function trans(string $key, array $replace = [], ?string $locale = null): string
+function trans(string $key, array $replace = []): string
 {
     static $translator = null;
 
     if ($translator === null) {
-        // Translator-Instanz mit Cache laden
-        $cache = null;
-        if (app()->has('App\Core\Cache\Cache')) {
-            $cache = app('App\Core\Cache\Cache');
-        }
+        $cache = app()->has('App\Core\Cache\Cache')
+            ? app('App\Core\Cache\Cache')
+            : null;
 
         $translator = new \App\Core\Translation\Translator(
-            config('app.locale', 'de'),
+            config('app.locale', 'en'),
             config('app.fallback_locale', 'en'),
             $cache
         );
     }
 
-    return $translator->get($key, $replace, $locale);
+    return $translator->get($key, $replace);
 }
 
 /**
- * Übersetzt einen Text mit Pluralisierung
- *
- * @param string $key Schlüssel
- * @param int $number Anzahl für Pluralentscheidung
- * @param array $replace Zu ersetzende Werte
- * @param string|null $locale Sprache
- * @return string Übersetzter Text
- * @throws Exception
- */
-function trans_choice(string $key, int $number, array $replace = [], ?string $locale = null): string
-{
-    static $translator = null;
-
-    if ($translator === null) {
-        $cache = null;
-        if (app()->has('App\Core\Cache\Cache')) {
-            $cache = app('App\Core\Cache\Cache');
-        }
-
-        $translator = new \App\Core\Translation\Translator(
-            config('app.locale', 'de'),
-            config('app.fallback_locale', 'en'),
-            $cache
-        );
-    }
-
-    return $translator->choice($key, $number, $replace, $locale);
-}
-
-/**
- * Generiert eine URL für eine Route
- *
- * @param string $name Routenname
- * @param array $parameters Parameter
- * @return string URL
- * @throws Exception Wenn die Route nicht gefunden wurde
- */
-function route(string $name, array $parameters = []): string
-{
-    $router = app('App\Core\Routing\Router');
-    $routes = $router->getRoutes();
-
-    $route = $routes->findByName($name);
-
-    if ($route === null) {
-        throw new Exception("Route mit dem Namen '$name' wurde nicht gefunden.");
-    }
-
-    $uri = $route->getUri();
-
-    // Parameter in der URI ersetzen
-    foreach ($parameters as $key => $value) {
-        $uri = str_replace("{{$key}}", (string)$value, $uri);
-    }
-
-    // Basis-URL hinzufügen
-    $baseUrl = config('app.url', '');
-
-    // Domain berücksichtigen, falls vorhanden
-    $domain = $route->getDomain();
-    if ($domain !== null) {
-        $baseUrl = preg_replace('/^https?:\/\/[^\/]+/i', "http://$domain", $baseUrl);
-    }
-
-    return rtrim($baseUrl, '/') . '/' . ltrim($uri, '/');
-}
-
-/**
- * Gibt einen formatierten Wert als JSON zurück und beendet die Anwendung
- *
- * @param mixed $value Wert
- * @param int $status HTTP-Statuscode
- * @param array $headers HTTP-Header
- * @return void
- * @throws Exception
- */
-#[NoReturn] function json(mixed $value, int $status = 200, array $headers = []): void
-{
-    $response = response()->json($value, $status, $headers);
-    $response->send();
-    exit;
-}
-
-/**
- * Leitet zu einer URL weiter und beendet die Anwendung
- *
- * @param string $url URL
- * @param int $status HTTP-Statuscode
- * @param array $headers HTTP-Header
- * @return void
- * @throws Exception
- */
-#[NoReturn] function redirect(string $url, int $status = 302, array $headers = []): void
-{
-    $response = response()->redirect($url, $status, $headers);
-    $response->send();
-    exit;
-}
-
-/**
- * Generiert einen CSRF-Token
+ * Generiert einen CSRF-Token für API
  *
  * @return string Token
  * @throws Exception
  */
 function csrf_token(): string
 {
-    return app()->make('App\Core\Security\Csrf')->getToken() ?? '';
+    return app('App\Core\Security\Csrf')->generateApiToken()['token'];
 }
 
 /**
- * Loggt eine Nachricht ins Framework-Logfile
- *
- * Wir verwenden app_log anstelle von log, um Konflikte mit anderen Funktionen zu vermeiden
+ * Loggt eine Nachricht im API-Log
  *
  * @param string $message Nachricht
  * @param array $context Kontext
@@ -320,12 +206,11 @@ function csrf_token(): string
  */
 function app_log(string $message, array $context = [], string $level = 'info'): void
 {
-    // Hier eine einfache Implementierung, später erweitern
     $date = date('Y-m-d H:i:s');
     $contextStr = !empty($context) ? ' ' . json_encode($context) : '';
     $logMessage = "[$date] [$level] $message$contextStr" . PHP_EOL;
 
-    $path = storage_path('logs/app.log');
+    $path = storage_path('logs/api.log');
     $dir = dirname($path);
 
     if (!is_dir($dir)) {
@@ -348,16 +233,17 @@ function value(mixed $value, mixed $default = null): mixed
 }
 
 /**
- * Debug-Funktion
+ * Gibt einen formatierten Wert als JSON zurück und beendet die Anwendung
  *
- * @param mixed ...$values
+ * @param mixed $value Wert
+ * @param int $status HTTP-Statuscode
+ * @param array $headers HTTP-Header
  * @return void
+ * @throws Exception
  */
-#[NoReturn] function dd(mixed ...$values): void
+#[NoReturn] function json(mixed $value, int $status = 200, array $headers = []): void
 {
-    foreach ($values as $value) {
-        var_dump($value);
-    }
-
+    $response = response()->json($value, $status, $headers);
+    $response->send();
     exit;
 }
