@@ -167,41 +167,6 @@ function storage_path(string $path = ''): string
 }
 
 /**
- * Gibt den Ressourcen-Pfad oder einen Unterpfad zurück
- *
- * @param string $path Pfad
- * @return string Vollständiger Pfad
- * @throws Exception
- */
-function resource_path(string $path = ''): string
-{
-    return base_path('resources/' . ltrim($path, '/'));
-}
-
-/**
- * Gibt den Public-Pfad oder einen Unterpfad zurück
- *
- * @param string $path Pfad
- * @return string Vollständiger Pfad
- * @throws Exception
- */
-function public_path(string $path = ''): string
-{
-    return base_path('public/' . ltrim($path, '/'));
-}
-
-/**
- * Gibt einen Asset-Pfad zurück
- *
- * @param string $path Pfad
- * @return string Vollständiger Pfad
- */
-function asset(string $path): string
-{
-    return config('app.url') . '/' . ltrim($path, '/');
-}
-
-/**
  * Übersetzt einen Text
  *
  * @param string $key Schlüssel
@@ -260,19 +225,6 @@ function trans_choice(string $key, int $number, array $replace = [], ?string $lo
 
     return $translator->choice($key, $number, $replace, $locale);
 }
-
-/**
- * Maskiert HTML-Zeichen
- *
- * @param string $value Zu maskierender Text
- * @return string Maskierter Text
- */
-function e(string $value): string
-{
-    return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-}
-
-// src/helpers.php
 
 /**
  * Generiert eine URL für eine Route
@@ -345,22 +297,6 @@ function route(string $name, array $parameters = []): string
 }
 
 /**
- * Generiert eine CSRF-Token-Eingabe
- *
- * @return string HTML-Input
- * @throws Exception
- */
-function csrf_field(): string
-{
-    $token = app()->make('App\Core\Security\Csrf')->getToken();
-
-    // Sicherstellen, dass der Token nicht null ist
-    $token = $token ?? '';
-
-    return '<input type="hidden" name="csrf_token" value="' . e($token) . '">';
-}
-
-/**
  * Generiert einen CSRF-Token
  *
  * @return string Token
@@ -369,17 +305,6 @@ function csrf_field(): string
 function csrf_token(): string
 {
     return app()->make('App\Core\Security\Csrf')->getToken() ?? '';
-}
-
-/**
- * Generiert eine Methoden-Eingabe
- *
- * @param string $method HTTP-Methode
- * @return string HTML-Input
- */
-function method_field(string $method): string
-{
-    return '<input type="hidden" name="_method" value="' . e($method) . '">';
 }
 
 /**

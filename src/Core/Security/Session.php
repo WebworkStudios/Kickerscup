@@ -182,54 +182,6 @@ class Session implements SessionInterface
         return isset($flash[$key]);
     }
 
-    /**
-     * Überprüft, ob der aktuelle Fingerprint mit dem gespeicherten übereinstimmt
-     *
-     * @return bool
-     */
-    public function validateFingerprint(): bool
-    {
-        if (empty($this->config['fingerprinting']['enabled'])) {
-            return true;
-        }
-
-        if (!$this->has('_fingerprint')) {
-            $this->setFingerprint();
-            return true;
-        }
-
-        $data = [
-            'ip' => $_SERVER['REMOTE_ADDR'] ?? '',
-            'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? ''
-        ];
-
-        $additionalData = $this->config['fingerprinting']['additional_data'] ?? [];
-        $data = array_merge($data, $additionalData);
-
-        $currentFingerprint = hash('sha256', json_encode($data));
-
-        return hash_equals($this->get('_fingerprint'), $currentFingerprint);
-    }
-
-    /**
-     * Setzt den Fingerprint für die aktuelle Session
-     */
-    public function setFingerprint(): void
-    {
-        if (empty($this->config['fingerprinting']['enabled'])) {
-            return;
-        }
-
-        $data = [
-            'ip' => $_SERVER['REMOTE_ADDR'] ?? '',
-            'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? ''
-        ];
-
-        $additionalData = $this->config['fingerprinting']['additional_data'] ?? [];
-        $data = array_merge($data, $additionalData);
-
-        $this->set('_fingerprint', hash('sha256', json_encode($data)));
-    }
 
     /**
      * Gibt die Redis-Instanz zurück, falls verfügbar
@@ -270,33 +222,6 @@ class Session implements SessionInterface
         $this->set($rateLimitKey, $attempts);
 
         return false;
-    }
-
-    /**
-     * Rotiert die Session nach erfolgreicher Authentifizierung
-     * Verhindert Session-Fixation-Angriffe
-     *
-     * @param int|string $userId ID des authentifizierten Benutzers
-     * @return void
-     */
-    public function rotateAfterLogin(int|string $userId): void
-    {
-        // Wir sichern die wichtigen Session-Daten
-        $flashData = $this->get($this->config['flash']['key'] ?? '_flash', []);
-
-        // Wir zerstören die alte Session
-        $this->destroy();
-
-        // Wir starten eine neue Session
-        $this->start();
-
-        // Wir setzen den Benutzer und die Flash-Daten
-        $this->set('user_id', $userId);
-        $this->set('authenticated_at', time());
-        $this->set($this->config['flash']['key'] ?? '_flash', $flashData);
-
-        // Fingerprint setzen
-        $this->setFingerprint();
     }
 
     /**

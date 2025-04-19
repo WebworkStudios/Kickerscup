@@ -15,7 +15,7 @@ use App\Core\Security\Security;
 use App\Core\Security\Session;
 
 /**
- * Hauptklasse der Anwendung
+ * Hauptklasse der API-Anwendung
  *
  * Verwaltet Container, Router und Request/Response-Handling
  */
@@ -102,14 +102,6 @@ class Application
             );
         });
 
-
-        // Vor der Cache-Registrierung
-        $cachePath = storage_path('cache');
-        if (!is_dir($cachePath)) {
-            mkdir($cachePath, 0755, true);
-        }
-
-
         // Cache-Service registrieren
         $this->container->bind(\App\Core\Cache\Cache::class, function ($container) {
             $cacheConfig = config('cache.default', 'file');
@@ -121,6 +113,9 @@ class Application
 
             // Fallback auf File-Cache
             $cachePath = storage_path('cache');
+            if (!is_dir($cachePath)) {
+                mkdir($cachePath, 0755, true);
+            }
             return new \App\Core\Cache\FileCache($cachePath);
         });
 
@@ -199,7 +194,10 @@ class Application
                 if (method_exists($controller, '__invoke')) {
                     $action = [$controller, '__invoke'];
                 } else {
-                    return $this->container->make(ResponseFactory::class)->serverError('Controller hat keine __invoke-Methode.');
+                    return $this->container->make(ResponseFactory::class)->serverError([
+                        'error' => 'Controller hat keine __invoke-Methode',
+                        'code' => 'CONTROLLER_INVALID'
+                    ]);
                 }
             }
 
@@ -219,16 +217,26 @@ class Application
             }
 
             // Wenn Action nicht aufrufbar ist, 500 Internal Server Error zurückgeben
-            return $this->container->make(ResponseFactory::class)->serverError('Route-Action ist nicht aufrufbar.');
+            return $this->container->make(ResponseFactory::class)->serverError([
+                'error' => 'Route-Action ist nicht aufrufbar',
+                'code' => 'ACTION_NOT_CALLABLE'
+            ]);
         } catch (\Throwable $e) {
-            // Fehler protokollieren und 500 Internal Server Error zurückgeben
+            // Fehler protokollieren
             app_log($e->getMessage(), [
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
                 'trace' => $e->getTraceAsString()
             ], 'error');
 
-            return $this->container->make(ResponseFactory::class)->serverError();
+            // API-freundliche Fehlerantwort
+            return $this->container->make(ResponseFactory::class)->serverError([
+                'error' => config('app.debug', false)
+                    ? $e->getMessage()
+                    : 'Ein interner Serverfehler ist aufgetreten',
+                'code' => 'SERVER_ERROR',
+                'trace' => config('app.debug', false) ? $e->getTraceAsString() : null
+            ]);
         }
     }
 

@@ -10,32 +10,6 @@ namespace App\Core\Http;
 class ResponseFactory
 {
     /**
-     * Erstellt eine HTML-Response
-     *
-     * @param string $content HTML-Inhalt
-     * @param int $statusCode HTTP-Statuscode
-     * @param array $headers HTTP-Header
-     * @return Response
-     */
-    public function html(string $content, int $statusCode = 200, array $headers = []): Response
-    {
-        return Response::html($content, $statusCode, $headers);
-    }
-
-    /**
-     * Erstellt eine Text-Response
-     *
-     * @param string $content Text-Inhalt
-     * @param int $statusCode HTTP-Statuscode
-     * @param array $headers HTTP-Header
-     * @return Response
-     */
-    public function text(string $content, int $statusCode = 200, array $headers = []): Response
-    {
-        return Response::text($content, $statusCode, $headers);
-    }
-
-    /**
      * Erstellt eine Redirect-Response
      *
      * @param string $url URL, zu der weitergeleitet werden soll

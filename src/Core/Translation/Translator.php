@@ -1,6 +1,5 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Core\Translation;
@@ -8,8 +7,8 @@ namespace App\Core\Translation;
 use App\Core\Cache\Cache;
 
 /**
- * Translator-Klasse für Mehrsprachigkeit
- * Verwaltet Übersetzungen mit Caching für optimale Performance
+ * Translator-Klasse für API-Lokalisierung
+ * Optimiert für JSON-Responses und API-Fehlermeldugen
  */
 class Translator
 {
@@ -17,18 +16,22 @@ class Translator
      * Cache-Schlüssel-Präfix
      */
     private const CACHE_PREFIX = 'translation:';
+
     /**
      * Standard-Locale
      */
     private string $locale;
+
     /**
      * Fallback-Locale
      */
     private string $fallbackLocale;
+
     /**
      * Cache-Instanz
      */
     private ?Cache $cache;
+
     /**
      * Geladene Übersetzungen
      *
@@ -37,20 +40,28 @@ class Translator
     private array $loaded = [];
 
     /**
+     * Basispfad für Übersetzungsdateien
+     */
+    private string $langPath;
+
+    /**
      * Konstruktor
      *
      * @param string $locale Standard-Locale
      * @param string $fallbackLocale Fallback-Locale
      * @param Cache|null $cache Cache-Instanz (für bessere Performance)
+     * @param string|null $langPath Benutzerdefinierter Pfad für Sprachdateien
      */
     public function __construct(
         string $locale = 'de',
         string $fallbackLocale = 'en',
-        ?Cache $cache = null
+        ?Cache $cache = null,
+        ?string $langPath = null
     ) {
         $this->locale = $locale;
         $this->fallbackLocale = $fallbackLocale;
         $this->cache = $cache;
+        $this->langPath = $langPath ?? dirname(__DIR__, 3) . '/resources/lang';
     }
 
     /**
@@ -71,7 +82,8 @@ class Translator
      */
     public function setLocale(string $locale): self
     {
-        return new self($locale, $this->fallbackLocale, $this->cache);
+        $this->locale = $locale;
+        return $this;
     }
 
     /**
@@ -80,7 +92,6 @@ class Translator
      * @param string $key Übersetzungsschlüssel
      * @param string|null $locale Optionale Sprache
      * @return bool True, wenn existiert
-     * @throws \Exception
      */
     public function has(string $key, ?string $locale = null): bool
     {
@@ -109,10 +120,9 @@ class Translator
     /**
      * Lädt Übersetzungen für eine bestimmte Datei und Sprache
      *
-     * @param string $file Dateiname (z.B. 'validation')
+     * @param string $file Dateiname (z.B. 'api')
      * @param string $locale Sprache
      * @return array Übersetzungen
-     * @throws \Exception
      */
     private function loadTranslationsForFile(string $file, string $locale): array
     {
@@ -154,11 +164,10 @@ class Translator
     /**
      * Übersetzt einen Schlüssel
      *
-     * @param string $key Übersetzungsschlüssel (z.B. 'validation.required')
+     * @param string $key Übersetzungsschlüssel (z.B. 'api.validation.required')
      * @param array $replace Zu ersetzende Parameter
      * @param string|null $locale Optionale Sprache für diese Übersetzung
      * @return string Übersetzte Zeichenkette
-     * @throws \Exception
      */
     public function get(string $key, array $replace = [], ?string $locale = null): string
     {
@@ -219,11 +228,10 @@ class Translator
      * @param string $file Dateiname
      * @param string $locale Sprache
      * @return string Pfad
-     * @throws \Exception
      */
     private function getTranslationPath(string $file, string $locale): string
     {
-        return resource_path("lang/$locale/$file.php");
+        return $this->langPath . '/' . $locale . '/' . $file . '.php';
     }
 
     /**
@@ -242,36 +250,70 @@ class Translator
     }
 
     /**
-     * Übersetzt einen Schlüssel mit der Auswahl zwischen Singular und Plural
+     * Gibt alle verfügbaren Übersetzungen für einen bestimmten Schlüssel zurück
+     *
+     * Nützlich für API-Clients, die mehrere Sprachen unterstützen
      *
      * @param string $key Übersetzungsschlüssel
-     * @param int $number Anzahl für Pluralentscheidung
+     * @param array $locales Sprachen (oder alle unterstützten, wenn leer)
      * @param array $replace Zu ersetzende Parameter
-     * @param string|null $locale Optionale Sprache
-     * @return string Übersetzte Zeichenkette
-     * @throws \Exception
+     * @return array<string, string> Übersetzungen nach Sprache
      */
-    public function choice(string $key, int $number, array $replace = [], ?string $locale = null): string
+    public function getAll(string $key, array $locales = [], array $replace = []): array
     {
-        $replace['count'] = $number;
-
-        $line = $this->get($key, $replace, $locale);
-
-        // Einfacher Pluralisierungsmechanismus mit Pipe
-        $segments = explode('|', $line);
-
-        if (count($segments) === 1) {
-            return $line;
+        // Wenn keine Sprachen angegeben, alle verfügbaren verwenden
+        if (empty($locales)) {
+            $locales = $this->getAvailableLocales();
         }
 
-        // Nur zwei Fälle (singular|plural)
-        if (count($segments) === 2) {
-            return $number === 1 ? $segments[0] : $segments[1];
+        $result = [];
+        foreach ($locales as $locale) {
+            $result[$locale] = $this->get($key, $replace, $locale);
         }
 
-        // Komplexere Pluralisierungsregeln könnten hier implementiert werden
-        // Für jetzt nehmen wir an, dass der Index der richtige ist
-        $index = min(abs($number), count($segments) - 1);
-        return $segments[$index];
+        return $result;
+    }
+
+    /**
+     * Gibt alle verfügbaren Sprachen zurück
+     *
+     * @return array Verfügbare Sprachen
+     */
+    public function getAvailableLocales(): array
+    {
+        $locales = [];
+
+        if (is_dir($this->langPath)) {
+            $items = scandir($this->langPath);
+            foreach ($items as $item) {
+                if ($item !== '.' && $item !== '..' && is_dir($this->langPath . '/' . $item)) {
+                    $locales[] = $item;
+                }
+            }
+        }
+
+        return $locales;
+    }
+
+    /**
+     * Setzt den Basispfad für Sprachdateien
+     *
+     * @param string $path Pfad zu den Sprachdateien
+     * @return self
+     */
+    public function setLangPath(string $path): self
+    {
+        $this->langPath = rtrim($path, '/');
+        return $this;
+    }
+
+    /**
+     * Gibt den Basispfad für Sprachdateien zurück
+     *
+     * @return string
+     */
+    public function getLangPath(): string
+    {
+        return $this->langPath;
     }
 }

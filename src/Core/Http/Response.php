@@ -56,44 +56,6 @@ class Response
     }
 
     /**
-     * Erstellt eine HTML-Response
-     *
-     * @param string $content HTML-Inhalt
-     * @param int $statusCode HTTP-Statuscode
-     * @param array $headers HTTP-Header
-     * @return self
-     */
-    public static function html(string $content, int $statusCode = 200, array $headers = []): self
-    {
-        return new self(
-            $content,
-            $statusCode,
-            array_merge([
-                'Content-Type' => 'text/html; charset=UTF-8'
-            ], $headers)
-        );
-    }
-
-    /**
-     * Erstellt eine Text-Response
-     *
-     * @param string $content Text-Inhalt
-     * @param int $statusCode HTTP-Statuscode
-     * @param array $headers HTTP-Header
-     * @return self
-     */
-    public static function text(string $content, int $statusCode = 200, array $headers = []): self
-    {
-        return new self(
-            $content,
-            $statusCode,
-            array_merge([
-                'Content-Type' => 'text/plain; charset=UTF-8'
-            ], $headers)
-        );
-    }
-
-    /**
      * Erstellt eine Redirect-Response
      *
      * @param string $url URL, zu der weitergeleitet werden soll
