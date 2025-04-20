@@ -13,6 +13,8 @@ use App\Core\Middleware\MiddlewareStack;
 use App\Core\Routing\Router;
 use App\Core\Security\Csrf;
 use App\Core\Security\Hash;
+use App\Core\Security\JWT;
+use App\Core\Security\JWTAuth;
 use App\Core\Security\Security;
 use App\Core\Security\Session;
 
@@ -108,6 +110,18 @@ class Application
         $this->container->singleton(Csrf::class, function($container) {
             return new Csrf(
                 $container->make(Session::class)
+            );
+        });
+
+        // JWT-Services registrieren
+        $this->container->singleton(JWT::class);
+
+        $this->container->singleton(JWTAuth::class, function ($container) {
+            return new JWTAuth(
+                $container->make(JWT::class),
+                config('auth.jwt.secret', env('JWT_SECRET', 'your-secret-key')),
+                config('auth.jwt.algorithm', JWT::ALGO_HS256),
+                config('auth.jwt.lifetime', 3600)
             );
         });
 
