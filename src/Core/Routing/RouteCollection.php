@@ -46,13 +46,7 @@ class RouteCollection implements \Iterator, \Countable
      */
     public function findByName(string $name): ?Route
     {
-        foreach ($this->routes as $route) {
-            if ($route->getName() === $name) {
-                return $route;
-            }
-        }
-
-        return null;
+        return array_find($this->routes, fn(Route $route) => $route->getName() === $name);
     }
 
     /**

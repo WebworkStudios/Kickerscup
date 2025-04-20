@@ -396,6 +396,6 @@ class WhereClause
      */
     public function hasConditions(): bool
     {
-        return !empty($this->conditions);
+        return array_any($this->conditions, fn($condition) => true);
     }
 }
