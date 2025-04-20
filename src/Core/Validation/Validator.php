@@ -10,13 +10,8 @@ use App\Core\Translation\Translator;
 /**
  * Validator für Eingabedaten mit PHP 8.4 Features
  */
-readonly class Validator
+class Validator
 {
-    /**
-     * Verfügbare Validierungsregeln
-     */
-    private array $rules;
-
     /**
      * Fehlermeldungen für Validierungsregeln
      */
@@ -29,17 +24,10 @@ readonly class Validator
      * @param DatabaseManager|null $db Datenbankmanager für DB-basierte Validierungen
      */
     public function __construct(
-        private ?Translator      $translator = null,
-        private ?DatabaseManager $db = null
+        private readonly ?Translator      $translator = null,
+        private readonly ?DatabaseManager $db = null
     )
     {
-        $this->rules = [
-            'required', 'string', 'email', 'numeric', 'integer', 'boolean',
-            'min', 'max', 'between', 'in', 'not_in', 'date', 'url',
-            'alpha', 'alpha_num', 'alpha_dash', 'regex', 'unique', 'exists',
-            'enum' // Neue PHP 8.4 Enum-Validierung
-        ];
-
         // Standard-Fehlermeldungen auf Englisch
         // (werden nur verwendet, wenn keine Übersetzungen gefunden werden)
         $this->messages = [
@@ -64,14 +52,16 @@ readonly class Validator
             'exists' => 'The selected :attribute is invalid.',
             'enum' => 'The selected :attribute is not a valid option.'
         ];
+    }
 
-        // Translator erstellen, wenn nicht übergeben
-        if ($this->translator === null) {
-            $this->translator = new Translator(
-                config('app.locale', 'de'),
-                config('app.fallback_locale', 'en')
-            );
-        }
+    /**
+     * Gibt die verfügbaren Validierungsregeln zurück
+     *
+     * @return array Liste der verfügbaren Validierungsregeln
+     */
+    public function getAvailableRules(): array
+    {
+        return array_keys($this->messages);
     }
 
     /**
@@ -110,6 +100,9 @@ readonly class Validator
         $errors = [];
         $validated = [];
 
+        // Translator-Instanz für diese Methode holen
+        $translator = $this->getTranslator();
+
         // Regeln verarbeiten
         foreach ($rules as $field => $fieldRules) {
             // Wenn die Regeln als String übergeben wurden, in ein Array umwandeln
@@ -140,8 +133,8 @@ readonly class Validator
                         // Fehlermeldung bestimmen (Priorität: benutzerdefiniert > übersetzt > Standard)
                         $message = $messages["$field.$ruleName"] ?? $messages[$ruleName] ?? null;
 
-                        if ($message === null && $this->translator->has($translationKey)) {
-                            $message = $this->translator->get($translationKey);
+                        if ($message === null && $translator->has($translationKey)) {
+                            $message = $translator->get($translationKey);
                         } else {
                             $message = $message ?? $this->messages[$ruleName] ?? "Validation failed for $field with rule $ruleName.";
                         }
@@ -163,7 +156,7 @@ readonly class Validator
                             $replace[$paramName] = $parameter;
                         }
 
-                        $message = $this->translator->replaceParameters($message, $replace);
+                        $message = $translator->replaceParameters($message, $replace);
 
                         $errors[$field][] = $message;
                         $isFieldValid = false;
@@ -179,6 +172,24 @@ readonly class Validator
         }
 
         return new ValidationResult($validated, $errors);
+    }
+
+    /**
+     * Liefert die Translator-Instanz oder erstellt eine neue wenn nötig
+     *
+     * @return Translator
+     */
+    private function getTranslator(): Translator
+    {
+        if ($this->translator !== null) {
+            return $this->translator;
+        }
+
+        // Neue Translator-Instanz erstellen, wenn keine vorhanden
+        return new Translator(
+            config('app.locale', 'de'),
+            config('app.fallback_locale', 'en')
+        );
     }
 
     /**
@@ -600,21 +611,37 @@ readonly class Validator
      */
     protected function validateEnum(string $field, mixed $value, array $parameters, array $data): bool
     {
-        if (empty($parameters) || !class_exists($parameters[0]) || !enum_exists($parameters[0])) {
+        if (empty($parameters)) {
             return false;
         }
 
         $enumClass = $parameters[0];
 
+        // Prüfen, ob die Klasse existiert und ein Enum ist
+        if (!class_exists($enumClass)) {
+            return false;
+        }
+
+        // Reflektieren der Klasse, um zu prüfen, ob es ein Enum ist
+        $reflector = new \ReflectionClass($enumClass);
+        if (!$reflector->isEnum()) {
+            return false;
+        }
+
         // Für backed Enums
-        if (method_exists($enumClass, 'tryFrom')) {
+        if ($reflector->hasMethod('tryFrom')) {
             return $enumClass::tryFrom($value) !== null;
         }
 
         // Für reguläre Enums
         try {
             $cases = $enumClass::cases();
-            return array_any($cases, fn($case) => $case->name === $value);
+            foreach ($cases as $case) {
+                if ($case->name === $value) {
+                    return true;
+                }
+            }
+            return false;
         } catch (\Throwable $e) {
             return false;
         }
