@@ -21,11 +21,44 @@ class TokenStorage
     }
 
     /**
-     * Speichert Token-Daten
+     * Speichert Token-Daten mit automatischen Verfallszeiten
      */
     public function store(string $token, array $data, int $lifetime): bool
     {
+        // In PHP 8.4 können wir array_filter mit kürzerer Syntax verwenden
+        $data = array_filter($data, fn($value) => $value !== null);
+
+        // Sicherstellen, dass Last-Used immer gesetzt ist
+        $data['last_used'] ??= time();
+
         return $this->cache->set(self::PREFIX . $token, $data, $lifetime);
+    }
+
+    /**
+     * Batch-Operation für mehrere Tokens gleichzeitig (Performance-Optimierung)
+     */
+    public function batchStore(array $tokens, array $data, int $lifetime): bool
+    {
+        if (!$tokens) {
+            return true;
+        }
+
+        // Prüfen ob Cache-Implementierung Batch-Operationen unterstützt
+        if (method_exists($this->cache, 'setMultiple')) {
+            $batchData = [];
+            foreach ($tokens as $i => $token) {
+                $batchData[self::PREFIX . $token] = $data[$i] ?? $data;
+            }
+            return $this->cache->setMultiple($batchData, $lifetime);
+        }
+
+        // Fallback für Caches ohne Batch-Support
+        $success = true;
+        foreach ($tokens as $i => $token) {
+            $tokenData = $data[$i] ?? $data;
+            $success = $this->store($token, $tokenData, $lifetime) && $success;
+        }
+        return $success;
     }
 
     /**

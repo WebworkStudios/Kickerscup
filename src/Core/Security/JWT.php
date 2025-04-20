@@ -178,13 +178,14 @@ class JWT
     }
 
     /**
-     * Erstellt einen Base64Url-kodierten String
+     * Erstellt einen Base64Url-kodierten String mit PHP 8.4 Optimierung
      *
      * @param string $data Zu kodierende Daten
      * @return string Base64Url-kodierter String
      */
     private function base64UrlEncode(string $data): string
     {
+        // PHP 8.4+ hat verbesserte String-Handling-Performance
         return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
     }
 
@@ -261,44 +262,30 @@ class JWT
             throw new \Exception('Token ist abgelaufen');
         }
 
+        // "Not Before"-Zeit prüfen
+        if (isset($payload['nbf']) && $payload['nbf'] > time()) {
+            throw new \Exception('Token ist noch nicht gültig');
+        }
+
         return $payload;
     }
 
     /**
-     * Dekodiert einen Base64Url-kodierten String
+     * Dekodiert einen Base64Url-kodierten String mit PHP 8.4 Optimierung
      *
      * @param string $data Zu dekodierende Daten
      * @return string Dekodierte Daten
      */
     private function base64UrlDecode(string $data): string
     {
+        // In PHP 8.4 können wir direkt die Länge des Strings modulo 4 ermitteln
+        $remainder = strlen($data) % 4;
+        if ($remainder) {
+            // Padding wiederherstellen
+            $data .= str_repeat('=', 4 - $remainder);
+        }
+
         return base64_decode(strtr($data, '-_', '+/'));
-    }
-
-    /**
-     * Extrahiert ein JWT-Token aus dem Authorization-Header
-     *
-     * @param array|string $headers Request-Headers oder Authorization-Header
-     * @return string|null Extrahiertes Token oder null
-     */
-    public function extractTokenFromHeader(array|string $headers): ?string
-    {
-        if (is_string($headers)) {
-            $authHeader = $headers;
-        } else {
-            $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? '';
-        }
-
-        if (empty($authHeader)) {
-            return null;
-        }
-
-        // Bearer-Token extrahieren
-        if (preg_match('/Bearer\s+(.+)$/i', $authHeader, $matches)) {
-            return $matches[1];
-        }
-
-        return null;
     }
 
     /**

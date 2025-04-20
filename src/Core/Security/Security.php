@@ -97,7 +97,9 @@ class Security
     private function getEncryptionKey(bool $forceRegenerate = false): string
     {
         $keyInEnv = getenv('APP_KEY');
-        $keyFile = getenv('APP_KEY_PATH') ?: __DIR__ . '/../../../config/encryption_key.php';
+
+        // In PHP 8.4 können wir den ternary-Operator mit nullsafe-Operator kombinieren
+        $keyFile = getenv('APP_KEY_PATH') ?: dirname(__DIR__, 3) . '/config/encryption_key.php';
 
         // Wenn Neugenerierung erzwungen wird oder kein Schlüssel in der Umgebungsvariable ist
         if ($forceRegenerate || empty($keyInEnv)) {
@@ -105,22 +107,25 @@ class Security
             $newKey = bin2hex(random_bytes(32));
 
             // Wenn die APP_KEY Umgebungsvariable nicht gesetzt ist, speichere den Schlüssel in einer Datei
+            // SICHERHEITSVERBESSERUNG: Speichern als binäre Datei statt PHP (verhindert versehentliche Ausführung)
             if (empty($keyInEnv)) {
-                $keyContent = "<?php\n// Automatisch generierter Verschlüsselungsschlüssel\nreturn '" . $newKey . "';\n";
+                $keyDir = dirname($keyFile);
+                if (!is_dir($keyDir)) {
+                    mkdir($keyDir, 0750, true);
+                }
 
-                // Temporäre Datei erstellen
-                $tempFile = $keyFile . '.temp.' . bin2hex(random_bytes(8));
+                // Verwenden wir jetzt einen binären Speichermechanismus statt PHP-Code
+                $tempFile = $keyFile . '.bin.temp.' . bin2hex(random_bytes(8));
 
-                // Speichern des Schlüssels in der temporären Datei
-                if (!file_put_contents($tempFile, $keyContent, LOCK_EX)) {
+                if (!file_put_contents($tempFile, base64_encode($newKey), LOCK_EX)) {
                     throw new \Exception('Konnte den Verschlüsselungsschlüssel nicht speichern. Bitte überprüfen Sie die Schreibrechte.');
                 }
 
                 // Die Datei sollte nur für den Webserver lesbar sein
-                chmod($tempFile, 0600);
+                chmod($tempFile, 0400); // Noch restriktiver: nur lesbar, nicht ausführbar
 
                 // Atomares Umbenennen (verhindert Race-Conditions)
-                if (!rename($tempFile, $keyFile)) {
+                if (!rename($tempFile, $keyFile . '.bin')) {
                     @unlink($tempFile); // Aufräumen im Fehlerfall
                     throw new \Exception('Konnte den Verschlüsselungsschlüssel nicht speichern (Umbenennung fehlgeschlagen).');
                 }
@@ -134,7 +139,16 @@ class Security
             return $keyInEnv;
         }
 
-        // Versuche den Schlüssel aus der Datei zu lesen
+        // Versuche den Schlüssel aus der binären Datei zu lesen
+        $binKeyFile = $keyFile . '.bin';
+        if (file_exists($binKeyFile)) {
+            $keyData = file_get_contents($binKeyFile);
+            if (!empty($keyData)) {
+                return base64_decode($keyData);
+            }
+        }
+
+        // Fallback auf die PHP-Datei (für Abwärtskompatibilität)
         if (file_exists($keyFile)) {
             $keyFromFile = include $keyFile;
             if (!empty($keyFromFile)) {

@@ -202,6 +202,7 @@ class Hash
      * @param string $data Die zu hashenden Daten
      * @param string $algo Algorithmus (xxh3, xxh64, xxh128)
      * @return string Hash-Wert
+     * @throws \Exception
      */
     public function fastHash(string $data, string $algo = 'xxh3'): string
     {
@@ -213,8 +214,18 @@ class Hash
             );
         }
 
+        // Prüfen, ob der Algorithmus verfügbar ist
         if (!in_array($algo, hash_algos(), true)) {
-            throw new \RuntimeException("xxHash-Algorithmus $algo ist nicht verfügbar");
+            // Fallback auf einen verfügbaren Algorithmus
+            foreach ($validAlgos as $fallbackAlgo) {
+                if (in_array($fallbackAlgo, hash_algos(), true)) {
+                    app_log("xxHash-Algorithmus $algo nicht verfügbar, Fallback auf $fallbackAlgo", [], 'warning');
+                    return hash($fallbackAlgo, $data);
+                }
+            }
+            // Wenn kein xxHash verfügbar ist, Fallback auf SHA-256
+            app_log("Keine xxHash-Algorithmen verfügbar, Fallback auf sha256", [], 'warning');
+            return hash('sha256', $data);
         }
 
         return hash($algo, $data);
