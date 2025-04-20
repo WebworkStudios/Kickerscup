@@ -146,7 +146,7 @@ class Validator
                             $replace[$i] = $parameter;
 
                             // Benannte Parameter ersetzen
-                            $paramName = match($i) {
+                            $paramName = match ($i) {
                                 0 => 'min',
                                 1 => 'max',
                                 2 => 'value',

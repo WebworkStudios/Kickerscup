@@ -151,14 +151,25 @@ class ResourceFactory
 
         return [
             'data' => $data,
-            'meta' => [
-                'total' => $paginator->getTotal(),
-                'per_page' => $paginator->getPerPage(),
-                'current_page' => $paginator->getCurrentPage(),
-                'last_page' => $paginator->getLastPage(),
-                'next_page_url' => $paginator->getNextPageUrl(),
-                'previous_page_url' => $paginator->getPreviousPageUrl()
-            ]
+            'meta' => $this->extractPaginatorMeta($paginator)
+        ];
+    }
+
+    /**
+     * Extrahiert Meta-Informationen aus einem Paginator
+     *
+     * @param Paginator $paginator Der Paginator
+     * @return array Die Meta-Informationen
+     */
+    private function extractPaginatorMeta(Paginator $paginator): array
+    {
+        return [
+            'total' => $paginator->getTotal(),
+            'per_page' => $paginator->getPerPage(),
+            'current_page' => $paginator->getCurrentPage(),
+            'last_page' => $paginator->getLastPage(),
+            'next_page_url' => $paginator->getNextPageUrl(),
+            'previous_page_url' => $paginator->getPreviousPageUrl()
         ];
     }
 
@@ -196,40 +207,40 @@ class ResourceFactory
                 $relation = $relationResourceClass;
             }
 
-            // Prüfen, ob die Relation als Methode oder Eigenschaft existiert
-            $relationData = null;
-            if (is_object($model)) {
-                if (method_exists($model, $relation)) {
-                    $relationData = $model->$relation();
-                } elseif (property_exists($model, $relation) || isset($model->$relation)) {
-                    $relationData = $model->$relation;
-                } elseif (method_exists($model, 'get' . ucfirst($relation))) {
-                    $method = 'get' . ucfirst($relation);
-                    $relationData = $model->$method();
-                }
-            } elseif (is_array($model) && array_key_exists($relation, $model)) {
-                $relationData = $model[$relation];
-            }
+            // Extrahiere relationData in eine separate Methode
+            $relationData = $this->extractRelationData($model, $relation);
 
             // Transformieren, wenn Daten vorhanden sind
-            if ($relationData !== null) {
-                if (is_array($relationData) && !array_is_list($relationData)) {
-                    // Einzelne Beziehung
-                    $result[$relation] = $this->make($relationData, $relationResourceClass);
-                } elseif (is_array($relationData)) {
-                    // Collection von Beziehungen
-                    $result[$relation] = $this->collection($relationData, $relationResourceClass);
-                } else {
-                    // Einzelne Beziehung (Objekt)
-                    $result[$relation] = $this->make($relationData, $relationResourceClass);
-                }
-            } else {
-                // Leeres Array setzen, wenn keine Daten vorhanden sind
-                $result[$relation] = [];
-            }
+            $result[$relation] = match (true) {
+                $relationData === null => [],
+                is_array($relationData) && !array_is_list($relationData) => $this->make($relationData, $relationResourceClass),
+                is_array($relationData) => $this->collection($relationData, $relationResourceClass),
+                default => $this->make($relationData, $relationResourceClass)
+            };
         }
 
         return $result;
+    }
+
+    /**
+     * Extrahiert Beziehungsdaten aus einem Modell
+     *
+     * @param mixed $model Das Modell
+     * @param string $relation Die Beziehung
+     * @return mixed Die extrahierten Daten oder null
+     */
+    private function extractRelationData(mixed $model, string $relation): mixed
+    {
+        if (is_object($model)) {
+            return match (true) {
+                method_exists($model, $relation) => $model->$relation(),
+                property_exists($model, $relation) || isset($model->$relation) => $model->$relation,
+                method_exists($model, 'get' . ucfirst($relation)) => $model->{'get' . ucfirst($relation)}(),
+                default => null
+            };
+        }
+
+        return is_array($model) && array_key_exists($relation, $model) ? $model[$relation] : null;
     }
 
     /**
@@ -251,14 +262,7 @@ class ResourceFactory
 
         return [
             'data' => $data,
-            'meta' => [
-                'total' => $paginator->getTotal(),
-                'per_page' => $paginator->getPerPage(),
-                'current_page' => $paginator->getCurrentPage(),
-                'last_page' => $paginator->getLastPage(),
-                'next_page_url' => $paginator->getNextPageUrl(),
-                'previous_page_url' => $paginator->getPreviousPageUrl()
-            ]
+            'meta' => $this->extractPaginatorMeta($paginator)
         ];
     }
 
@@ -295,19 +299,14 @@ class ResourceFactory
      */
     private function resolveResource(string $resourceClass): Resource
     {
-        // Versuchen, die Ressource über den Container zu erstellen, falls vorhanden
         try {
             $container = app();
-            if ($container->has($resourceClass)) {
-                $resource = $container->make($resourceClass);
-                if ($resource instanceof Resource) {
-                    return $resource;
-                }
-            }
-        } catch (\Throwable $e) {
-            // Fallback zur direkten Instanziierung, wenn Container nicht verfügbar ist
+            return $container->has($resourceClass) && $container->make($resourceClass) instanceof Resource
+                ? $container->make($resourceClass)
+                : $this->createResource($resourceClass);
+        } catch (\Throwable) {
+            // Fallback bei Container-Problemen
+            return $this->createResource($resourceClass);
         }
-
-        return $this->createResource($resourceClass);
     }
 }

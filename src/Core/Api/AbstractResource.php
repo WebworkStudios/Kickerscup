@@ -34,10 +34,8 @@ abstract class AbstractResource implements Resource
     {
         $resource = new static();
 
-        return array_map(
-            fn($model) => $resource->toArray($model),
-            $models
-        );
+        // Korrekte Reihenfolge: zuerst die Callback-Funktion, dann das Array
+        return array_map(fn($model) => $resource->toArray($model), $models);
     }
 
     /**
@@ -95,11 +93,11 @@ abstract class AbstractResource implements Resource
             return null;
         }
 
-        if (is_string($resource)) {
-            $resource = new $resource();
-        }
-
-        return $resource->toArray($model);
+        // PHP 8.4: Wir könnten `match` für bessere Lesbarkeit verwenden
+        return match (true) {
+            is_string($resource) => (new $resource())->toArray($model),
+            default => $resource->toArray($model)
+        };
     }
 
     /**
@@ -123,5 +121,30 @@ abstract class AbstractResource implements Resource
             fn($model) => $resource->toArray($model),
             $models
         );
+    }
+
+    /**
+     * Fügt Felder bedingt zu einer Ressource hinzu
+     *
+     * @param bool $condition Bedingung
+     * @param callable $callback Callback, der die Felder erzeugt
+     * @return array Bedingte Felder oder leeres Array
+     */
+    protected function whenCondition(bool $condition, callable $callback): array
+    {
+        return $condition ? $callback() : [];
+    }
+
+    /**
+     * Fügt ein Feld bedingt zu einer Ressource hinzu
+     *
+     * @param bool $condition Bedingung
+     * @param mixed $value Feldwert
+     * @param mixed $default Standardwert
+     * @return mixed Feldwert oder Standardwert
+     */
+    protected function whenField(bool $condition, mixed $value, mixed $default = null): mixed
+    {
+        return $condition ? $value : $default;
     }
 }

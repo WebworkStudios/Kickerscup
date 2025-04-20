@@ -316,8 +316,7 @@ class JWT
         // Wenn ein String übergeben wird, handelt es sich um den direkten Authorization-Header
         if (is_string($headers)) {
             $authHeader = $headers;
-        }
-        // Ansonsten aus dem Headers-Array extrahieren
+        } // Ansonsten aus dem Headers-Array extrahieren
         else {
             // Normalisiere die Header-Keys für Fallunabhängigkeit
             $normalized = [];

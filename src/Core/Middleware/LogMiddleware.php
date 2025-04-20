@@ -86,6 +86,7 @@ class LogMiddleware implements Middleware
 
         return $response;
     }
+
     /**
      * Protokolliert einen eingehenden Request
      *

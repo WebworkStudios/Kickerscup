@@ -54,7 +54,8 @@ class Application
      */
     public function __construct(
         private readonly string $basePath
-    ) {
+    )
+    {
         // Container initialisieren
         $this->container = new Container();
 

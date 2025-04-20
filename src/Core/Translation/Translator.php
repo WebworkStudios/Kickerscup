@@ -109,27 +109,6 @@ class Translator
     }
 
     /**
-     * Prüft, ob ein verschachtelter Schlüssel in einem Array existiert
-     *
-     * @param array $array Array, in dem gesucht werden soll
-     * @param array $keys Schlüssel-Pfad als Array
-     * @return bool True, wenn der Schlüssel existiert
-     */
-    private function hasNestedKey(array $array, array $keys): bool
-    {
-        $current = $array;
-
-        foreach ($keys as $key) {
-            if (!is_array($current) || !isset($current[$key])) {
-                return false;
-            }
-            $current = $current[$key];
-        }
-
-        return is_string($current);
-    }
-
-    /**
      * Lädt Übersetzungen für eine bestimmte Datei und Sprache
      *
      * @param string $file Dateiname (z.B. 'api')
@@ -287,6 +266,27 @@ class Translator
     }
 
     /**
+     * Prüft, ob ein verschachtelter Schlüssel in einem Array existiert
+     *
+     * @param array $array Array, in dem gesucht werden soll
+     * @param array $keys Schlüssel-Pfad als Array
+     * @return bool True, wenn der Schlüssel existiert
+     */
+    private function hasNestedKey(array $array, array $keys): bool
+    {
+        $current = $array;
+
+        foreach ($keys as $key) {
+            if (!is_array($current) || !isset($current[$key])) {
+                return false;
+            }
+            $current = $current[$key];
+        }
+
+        return is_string($current);
+    }
+
+    /**
      * Gibt alle verfügbaren Übersetzungen für einen bestimmten Schlüssel zurück
      *
      * Nützlich für API-Clients, die mehrere Sprachen unterstützen
@@ -332,19 +332,6 @@ class Translator
     }
 
     /**
-     * Exportiert Übersetzungen für Frontend-Clients als JSON
-     *
-     * @param string $file Dateiname (z.B. 'api', 'frontend', etc.)
-     * @param string|null $locale Optionale Sprache (Standard: aktuelle Sprache)
-     * @return array Übersetzungen als assoziatives Array für JSON-Ausgabe
-     */
-    public function forFrontend(string $file, ?string $locale = null): array
-    {
-        $locale = $locale ?? $this->locale;
-        return $this->loadTranslationsForFile($file, $locale);
-    }
-
-    /**
      * Exportiert alle Übersetzungen eines bestimmten Files für mehrere Sprachen
      * Ideal für mehrsprachige SPAs und mobile Apps
      *
@@ -364,6 +351,19 @@ class Translator
         }
 
         return $result;
+    }
+
+    /**
+     * Exportiert Übersetzungen für Frontend-Clients als JSON
+     *
+     * @param string $file Dateiname (z.B. 'api', 'frontend', etc.)
+     * @param string|null $locale Optionale Sprache (Standard: aktuelle Sprache)
+     * @return array Übersetzungen als assoziatives Array für JSON-Ausgabe
+     */
+    public function forFrontend(string $file, ?string $locale = null): array
+    {
+        $locale = $locale ?? $this->locale;
+        return $this->loadTranslationsForFile($file, $locale);
     }
 
     /**

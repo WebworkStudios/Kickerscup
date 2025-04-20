@@ -27,6 +27,7 @@ function setContainer(Container $container): void
     global $container;
     $GLOBALS['container'] = $container;
 }
+
 /**
  * Holt einen Service aus dem Container
  *
