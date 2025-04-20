@@ -8,6 +8,8 @@ use App\Core\Container\Container;
 use App\Core\Http\Request;
 use App\Core\Http\Response;
 use App\Core\Http\ResponseFactory;
+use App\Core\Middleware\Middleware;
+use App\Core\Middleware\MiddlewareStack;
 use App\Core\Routing\Router;
 use App\Core\Security\Csrf;
 use App\Core\Security\Hash;
@@ -32,6 +34,11 @@ class Application
     private Router $router;
 
     /**
+     * @var MiddlewareStack
+     */
+    private MiddlewareStack $middlewareStack;
+
+    /**
      * Konstruktor
      *
      * @param string $basePath Basis-Pfad der Anwendung
@@ -52,6 +59,8 @@ class Application
 
         // Router initialisieren
         $this->router = $this->container->make(Router::class);
+
+        $this->middlewareStack = new MiddlewareStack();
 
         // Kern-Services registrieren
         $this->registerCoreServices();
@@ -163,81 +172,99 @@ class Application
     }
 
     /**
+     * Fügt eine Middleware zur Anwendung hinzu
+     *
+     * @param Middleware $middleware Die hinzuzufügende Middleware
+     * @return self
+     */
+    public function addMiddleware(Middleware $middleware): self
+    {
+        $this->middlewareStack->add($middleware);
+        return $this;
+    }
+
+    /**
+     * Verarbeitet den Request und gibt eine Response zurück
+     */
+    /**
      * Verarbeitet den Request und gibt eine Response zurück
      */
     public function handle(Request $request): Response
     {
-        try {
-            // Request im Container registrieren
-            $this->container->singleton(Request::class, fn() => $request);
+        // Request im Container registrieren
+        $this->container->singleton(Request::class, fn() => $request);
 
-            // Route finden
-            $route = $this->router->resolve($request);
+        // Middleware-Handler mit der Core-Anwendungslogik als innersten Handler
+        return $this->middlewareStack->process($request, function (Request $request) {
+            try {
+                // Route finden
+                $route = $this->router->resolve($request);
 
-            if ($route === null) {
-                return $this->container->make(ResponseFactory::class)->notFound();
-            }
-
-            // Action auflösen
-            $action = $route->getAction();
-
-            // Wenn Action ein Array ist [Controller::class, 'method']
-            if (is_array($action) && count($action) === 2 && is_string($action[0]) && is_string($action[1])) {
-                $controller = $this->container->make($action[0]);
-                $action = [$controller, $action[1]];
-            }
-
-            // Wenn Action ein Classname ist, instanziieren und invoke-Methode aufrufen
-            if (is_string($action) && class_exists($action)) {
-                $controller = $this->container->make($action);
-
-                if (method_exists($controller, '__invoke')) {
-                    $action = [$controller, '__invoke'];
-                } else {
-                    return $this->container->make(ResponseFactory::class)->serverError([
-                        'error' => 'Controller hat keine __invoke-Methode',
-                        'code' => 'CONTROLLER_INVALID'
-                    ]);
-                }
-            }
-
-            // Parameter vorbereiten
-            $parameters = array_merge([$request], $route->getParameters());
-
-            // Action ausführen
-            if (is_callable($action)) {
-                $response = $action(...$parameters);
-
-                // Wenn keine Response zurückgegeben wurde, 204 No Content zurückgeben
-                if (!$response instanceof Response) {
-                    return $this->container->make(ResponseFactory::class)->noContent();
+                if ($route === null) {
+                    return $this->container->make(ResponseFactory::class)->notFound();
                 }
 
-                return $response;
+                // Action auflösen
+                $action = $route->getAction();
+
+                // Wenn Action ein Array ist [Controller::class, 'method']
+                if (is_array($action) && count($action) === 2 && is_string($action[0]) && is_string($action[1])) {
+                    $controller = $this->container->make($action[0]);
+                    $action = [$controller, $action[1]];
+                }
+
+                // Wenn Action ein Classname ist, instanziieren und invoke-Methode aufrufen
+                if (is_string($action) && class_exists($action)) {
+                    $controller = $this->container->make($action);
+
+                    if (method_exists($controller, '__invoke')) {
+                        $action = [$controller, '__invoke'];
+                    } else {
+                        return $this->container->make(ResponseFactory::class)->serverError([
+                            'error' => 'Controller hat keine __invoke-Methode',
+                            'code' => 'CONTROLLER_INVALID'
+                        ]);
+                    }
+                }
+
+                // Parameter vorbereiten
+                $parameters = array_merge([$request], $route->getParameters());
+
+                // Action ausführen
+                if (is_callable($action)) {
+                    $response = $action(...$parameters);
+
+                    // Wenn keine Response zurückgegeben wurde, 204 No Content zurückgeben
+                    if (!$response instanceof Response) {
+                        return $this->container->make(ResponseFactory::class)->noContent();
+                    }
+
+                    return $response;
+                }
+
+                // Wenn Action nicht aufrufbar ist, 500 Internal Server Error zurückgeben
+                return $this->container->make(ResponseFactory::class)->serverError([
+                    'error' => 'Route-Action ist nicht aufrufbar',
+                    'code' => 'ACTION_NOT_CALLABLE'
+                ]);
+            } catch (\Throwable $e) {
+                // Fehler protokollieren
+                app_log($e->getMessage(), [
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                    'trace' => $e->getTraceAsString()
+                ], 'error');
+
+                // API-freundliche Fehlerantwort
+                return $this->container->make(ResponseFactory::class)->serverError([
+                    'error' => config('app.debug', false)
+                        ? $e->getMessage()
+                        : 'Ein interner Serverfehler ist aufgetreten',
+                    'code' => 'SERVER_ERROR',
+                    'trace' => config('app.debug', false) ? $e->getTraceAsString() : null
+                ]);
             }
-
-            // Wenn Action nicht aufrufbar ist, 500 Internal Server Error zurückgeben
-            return $this->container->make(ResponseFactory::class)->serverError([
-                'error' => 'Route-Action ist nicht aufrufbar',
-                'code' => 'ACTION_NOT_CALLABLE'
-            ]);
-        } catch (\Throwable $e) {
-            // Fehler protokollieren
-            app_log($e->getMessage(), [
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'trace' => $e->getTraceAsString()
-            ], 'error');
-
-            // API-freundliche Fehlerantwort
-            return $this->container->make(ResponseFactory::class)->serverError([
-                'error' => config('app.debug', false)
-                    ? $e->getMessage()
-                    : 'Ein interner Serverfehler ist aufgetreten',
-                'code' => 'SERVER_ERROR',
-                'trace' => config('app.debug', false) ? $e->getTraceAsString() : null
-            ]);
-        }
+        });
     }
 
     /**

@@ -121,13 +121,19 @@ class Csrf
     /**
      * Validiert ein API-Token aus dem Authorization-Header
      *
-     * @param array $headers Request-Headers
+     * @param array|string $headers Request-Headers als Array oder Authorization-Header-String
      * @param string|null $requiredScope Optionaler erforderlicher Bereich
      * @return bool True, wenn das Token gültig ist
      */
-    public function validateTokenFromHeaders(array $headers, ?string $requiredScope = null): bool
+    public function validateTokenFromHeaders(array|string $headers, ?string $requiredScope = null): bool
     {
-        $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? '';
+        if (is_string($headers)) {
+            // String-Fall: Direkter Authorization-Header wurde übergeben
+            $authHeader = $headers;
+        } else {
+            // Array-Fall: Headers-Array wurde übergeben
+            $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? '';
+        }
 
         if (empty($authHeader)) {
             return false;
@@ -139,10 +145,12 @@ class Csrf
         }
 
         // X-API-Token-Header prüfen als Fallback
-        $tokenHeader = $headers['X-API-Token'] ?? $headers['x-api-token'] ?? null;
+        if (is_array($headers)) {
+            $tokenHeader = $headers['X-API-Token'] ?? $headers['x-api-token'] ?? null;
 
-        if ($tokenHeader) {
-            return $this->validateApiToken($tokenHeader, $requiredScope);
+            if ($tokenHeader) {
+                return $this->validateApiToken($tokenHeader, $requiredScope);
+            }
         }
 
         return false;
