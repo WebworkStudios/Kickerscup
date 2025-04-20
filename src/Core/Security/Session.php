@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Core\Security;
 
-use Redis;
 use Exception;
+use Redis;
 
 /**
  * API-optimierte Session-Klasse
@@ -83,6 +83,33 @@ class Session implements SessionInterface
     }
 
     /**
+     * Generiert eine neue Session-ID
+     */
+    public function regenerate(bool $deleteOldSession = true): void
+    {
+        if ($this->sessionId === null) {
+            $this->start();
+            return;
+        }
+
+        $oldId = $this->sessionId;
+        $oldData = $this->data;
+
+        // Neue ID generieren
+        $this->sessionId = $this->generateSessionId();
+
+        if ($deleteOldSession) {
+            $this->deleteSession($oldId);
+        }
+
+        // Daten mit neuer ID speichern
+        $this->saveSessionData();
+
+        // Session-Cookie aktualisieren
+        $this->setSessionCookie();
+    }
+
+    /**
      * Startet eine Session
      */
     public function start(): void
@@ -114,6 +141,185 @@ class Session implements SessionInterface
     }
 
     /**
+     * Extrahiert die Session-ID aus dem Request
+     *
+     * @return string|null
+     */
+    private function getSessionIdFromRequest(): ?string
+    {
+        // Zuerst aus dem Cookie
+        $cookieName = $this->config['cookie'];
+        $id = $_COOKIE[$cookieName] ?? null;
+
+        // Dann aus dem API-Header
+        if ($id === null) {
+            $headers = getallheaders();
+            $id = $headers['X-Session-ID'] ?? null;
+        }
+
+        // Dann aus dem Authorization-Header (Bearer)
+        if ($id === null) {
+            $headers = getallheaders();
+            $auth = $headers['Authorization'] ?? '';
+
+            if (preg_match('/^Session\s+([a-zA-Z0-9]+)$/i', $auth, $matches)) {
+                $id = $matches[1];
+            }
+        }
+
+        return $id;
+    }
+
+    /**
+     * Generiert eine neue Session-ID
+     *
+     * @return string
+     */
+    private function generateSessionId(): string
+    {
+        return bin2hex(random_bytes($this->config['id_length'] / 2));
+    }
+
+    /**
+     * Lädt Session-Daten
+     *
+     * @param string $id Session-ID
+     * @return array
+     */
+    private function loadSessionData(string $id): array
+    {
+        $driver = $this->config['driver'];
+
+        if ($driver === 'array') {
+            return [];
+        }
+
+        if ($driver === 'redis') {
+            return $this->loadRedisSessionData($id);
+        }
+
+        // Default: File
+        return $this->loadFileSessionData($id);
+    }
+
+    /**
+     * Lädt Session-Daten aus Redis
+     *
+     * @param string $id Session-ID
+     * @return array
+     */
+    private function loadRedisSessionData(string $id): array
+    {
+        $redis = $this->getRedisConnection();
+        $key = $this->config['redis']['prefix'] . $id;
+
+        $data = $redis->get($key);
+
+        if ($data === false) {
+            return [];
+        }
+
+        try {
+            $decoded = json_decode($data, true, 512, JSON_THROW_ON_ERROR);
+            return is_array($decoded) ? $decoded : [];
+        } catch (Exception $e) {
+            app_log('Fehler beim Dekodieren der Session-Daten: ' . $e->getMessage(), [], 'error');
+            return [];
+        }
+    }
+
+    /**
+     * Stellt eine Redis-Verbindung her
+     *
+     * @return Redis
+     */
+    private function getRedisConnection(): Redis
+    {
+        if ($this->redis === null) {
+            $config = $this->config['redis'];
+
+            $this->redis = new Redis();
+            $this->redis->connect(
+                $config['host'],
+                $config['port'],
+                2.0
+            );
+
+            if (!empty($config['password'])) {
+                $this->redis->auth($config['password']);
+            }
+
+            if (!empty($config['database'])) {
+                $this->redis->select($config['database']);
+            }
+        }
+
+        return $this->redis;
+    }
+
+    /**
+     * Holt einen Wert aus der Session
+     *
+     * @param string $key Schlüssel
+     * @param mixed $default Standardwert
+     * @return mixed Wert
+     */
+    public function get(string $key, mixed $default = null): mixed
+    {
+        if ($this->sessionId === null) {
+            $this->start();
+        }
+
+        return $this->data[$key] ?? $default;
+    }
+
+    /**
+     * Lädt Session-Daten aus einer Datei
+     *
+     * @param string $id Session-ID
+     * @return array
+     */
+    private function loadFileSessionData(string $id): array
+    {
+        $path = $this->getSessionFilePath($id);
+
+        if (!file_exists($path)) {
+            return [];
+        }
+
+        $content = file_get_contents($path);
+
+        if ($content === false) {
+            return [];
+        }
+
+        try {
+            $decoded = json_decode($content, true, 512, JSON_THROW_ON_ERROR);
+            return is_array($decoded) ? $decoded : [];
+        } catch (Exception $e) {
+            app_log('Fehler beim Dekodieren der Session-Datei: ' . $e->getMessage(), [], 'error');
+            return [];
+        }
+    }
+
+    /**
+     * Gibt den Pfad zur Session-Datei zurück
+     *
+     * @param string $id Session-ID
+     * @return string
+     */
+    private function getSessionFilePath(string $id): string
+    {
+        $storagePath = $this->config['storage_path'];
+
+        // Sessiondaten in verteilten Unterverzeichnissen speichern
+        // für bessere Performance bei vielen Sessions
+        $subDir = substr($id, 0, 2);
+
+        return "$storagePath/$subDir/$id.json";
+    }
+
+    /**
      * Aktualisiert den Zeitstempel der letzten Aktivität
      */
     public function updateActivity(): void
@@ -127,30 +333,155 @@ class Session implements SessionInterface
     }
 
     /**
-     * Generiert eine neue Session-ID
+     * Löscht eine Session
+     *
+     * @param string $id Session-ID
+     * @return bool
      */
-    public function regenerate(bool $deleteOldSession = true): void
+    private function deleteSession(string $id): bool
+    {
+        $driver = $this->config['driver'];
+
+        if ($driver === 'array') {
+            return true;
+        }
+
+        if ($driver === 'redis') {
+            return $this->deleteRedisSession($id);
+        }
+
+        // Default: File
+        return $this->deleteFileSession($id);
+    }
+
+    /**
+     * Löscht eine Session aus Redis
+     *
+     * @param string $id Session-ID
+     * @return bool
+     */
+    private function deleteRedisSession(string $id): bool
+    {
+        $redis = $this->getRedisConnection();
+        $key = $this->config['redis']['prefix'] . $id;
+
+        return (bool)$redis->del($key);
+    }
+
+    /**
+     * Löscht eine Session-Datei
+     *
+     * @param string $id Session-ID
+     * @return bool
+     */
+    private function deleteFileSession(string $id): bool
+    {
+        $path = $this->getSessionFilePath($id);
+
+        if (file_exists($path)) {
+            return unlink($path);
+        }
+
+        return true;
+    }
+
+    /**
+     * Speichert Session-Daten
+     *
+     * @return bool
+     */
+    private function saveSessionData(): bool
     {
         if ($this->sessionId === null) {
-            $this->start();
+            return false;
+        }
+
+        $driver = $this->config['driver'];
+
+        if ($driver === 'array') {
+            return true;
+        }
+
+        if ($driver === 'redis') {
+            return $this->saveRedisSessionData();
+        }
+
+        // Default: File
+        return $this->saveFileSessionData();
+    }
+
+    /**
+     * Speichert Session-Daten in Redis
+     *
+     * @return bool
+     */
+    private function saveRedisSessionData(): bool
+    {
+        $redis = $this->getRedisConnection();
+        $key = $this->config['redis']['prefix'] . $this->sessionId;
+
+        try {
+            $encoded = json_encode($this->data, JSON_THROW_ON_ERROR);
+            $ttl = $this->config['lifetime'];
+
+            return $redis->setex($key, $ttl, $encoded);
+        } catch (Exception $e) {
+            app_log('Fehler beim Speichern der Session-Daten in Redis: ' . $e->getMessage(), [], 'error');
+            return false;
+        }
+    }
+
+    /**
+     * Speichert Session-Daten in einer Datei
+     *
+     * @return bool
+     */
+    private function saveFileSessionData(): bool
+    {
+        $path = $this->getSessionFilePath($this->sessionId);
+        $dir = dirname($path);
+
+        if (!is_dir($dir)) {
+            if (!mkdir($dir, 0755, true) && !is_dir($dir)) {
+                app_log('Fehler beim Erstellen des Session-Verzeichnisses', [], 'error');
+                return false;
+            }
+        }
+
+        try {
+            $encoded = json_encode($this->data, JSON_THROW_ON_ERROR);
+            return file_put_contents($path, $encoded, LOCK_EX) !== false;
+        } catch (Exception $e) {
+            app_log('Fehler beim Speichern der Session-Datei: ' . $e->getMessage(), [], 'error');
+            return false;
+        }
+    }
+
+    /**
+     * Setzt das Session-Cookie
+     */
+    private function setSessionCookie(): void
+    {
+        if (headers_sent() || $this->sessionId === null) {
             return;
         }
 
-        $oldId = $this->sessionId;
-        $oldData = $this->data;
+        $cookieName = $this->config['cookie'];
+        $lifetime = $this->config['lifetime'];
+        $path = $this->config['path'];
+        $domain = $this->config['domain'];
+        $secure = $this->config['secure'];
+        $httpOnly = $this->config['httponly'];
+        $sameSite = $this->config['samesite'];
 
-        // Neue ID generieren
-        $this->sessionId = $this->generateSessionId();
-
-        if ($deleteOldSession) {
-            $this->deleteSession($oldId);
-        }
-
-        // Daten mit neuer ID speichern
-        $this->saveSessionData();
-
-        // Session-Cookie aktualisieren
-        $this->setSessionCookie();
+        setcookie($cookieName, $this->sessionId, [
+            'expires' => time() + $lifetime,
+            'path' => $path,
+            'domain' => $domain,
+            'secure' => $secure,
+            'httponly' => $httpOnly,
+            'samesite' => $sameSite
+        ]);
     }
 
     /**
@@ -171,52 +502,29 @@ class Session implements SessionInterface
     }
 
     /**
-     * Setzt einen Wert in der Session
-     *
-     * @param string $key Schlüssel
-     * @param mixed $value Wert
+     * Löscht das Session-Cookie
      */
-    public function set(string $key, mixed $value): void
+    private function clearSessionCookie(): void
     {
-        if ($this->sessionId === null) {
-            $this->start();
+        if (headers_sent()) {
+            return;
         }
 
-        $this->data[$key] = $value;
-        $this->changed = true;
-    }
+        $cookieName = $this->config['cookie'];
+        $path = $this->config['path'];
+        $domain = $this->config['domain'];
+        $secure = $this->config['secure'];
+        $httpOnly = $this->config['httponly'];
+        $sameSite = $this->config['samesite'];
 
-    /**
-     * Holt einen Wert aus der Session
-     *
-     * @param string $key Schlüssel
-     * @param mixed $default Standardwert
-     * @return mixed Wert
-     */
-    public function get(string $key, mixed $default = null): mixed
-    {
-        if ($this->sessionId === null) {
-            $this->start();
-        }
-
-        return $this->data[$key] ?? $default;
-    }
-
-    /**
-     * Entfernt einen Wert aus der Session
-     *
-     * @param string $key Schlüssel
-     */
-    public function remove(string $key): void
-    {
-        if ($this->sessionId === null) {
-            $this->start();
-        }
-
-        if (isset($this->data[$key])) {
-            unset($this->data[$key]);
-            $this->changed = true;
-        }
+        setcookie($cookieName, '', [
+            'expires' => time() - 42000,
+            'path' => $path,
+            'domain' => $domain,
+            'secure' => $secure,
+            'httponly' => $httpOnly,
+            'samesite' => $sameSite
+        ]);
     }
 
     /**
@@ -250,6 +558,8 @@ class Session implements SessionInterface
 
         return (time() - $lastActivity) > $timeout;
     }
+
+    // Private Hilfsmethoden
 
     /**
      * Setzt eine Flash-Message
@@ -345,6 +655,22 @@ class Session implements SessionInterface
     }
 
     /**
+     * Setzt einen Wert in der Session
+     *
+     * @param string $key Schlüssel
+     * @param mixed $value Wert
+     */
+    public function set(string $key, mixed $value): void
+    {
+        if ($this->sessionId === null) {
+            $this->start();
+        }
+
+        $this->data[$key] = $value;
+        $this->changed = true;
+    }
+
+    /**
      * Sperrt die Session für konkurrierende Zugriffe
      *
      * @param int $timeout Timeout in Sekunden
@@ -371,6 +697,68 @@ class Session implements SessionInterface
     }
 
     /**
+     * Erwirbt eine Redis-Sperre
+     *
+     * @param int $timeout Timeout in Sekunden
+     * @return bool
+     */
+    private function acquireRedisLock(int $timeout): bool
+    {
+        $redis = $this->getRedisConnection();
+        $lockKey = "lock:{$this->sessionId}";
+        $token = bin2hex(random_bytes(8));
+
+        $this->set('_lock_token', $token);
+
+        $startTime = microtime(true);
+        $acquired = false;
+
+        // Versuchen, die Sperre zu erhalten
+        while (microtime(true) - $startTime < $timeout) {
+            $acquired = $redis->set($lockKey, $token, ['NX', 'EX' => $timeout]);
+
+            if ($acquired) {
+                break;
+            }
+
+            // Kurze Pause
+            usleep(10000); // 10ms
+        }
+
+        return (bool)$acquired;
+    }
+
+    /**
+     * Erwirbt eine Datei-Sperre
+     *
+     * @param int $timeout Timeout in Sekunden
+     * @return bool
+     */
+    private function acquireFileLock(int $timeout): bool
+    {
+        $lockFile = $this->getSessionFilePath($this->sessionId) . '.lock';
+        $startTime = microtime(true);
+
+        while (microtime(true) - $startTime < $timeout) {
+            $fp = fopen($lockFile, 'w+');
+
+            if ($fp === false) {
+                return false;
+            }
+
+            if (flock($fp, LOCK_EX | LOCK_NB)) {
+                $this->set('_lock_handle', $fp);
+                return true;
+            }
+
+            fclose($fp);
+            usleep(10000); // 10ms
+        }
+
+        return false;
+    }
+
+    /**
      * Hebt die Sperre der Session auf
      *
      * @return bool
@@ -393,6 +781,76 @@ class Session implements SessionInterface
 
         // Bei File-Driver: Datei-Lock freigeben
         return $this->releaseFileLock();
+    }
+
+    /**
+     * Gibt eine Redis-Sperre frei
+     *
+     * @return bool
+     */
+    private function releaseRedisLock(): bool
+    {
+        $redis = $this->getRedisConnection();
+        $lockKey = "lock:{$this->sessionId}";
+        $token = $this->get('_lock_token');
+
+        if (!$token) {
+            return false;
+        }
+
+        // Lua-Script für atomares Prüfen und Löschen
+        $script = <<<LUA
+        if redis.call('get', KEYS[1]) == ARGV[1] then
+            return redis.call('del', KEYS[1])
+        else
+            return 0
+        end
+        LUA;
+
+        $result = $redis->eval($script, [$lockKey, $token], 1);
+        return (bool)$result;
+    }
+
+    /**
+     * Gibt eine Datei-Sperre frei
+     *
+     * @return bool
+     */
+    private function releaseFileLock(): bool
+    {
+        $fp = $this->get('_lock_handle');
+
+        if (!$fp) {
+            return false;
+        }
+
+        flock($fp, LOCK_UN);
+        fclose($fp);
+        $this->remove('_lock_handle');
+
+        $lockFile = $this->getSessionFilePath($this->sessionId) . '.lock';
+        if (file_exists($lockFile)) {
+            unlink($lockFile);
+        }
+
+        return true;
+    }
+
+    /**
+     * Entfernt einen Wert aus der Session
+     *
+     * @param string $key Schlüssel
+     */
+    public function remove(string $key): void
+    {
+        if ($this->sessionId === null) {
+            $this->start();
+        }
+
+        if (isset($this->data[$key])) {
+            unset($this->data[$key]);
+            $this->changed = true;
+        }
     }
 
     /**
@@ -519,463 +977,5 @@ class Session implements SessionInterface
         }
 
         return $token;
-    }
-
-    // Private Hilfsmethoden
-
-    /**
-     * Generiert eine neue Session-ID
-     *
-     * @return string
-     */
-    private function generateSessionId(): string
-    {
-        return bin2hex(random_bytes($this->config['id_length'] / 2));
-    }
-
-    /**
-     * Lädt Session-Daten
-     *
-     * @param string $id Session-ID
-     * @return array
-     */
-    private function loadSessionData(string $id): array
-    {
-        $driver = $this->config['driver'];
-
-        if ($driver === 'array') {
-            return [];
-        }
-
-        if ($driver === 'redis') {
-            return $this->loadRedisSessionData($id);
-        }
-
-        // Default: File
-        return $this->loadFileSessionData($id);
-    }
-
-    /**
-     * Speichert Session-Daten
-     *
-     * @return bool
-     */
-    private function saveSessionData(): bool
-    {
-        if ($this->sessionId === null) {
-            return false;
-        }
-
-        $driver = $this->config['driver'];
-
-        if ($driver === 'array') {
-            return true;
-        }
-
-        if ($driver === 'redis') {
-            return $this->saveRedisSessionData();
-        }
-
-        // Default: File
-        return $this->saveFileSessionData();
-    }
-
-    /**
-     * Löscht eine Session
-     *
-     * @param string $id Session-ID
-     * @return bool
-     */
-    private function deleteSession(string $id): bool
-    {
-        $driver = $this->config['driver'];
-
-        if ($driver === 'array') {
-            return true;
-        }
-
-        if ($driver === 'redis') {
-            return $this->deleteRedisSession($id);
-        }
-
-        // Default: File
-        return $this->deleteFileSession($id);
-    }
-
-    /**
-     * Lädt Session-Daten aus Redis
-     *
-     * @param string $id Session-ID
-     * @return array
-     */
-    private function loadRedisSessionData(string $id): array
-    {
-        $redis = $this->getRedisConnection();
-        $key = $this->config['redis']['prefix'] . $id;
-
-        $data = $redis->get($key);
-
-        if ($data === false) {
-            return [];
-        }
-
-        try {
-            $decoded = json_decode($data, true, 512, JSON_THROW_ON_ERROR);
-            return is_array($decoded) ? $decoded : [];
-        } catch (Exception $e) {
-            app_log('Fehler beim Dekodieren der Session-Daten: ' . $e->getMessage(), [], 'error');
-            return [];
-        }
-    }
-
-    /**
-     * Speichert Session-Daten in Redis
-     *
-     * @return bool
-     */
-    private function saveRedisSessionData(): bool
-    {
-        $redis = $this->getRedisConnection();
-        $key = $this->config['redis']['prefix'] . $this->sessionId;
-
-        try {
-            $encoded = json_encode($this->data, JSON_THROW_ON_ERROR);
-            $ttl = $this->config['lifetime'];
-
-            return $redis->setex($key, $ttl, $encoded);
-        } catch (Exception $e) {
-            app_log('Fehler beim Speichern der Session-Daten in Redis: ' . $e->getMessage(), [], 'error');
-            return false;
-        }
-    }
-
-    /**
-     * Löscht eine Session aus Redis
-     *
-     * @param string $id Session-ID
-     * @return bool
-     */
-    private function deleteRedisSession(string $id): bool
-    {
-        $redis = $this->getRedisConnection();
-        $key = $this->config['redis']['prefix'] . $id;
-
-        return (bool)$redis->del($key);
-    }
-
-    /**
-     * Stellt eine Redis-Verbindung her
-     *
-     * @return Redis
-     */
-    private function getRedisConnection(): Redis
-    {
-        if ($this->redis === null) {
-            $config = $this->config['redis'];
-
-            $this->redis = new Redis();
-            $this->redis->connect(
-                $config['host'],
-                $config['port'],
-                2.0
-            );
-
-            if (!empty($config['password'])) {
-                $this->redis->auth($config['password']);
-            }
-
-            if (!empty($config['database'])) {
-                $this->redis->select($config['database']);
-            }
-        }
-
-        return $this->redis;
-    }
-
-    /**
-     * Lädt Session-Daten aus einer Datei
-     *
-     * @param string $id Session-ID
-     * @return array
-     */
-    private function loadFileSessionData(string $id): array
-    {
-        $path = $this->getSessionFilePath($id);
-
-        if (!file_exists($path)) {
-            return [];
-        }
-
-        $content = file_get_contents($path);
-
-        if ($content === false) {
-            return [];
-        }
-
-        try {
-            $decoded = json_decode($content, true, 512, JSON_THROW_ON_ERROR);
-            return is_array($decoded) ? $decoded : [];
-        } catch (Exception $e) {
-            app_log('Fehler beim Dekodieren der Session-Datei: ' . $e->getMessage(), [], 'error');
-            return [];
-        }
-    }
-
-    /**
-     * Speichert Session-Daten in einer Datei
-     *
-     * @return bool
-     */
-    private function saveFileSessionData(): bool
-    {
-        $path = $this->getSessionFilePath($this->sessionId);
-        $dir = dirname($path);
-
-        if (!is_dir($dir)) {
-            if (!mkdir($dir, 0755, true) && !is_dir($dir)) {
-                app_log('Fehler beim Erstellen des Session-Verzeichnisses', [], 'error');
-                return false;
-            }
-        }
-
-        try {
-            $encoded = json_encode($this->data, JSON_THROW_ON_ERROR);
-            return file_put_contents($path, $encoded, LOCK_EX) !== false;
-        } catch (Exception $e) {
-            app_log('Fehler beim Speichern der Session-Datei: ' . $e->getMessage(), [], 'error');
-            return false;
-        }
-    }
-
-    /**
-     * Löscht eine Session-Datei
-     *
-     * @param string $id Session-ID
-     * @return bool
-     */
-    private function deleteFileSession(string $id): bool
-    {
-        $path = $this->getSessionFilePath($id);
-
-        if (file_exists($path)) {
-            return unlink($path);
-        }
-
-        return true;
-    }
-
-    /**
-     * Gibt den Pfad zur Session-Datei zurück
-     *
-     * @param string $id Session-ID
-     * @return string
-     */
-    private function getSessionFilePath(string $id): string
-    {
-        $storagePath = $this->config['storage_path'];
-
-        // Sessiondaten in verteilten Unterverzeichnissen speichern
-        // für bessere Performance bei vielen Sessions
-        $subDir = substr($id, 0, 2);
-
-        return "$storagePath/$subDir/$id.json";
-    }
-
-    /**
-     * Extrahiert die Session-ID aus dem Request
-     *
-     * @return string|null
-     */
-    private function getSessionIdFromRequest(): ?string
-    {
-        // Zuerst aus dem Cookie
-        $cookieName = $this->config['cookie'];
-        $id = $_COOKIE[$cookieName] ?? null;
-
-        // Dann aus dem API-Header
-        if ($id === null) {
-            $headers = getallheaders();
-            $id = $headers['X-Session-ID'] ?? null;
-        }
-
-        // Dann aus dem Authorization-Header (Bearer)
-        if ($id === null) {
-            $headers = getallheaders();
-            $auth = $headers['Authorization'] ?? '';
-
-            if (preg_match('/^Session\s+([a-zA-Z0-9]+)$/i', $auth, $matches)) {
-                $id = $matches[1];
-            }
-        }
-
-        return $id;
-    }
-
-    /**
-     * Setzt das Session-Cookie
-     */
-    private function setSessionCookie(): void
-    {
-        if (headers_sent() || $this->sessionId === null) {
-            return;
-        }
-
-        $cookieName = $this->config['cookie'];
-        $lifetime = $this->config['lifetime'];
-        $path = $this->config['path'];
-        $domain = $this->config['domain'];
-        $secure = $this->config['secure'];
-        $httpOnly = $this->config['httponly'];
-        $sameSite = $this->config['samesite'];
-
-        setcookie($cookieName, $this->sessionId, [
-            'expires' => time() + $lifetime,
-            'path' => $path,
-            'domain' => $domain,
-            'secure' => $secure,
-            'httponly' => $httpOnly,
-            'samesite' => $sameSite
-        ]);
-    }
-
-    /**
-     * Löscht das Session-Cookie
-     */
-    private function clearSessionCookie(): void
-    {
-        if (headers_sent()) {
-            return;
-        }
-
-        $cookieName = $this->config['cookie'];
-        $path = $this->config['path'];
-        $domain = $this->config['domain'];
-        $secure = $this->config['secure'];
-        $httpOnly = $this->config['httponly'];
-        $sameSite = $this->config['samesite'];
-
-        setcookie($cookieName, '', [
-            'expires' => time() - 42000,
-            'path' => $path,
-            'domain' => $domain,
-            'secure' => $secure,
-            'httponly' => $httpOnly,
-            'samesite' => $sameSite
-        ]);
-    }
-
-    /**
-     * Erwirbt eine Redis-Sperre
-     *
-     * @param int $timeout Timeout in Sekunden
-     * @return bool
-     */
-    private function acquireRedisLock(int $timeout): bool
-    {
-        $redis = $this->getRedisConnection();
-        $lockKey = "lock:{$this->sessionId}";
-        $token = bin2hex(random_bytes(8));
-
-        $this->set('_lock_token', $token);
-
-        $startTime = microtime(true);
-        $acquired = false;
-
-        // Versuchen, die Sperre zu erhalten
-        while (microtime(true) - $startTime < $timeout) {
-            $acquired = $redis->set($lockKey, $token, ['NX', 'EX' => $timeout]);
-
-            if ($acquired) {
-                break;
-            }
-
-            // Kurze Pause
-            usleep(10000); // 10ms
-        }
-
-        return (bool)$acquired;
-    }
-
-    /**
-     * Gibt eine Redis-Sperre frei
-     *
-     * @return bool
-     */
-    private function releaseRedisLock(): bool
-    {
-        $redis = $this->getRedisConnection();
-        $lockKey = "lock:{$this->sessionId}";
-        $token = $this->get('_lock_token');
-
-        if (!$token) {
-            return false;
-        }
-
-        // Lua-Script für atomares Prüfen und Löschen
-        $script = <<<LUA
-        if redis.call('get', KEYS[1]) == ARGV[1] then
-            return redis.call('del', KEYS[1])
-        else
-            return 0
-        end
-        LUA;
-
-        $result = $redis->eval($script, [$lockKey, $token], 1);
-        return (bool)$result;
-    }
-
-    /**
-     * Erwirbt eine Datei-Sperre
-     *
-     * @param int $timeout Timeout in Sekunden
-     * @return bool
-     */
-    private function acquireFileLock(int $timeout): bool
-    {
-        $lockFile = $this->getSessionFilePath($this->sessionId) . '.lock';
-        $startTime = microtime(true);
-
-        while (microtime(true) - $startTime < $timeout) {
-            $fp = fopen($lockFile, 'w+');
-
-            if ($fp === false) {
-                return false;
-            }
-
-            if (flock($fp, LOCK_EX | LOCK_NB)) {
-                $this->set('_lock_handle', $fp);
-                return true;
-            }
-
-            fclose($fp);
-            usleep(10000); // 10ms
-        }
-
-        return false;
-    }
-
-    /**
-     * Gibt eine Datei-Sperre frei
-     *
-     * @return bool
-     */
-    private function releaseFileLock(): bool
-    {
-        $fp = $this->get('_lock_handle');
-
-        if (!$fp) {
-            return false;
-        }
-
-        flock($fp, LOCK_UN);
-        fclose($fp);
-        $this->remove('_lock_handle');
-
-        $lockFile = $this->getSessionFilePath($this->sessionId) . '.lock';
-        if (file_exists($lockFile)) {
-            unlink($lockFile);
-        }
-
-        return true;
     }
 }

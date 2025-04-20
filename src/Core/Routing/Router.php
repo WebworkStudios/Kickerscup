@@ -5,8 +5,6 @@ declare(strict_types=1);
 namespace App\Core\Routing;
 
 use App\Core\Http\Request;
-use App\Core\Http\Response;
-use App\Core\Http\ResponseFactory;
 
 /**
  * Router-Klasse für API-Routing mit Subdomain-Unterstützung
@@ -46,6 +44,35 @@ class Router
     public function get(string $uri, \Closure|string|array $action): Route
     {
         return $this->addRoute(['GET', 'HEAD'], $uri, $action);
+    }
+
+    /**
+     * Fügt eine Route hinzu
+     *
+     * @param array $methods HTTP-Methoden
+     * @param string $uri URI der Route
+     * @param \Closure|string|array $action Aktion, die ausgeführt werden soll
+     * @return Route Die erstellte Route
+     */
+    private function addRoute(array $methods, string $uri, \Closure|string|array $action): Route
+    {
+        // Präfix hinzufügen, falls vorhanden
+        if ($this->currentPrefix !== null) {
+            $uri = rtrim($this->currentPrefix, '/') . '/' . ltrim($uri, '/');
+        }
+
+        // Route erstellen
+        $route = new Route($methods, $uri, $action);
+
+        // Domain setzen, falls vorhanden
+        if ($this->currentDomain !== null) {
+            $route->setDomain($this->currentDomain);
+        }
+
+        // Route zur Sammlung hinzufügen
+        $this->routes->add($route);
+
+        return $route;
     }
 
     /**
@@ -109,35 +136,6 @@ class Router
             'GET', 'HEAD', 'POST', 'PUT',
             'PATCH', 'DELETE', 'OPTIONS'
         ], $uri, $action);
-    }
-
-    /**
-     * Fügt eine Route hinzu
-     *
-     * @param array $methods HTTP-Methoden
-     * @param string $uri URI der Route
-     * @param \Closure|string|array $action Aktion, die ausgeführt werden soll
-     * @return Route Die erstellte Route
-     */
-    private function addRoute(array $methods, string $uri, \Closure|string|array $action): Route
-    {
-        // Präfix hinzufügen, falls vorhanden
-        if ($this->currentPrefix !== null) {
-            $uri = rtrim($this->currentPrefix, '/') . '/' . ltrim($uri, '/');
-        }
-
-        // Route erstellen
-        $route = new Route($methods, $uri, $action);
-
-        // Domain setzen, falls vorhanden
-        if ($this->currentDomain !== null) {
-            $route->setDomain($this->currentDomain);
-        }
-
-        // Route zur Sammlung hinzufügen
-        $this->routes->add($route);
-
-        return $route;
     }
 
     /**

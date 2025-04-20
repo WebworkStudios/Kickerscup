@@ -4,8 +4,6 @@ declare(strict_types=1);
 namespace App\Core\Security;
 
 use DateTime;
-use DateTimeInterface;
-use stdClass;
 
 /**
  * JWT-Implementierung für das Framework
@@ -72,6 +70,44 @@ class JWT
     }
 
     /**
+     * Erstellt einen Base64Url-kodierten String
+     *
+     * @param string $data Zu kodierende Daten
+     * @return string Base64Url-kodierter String
+     */
+    private function base64UrlEncode(string $data): string
+    {
+        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
+    }
+
+    /**
+     * Erstellt die Signatur für ein JWT
+     *
+     * @param string $base64UrlHeader Base64Url-kodierter Header
+     * @param string $base64UrlPayload Base64Url-kodierte Nutzdaten
+     * @param string $key Signaturschlüssel
+     * @param string $algorithm Algorithmus für die Signatur
+     * @return string Signatur
+     * @throws \Exception Bei nicht unterstütztem Algorithmus
+     */
+    private function createSignature(
+        string $base64UrlHeader,
+        string $base64UrlPayload,
+        string $key,
+        string $algorithm
+    ): string
+    {
+        $data = $base64UrlHeader . '.' . $base64UrlPayload;
+
+        return match ($algorithm) {
+            self::ALGO_HS256 => hash_hmac('sha256', $data, $key, true),
+            self::ALGO_HS384 => hash_hmac('sha384', $data, $key, true),
+            self::ALGO_HS512 => hash_hmac('sha512', $data, $key, true),
+            default => throw new \Exception("Nicht unterstützter Algorithmus: $algorithm"),
+        };
+    }
+
+    /**
      * Dekodiert und validiert ein JWT-Token
      *
      * @param string $jwt Token
@@ -121,17 +157,6 @@ class JWT
     }
 
     /**
-     * Erstellt einen Base64Url-kodierten String
-     *
-     * @param string $data Zu kodierende Daten
-     * @return string Base64Url-kodierter String
-     */
-    private function base64UrlEncode(string $data): string
-    {
-        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
-    }
-
-    /**
      * Dekodiert einen Base64Url-kodierten String
      *
      * @param string $data Zu dekodierende Daten
@@ -140,33 +165,6 @@ class JWT
     private function base64UrlDecode(string $data): string
     {
         return base64_decode(strtr($data, '-_', '+/'));
-    }
-
-    /**
-     * Erstellt die Signatur für ein JWT
-     *
-     * @param string $base64UrlHeader Base64Url-kodierter Header
-     * @param string $base64UrlPayload Base64Url-kodierte Nutzdaten
-     * @param string $key Signaturschlüssel
-     * @param string $algorithm Algorithmus für die Signatur
-     * @return string Signatur
-     * @throws \Exception Bei nicht unterstütztem Algorithmus
-     */
-    private function createSignature(
-        string $base64UrlHeader,
-        string $base64UrlPayload,
-        string $key,
-        string $algorithm
-    ): string
-    {
-        $data = $base64UrlHeader . '.' . $base64UrlPayload;
-
-        return match ($algorithm) {
-            self::ALGO_HS256 => hash_hmac('sha256', $data, $key, true),
-            self::ALGO_HS384 => hash_hmac('sha384', $data, $key, true),
-            self::ALGO_HS512 => hash_hmac('sha512', $data, $key, true),
-            default => throw new \Exception("Nicht unterstützter Algorithmus: $algorithm"),
-        };
     }
 
     /**

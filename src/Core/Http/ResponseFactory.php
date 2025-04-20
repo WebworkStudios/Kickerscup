@@ -23,6 +23,39 @@ class ResponseFactory
     }
 
     /**
+     * Erstellt eine Fehlerantwort
+     *
+     * @param string $message Fehlermeldung
+     * @param string $errorCode Fehlercode
+     * @param array $details Fehlerdetails
+     * @param int $statusCode HTTP-Statuscode
+     * @param array $headers HTTP-Header
+     * @return Response
+     */
+    public function error(
+        string $message,
+        string $errorCode = 'ERROR',
+        array  $details = [],
+        int    $statusCode = 400,
+        array  $headers = []
+    ): Response
+    {
+        $response = [
+            'success' => false,
+            'error' => [
+                'code' => $errorCode,
+                'message' => $message
+            ]
+        ];
+
+        if (!empty($details)) {
+            $response['error']['details'] = $details;
+        }
+
+        return $this->json($response, $statusCode, $headers);
+    }
+
+    /**
      * Erstellt eine JSON-Response
      *
      * @param mixed $data Daten
@@ -95,6 +128,35 @@ class ResponseFactory
     }
 
     /**
+     * Erstellt eine validierungsfehler-Response
+     *
+     * @param array $errors Validierungsfehler
+     * @param string $message Fehlermeldung
+     * @param array $headers HTTP-Header
+     * @return Response
+     */
+    public function validationError(
+        array  $errors,
+        string $message = 'Die Eingabedaten sind ungültig.',
+        array  $headers = []
+    ): Response
+    {
+        return $this->error($message, 'VALIDATION_ERROR', $errors, 422, $headers);
+    }
+
+    /**
+     * Erstellt eine erfolgreiche Antwort auf eine Erstellungsoperation
+     *
+     * @param mixed $data Erstellte Daten
+     * @param array $headers HTTP-Header
+     * @return Response
+     */
+    public function created(mixed $data = null, array $headers = []): Response
+    {
+        return $this->success($data, 201, $headers);
+    }
+
+    /**
      * Erstellt eine Erfolgsantwort
      *
      * @param mixed $data Daten
@@ -113,68 +175,6 @@ class ResponseFactory
         }
 
         return $this->json($response, $statusCode, $headers);
-    }
-
-    /**
-     * Erstellt eine Fehlerantwort
-     *
-     * @param string $message Fehlermeldung
-     * @param string $errorCode Fehlercode
-     * @param array $details Fehlerdetails
-     * @param int $statusCode HTTP-Statuscode
-     * @param array $headers HTTP-Header
-     * @return Response
-     */
-    public function error(
-        string $message,
-        string $errorCode = 'ERROR',
-        array $details = [],
-        int $statusCode = 400,
-        array $headers = []
-    ): Response
-    {
-        $response = [
-            'success' => false,
-            'error' => [
-                'code' => $errorCode,
-                'message' => $message
-            ]
-        ];
-
-        if (!empty($details)) {
-            $response['error']['details'] = $details;
-        }
-
-        return $this->json($response, $statusCode, $headers);
-    }
-
-    /**
-     * Erstellt eine validierungsfehler-Response
-     *
-     * @param array $errors Validierungsfehler
-     * @param string $message Fehlermeldung
-     * @param array $headers HTTP-Header
-     * @return Response
-     */
-    public function validationError(
-        array $errors,
-        string $message = 'Die Eingabedaten sind ungültig.',
-        array $headers = []
-    ): Response
-    {
-        return $this->error($message, 'VALIDATION_ERROR', $errors, 422, $headers);
-    }
-
-    /**
-     * Erstellt eine erfolgreiche Antwort auf eine Erstellungsoperation
-     *
-     * @param mixed $data Erstellte Daten
-     * @param array $headers HTTP-Header
-     * @return Response
-     */
-    public function created(mixed $data = null, array $headers = []): Response
-    {
-        return $this->success($data, 201, $headers);
     }
 
     /**
@@ -229,9 +229,9 @@ class ResponseFactory
      * @return Response
      */
     public function tooManyRequests(
-        int $retryAfter = 60,
+        int    $retryAfter = 60,
         string $message = 'Zu viele Anfragen. Bitte versuchen Sie es später erneut.',
-        array $headers = []
+        array  $headers = []
     ): Response
     {
         $headers['Retry-After'] = (string)$retryAfter;

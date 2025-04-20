@@ -73,6 +73,29 @@ readonly class Validator
     }
 
     /**
+     * Validiert Daten und wirft bei Fehler eine ValidationException
+     *
+     * @param array $data Zu validierende Daten
+     * @param array $rules Validierungsregeln
+     * @param array $messages Benutzerdefinierte Fehlermeldungen
+     * @return array Validierte Daten
+     * @throws \App\Core\Error\ValidationException Wenn die Validierung fehlschlägt
+     */
+    public function validateOrFail(array $data, array $rules, array $messages = []): array
+    {
+        $result = $this->validate($data, $rules, $messages);
+
+        if ($result->fails()) {
+            throw new \App\Core\Error\ValidationException(
+                'Die Eingabedaten sind ungültig.',
+                $result->errors()
+            );
+        }
+
+        return $result->validated();
+    }
+
+    /**
      * Validiert Daten
      *
      * @param array $data Zu validierende Daten
@@ -543,28 +566,5 @@ readonly class Validator
         $column = $parameters[1] ?? $field;
 
         return $this->db->table($table)->where($column, '=', $value)->count() > 0;
-    }
-
-    /**
-     * Validiert Daten und wirft bei Fehler eine ValidationException
-     *
-     * @param array $data Zu validierende Daten
-     * @param array $rules Validierungsregeln
-     * @param array $messages Benutzerdefinierte Fehlermeldungen
-     * @throws \App\Core\Error\ValidationException Wenn die Validierung fehlschlägt
-     * @return array Validierte Daten
-     */
-    public function validateOrFail(array $data, array $rules, array $messages = []): array
-    {
-        $result = $this->validate($data, $rules, $messages);
-
-        if ($result->fails()) {
-            throw new \App\Core\Error\ValidationException(
-                'Die Eingabedaten sind ungültig.',
-                $result->errors()
-            );
-        }
-
-        return $result->validated();
     }
 }

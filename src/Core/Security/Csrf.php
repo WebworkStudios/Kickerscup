@@ -40,82 +40,11 @@ class Csrf
      */
     public function __construct(
         Session $session,
-        ?int $tokenLifetime = null
-    ) {
+        ?int    $tokenLifetime = null
+    )
+    {
         $this->session = $session;
         $this->tokenLifetime = $tokenLifetime ?? self::DEFAULT_TOKEN_LIFETIME;
-    }
-
-    /**
-     * Generiert ein neues API-Token für Client-Anfragen
-     *
-     * @param string|null $scope Optionaler Bereich für das Token (z.B. 'admin', 'user')
-     * @param int|null $customLifetime Optionale benutzerdefinierte Lebensdauer
-     * @return array{token: string, expires: int, scope: string} Token-Daten
-     */
-    public function generateApiToken(?string $scope = null, ?int $customLifetime = null): array
-    {
-        $tokenValue = $this->createSecureToken();
-        $expiryTime = time() + ($customLifetime ?? $this->tokenLifetime);
-        $scope = $scope ?? 'default';
-
-        // Token und Metadaten speichern
-        $apiTokens = $this->session->get(self::SESSION_KEY_API_TOKENS, []);
-
-        $apiTokens[$tokenValue] = [
-            'expires' => $expiryTime,
-            'scope' => $scope,
-            'created' => time(),
-            'last_used' => null
-        ];
-
-        // Alte Tokens aufräumen
-        $apiTokens = $this->cleanExpiredTokens($apiTokens);
-
-        $this->session->set(self::SESSION_KEY_API_TOKENS, $apiTokens);
-
-        return [
-            'token' => $tokenValue,
-            'expires' => $expiryTime,
-            'scope' => $scope
-        ];
-    }
-
-    /**
-     * Validiert ein API-Token
-     *
-     * @param string $token Das zu validierende Token
-     * @param string|null $requiredScope Optionaler erforderlicher Bereich
-     * @return bool True, wenn das Token gültig ist
-     */
-    public function validateApiToken(string $token, ?string $requiredScope = null): bool
-    {
-        $apiTokens = $this->session->get(self::SESSION_KEY_API_TOKENS, []);
-
-        if (!isset($apiTokens[$token])) {
-            return false;
-        }
-
-        $tokenData = $apiTokens[$token];
-        $now = time();
-
-        // Prüfen, ob Token abgelaufen ist
-        if ($tokenData['expires'] < $now) {
-            unset($apiTokens[$token]);
-            $this->session->set(self::SESSION_KEY_API_TOKENS, $apiTokens);
-            return false;
-        }
-
-        // Scope prüfen, falls erforderlich
-        if ($requiredScope !== null && $tokenData['scope'] !== $requiredScope) {
-            return false;
-        }
-
-        // Token-Verwendung aktualisieren
-        $apiTokens[$token]['last_used'] = $now;
-        $this->session->set(self::SESSION_KEY_API_TOKENS, $apiTokens);
-
-        return true;
     }
 
     /**
@@ -154,6 +83,43 @@ class Csrf
         }
 
         return false;
+    }
+
+    /**
+     * Validiert ein API-Token
+     *
+     * @param string $token Das zu validierende Token
+     * @param string|null $requiredScope Optionaler erforderlicher Bereich
+     * @return bool True, wenn das Token gültig ist
+     */
+    public function validateApiToken(string $token, ?string $requiredScope = null): bool
+    {
+        $apiTokens = $this->session->get(self::SESSION_KEY_API_TOKENS, []);
+
+        if (!isset($apiTokens[$token])) {
+            return false;
+        }
+
+        $tokenData = $apiTokens[$token];
+        $now = time();
+
+        // Prüfen, ob Token abgelaufen ist
+        if ($tokenData['expires'] < $now) {
+            unset($apiTokens[$token]);
+            $this->session->set(self::SESSION_KEY_API_TOKENS, $apiTokens);
+            return false;
+        }
+
+        // Scope prüfen, falls erforderlich
+        if ($requiredScope !== null && $tokenData['scope'] !== $requiredScope) {
+            return false;
+        }
+
+        // Token-Verwendung aktualisieren
+        $apiTokens[$token]['last_used'] = $now;
+        $this->session->set(self::SESSION_KEY_API_TOKENS, $apiTokens);
+
+        return true;
     }
 
     /**
@@ -229,6 +195,41 @@ class Csrf
             $oldData['scope'],
             $this->tokenLifetime
         );
+    }
+
+    /**
+     * Generiert ein neues API-Token für Client-Anfragen
+     *
+     * @param string|null $scope Optionaler Bereich für das Token (z.B. 'admin', 'user')
+     * @param int|null $customLifetime Optionale benutzerdefinierte Lebensdauer
+     * @return array{token: string, expires: int, scope: string} Token-Daten
+     */
+    public function generateApiToken(?string $scope = null, ?int $customLifetime = null): array
+    {
+        $tokenValue = $this->createSecureToken();
+        $expiryTime = time() + ($customLifetime ?? $this->tokenLifetime);
+        $scope = $scope ?? 'default';
+
+        // Token und Metadaten speichern
+        $apiTokens = $this->session->get(self::SESSION_KEY_API_TOKENS, []);
+
+        $apiTokens[$tokenValue] = [
+            'expires' => $expiryTime,
+            'scope' => $scope,
+            'created' => time(),
+            'last_used' => null
+        ];
+
+        // Alte Tokens aufräumen
+        $apiTokens = $this->cleanExpiredTokens($apiTokens);
+
+        $this->session->set(self::SESSION_KEY_API_TOKENS, $apiTokens);
+
+        return [
+            'token' => $tokenValue,
+            'expires' => $expiryTime,
+            'scope' => $scope
+        ];
     }
 
     /**

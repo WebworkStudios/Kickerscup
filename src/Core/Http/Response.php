@@ -33,6 +33,30 @@ class Response
     }
 
     /**
+     * Erstellt eine API-Error-Response
+     *
+     * @param string $message Fehlermeldung
+     * @param int $statusCode HTTP-Statuscode
+     * @param array $details Zusätzliche Fehlerdetails
+     * @return self
+     */
+    public static function error(
+        string $message,
+        int    $statusCode = 400,
+        array  $details = []
+    ): self
+    {
+        $errorResponse = [
+            'error' => true,
+            'message' => $message,
+            'details' => $details,
+            'timestamp' => time()
+        ];
+
+        return self::json($errorResponse, $statusCode);
+    }
+
+    /**
      * Erstellt eine JSON-Response
      *
      * @param mixed $data Daten
@@ -52,29 +76,6 @@ class Response
                 'Content-Type' => 'application/json; charset=UTF-8'
             ], $headers)
         );
-    }
-
-    /**
-     * Erstellt eine API-Error-Response
-     *
-     * @param string $message Fehlermeldung
-     * @param int $statusCode HTTP-Statuscode
-     * @param array $details Zusätzliche Fehlerdetails
-     * @return self
-     */
-    public static function error(
-        string $message,
-        int $statusCode = 400,
-        array $details = []
-    ): self {
-        $errorResponse = [
-            'error' => true,
-            'message' => $message,
-            'details' => $details,
-            'timestamp' => time()
-        ];
-
-        return self::json($errorResponse, $statusCode);
     }
 
     /**

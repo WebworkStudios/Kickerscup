@@ -115,6 +115,18 @@ class WhereClause
     }
 
     /**
+     * Fügt eine WHERE IN-Bedingung mit OR hinzu
+     *
+     * @param string $column Spalte
+     * @param array $values Werte
+     * @return void
+     */
+    public function orWhereIn(string $column, array $values): void
+    {
+        $this->addInCondition('OR', $column, $values, 'IN');
+    }
+
+    /**
      * Fügt eine IN-Bedingung hinzu
      *
      * @param string $type Typ der Verknüpfung (AND oder OR)
@@ -151,18 +163,6 @@ class WhereClause
             'type' => $type,
             'sql' => "$column $operator (" . implode(', ', $bindings) . ")"
         ];
-    }
-
-    /**
-     * Fügt eine WHERE IN-Bedingung mit OR hinzu
-     *
-     * @param string $column Spalte
-     * @param array $values Werte
-     * @return void
-     */
-    public function orWhereIn(string $column, array $values): void
-    {
-        $this->addInCondition('OR', $column, $values, 'IN');
     }
 
     /**

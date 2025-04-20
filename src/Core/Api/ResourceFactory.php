@@ -12,6 +12,24 @@ use App\Core\Database\Paginator;
 class ResourceFactory
 {
     /**
+     * Transformiert ein Modell in eine Ressource mit HTTP-Status
+     *
+     * @param mixed $model Zu transformierendes Modell
+     * @param string $resourceClass Ressourcenklasse
+     * @param int $status HTTP-Status
+     * @return array Ressource mit HTTP-Status
+     */
+    public function response(mixed $model, string $resourceClass, int $status = 200): array
+    {
+        $data = $this->make($model, $resourceClass);
+
+        return [
+            'data' => $data,
+            'status' => $status
+        ];
+    }
+
+    /**
      * Transformiert ein Modell in eine Ressource
      *
      * @param mixed $model Zu transformierendes Modell
@@ -22,46 +40,6 @@ class ResourceFactory
     {
         $resource = $this->createResource($resourceClass);
         return $resource->toArray($model);
-    }
-
-    /**
-     * Transformiert eine Sammlung von Modellen in eine Sammlung von Ressourcen
-     *
-     * @param array $models Zu transformierende Modelle
-     * @param string $resourceClass Ressourcenklasse
-     * @return array Transformierte Ressourcen
-     */
-    public function collection(array $models, string $resourceClass): array
-    {
-        $resource = $this->createResource($resourceClass);
-        return array_map(fn($model) => $resource->toArray($model), $models);
-    }
-
-    /**
-     * Transformiert einen Paginator in eine paginierte Ressource
-     *
-     * @param Paginator $paginator Paginator
-     * @param string $resourceClass Ressourcenklasse
-     * @return array Paginierte Ressource
-     */
-    public function paginate(Paginator $paginator, string $resourceClass): array
-    {
-        $resource = $this->createResource($resourceClass);
-        $items = $paginator->getItems();
-
-        $data = array_map(fn($item) => $resource->toArray($item), $items);
-
-        return [
-            'data' => $data,
-            'meta' => [
-                'total' => $paginator->getTotal(),
-                'per_page' => $paginator->getPerPage(),
-                'current_page' => $paginator->getCurrentPage(),
-                'last_page' => $paginator->getLastPage(),
-                'next_page_url' => $paginator->getNextPageUrl(),
-                'previous_page_url' => $paginator->getPreviousPageUrl()
-            ]
-        ];
     }
 
     /**
@@ -84,24 +62,6 @@ class ResourceFactory
         }
 
         return $resource;
-    }
-
-    /**
-     * Transformiert ein Modell in eine Ressource mit HTTP-Status
-     *
-     * @param mixed $model Zu transformierendes Modell
-     * @param string $resourceClass Ressourcenklasse
-     * @param int $status HTTP-Status
-     * @return array Ressource mit HTTP-Status
-     */
-    public function response(mixed $model, string $resourceClass, int $status = 200): array
-    {
-        $data = $this->make($model, $resourceClass);
-
-        return [
-            'data' => $data,
-            'status' => $status
-        ];
     }
 
     /**
@@ -143,6 +103,19 @@ class ResourceFactory
     }
 
     /**
+     * Transformiert eine Sammlung von Modellen in eine Sammlung von Ressourcen
+     *
+     * @param array $models Zu transformierende Modelle
+     * @param string $resourceClass Ressourcenklasse
+     * @return array Transformierte Ressourcen
+     */
+    public function collection(array $models, string $resourceClass): array
+    {
+        $resource = $this->createResource($resourceClass);
+        return array_map(fn($model) => $resource->toArray($model), $models);
+    }
+
+    /**
      * Transformiert einen Paginator in eine standardisierte API-Antwort
      *
      * @param Paginator $paginator Paginator
@@ -160,6 +133,49 @@ class ResourceFactory
             'meta' => $result['meta'],
             'status' => $status
         ];
+    }
+
+    /**
+     * Transformiert einen Paginator in eine paginierte Ressource
+     *
+     * @param Paginator $paginator Paginator
+     * @param string $resourceClass Ressourcenklasse
+     * @return array Paginierte Ressource
+     */
+    public function paginate(Paginator $paginator, string $resourceClass): array
+    {
+        $resource = $this->createResource($resourceClass);
+        $items = $paginator->getItems();
+
+        $data = array_map(fn($item) => $resource->toArray($item), $items);
+
+        return [
+            'data' => $data,
+            'meta' => [
+                'total' => $paginator->getTotal(),
+                'per_page' => $paginator->getPerPage(),
+                'current_page' => $paginator->getCurrentPage(),
+                'last_page' => $paginator->getLastPage(),
+                'next_page_url' => $paginator->getNextPageUrl(),
+                'previous_page_url' => $paginator->getPreviousPageUrl()
+            ]
+        ];
+    }
+
+    /**
+     * Transformiert eine Sammlung mit verschachtelten Beziehungen
+     *
+     * @param array $models Zu transformierende Modelle
+     * @param string $resourceClass Ressourcenklasse
+     * @param array $includes Zu inkludierende Beziehungen mit ihren Ressourcenklassen
+     * @return array Transformierte Ressourcen mit Beziehungen
+     */
+    public function collectionWithIncludes(array $models, string $resourceClass, array $includes = []): array
+    {
+        return array_map(
+            fn($model) => $this->makeWithIncludes($model, $resourceClass, $includes),
+            $models
+        );
     }
 
     /**
@@ -217,22 +233,6 @@ class ResourceFactory
     }
 
     /**
-     * Transformiert eine Sammlung mit verschachtelten Beziehungen
-     *
-     * @param array $models Zu transformierende Modelle
-     * @param string $resourceClass Ressourcenklasse
-     * @param array $includes Zu inkludierende Beziehungen mit ihren Ressourcenklassen
-     * @return array Transformierte Ressourcen mit Beziehungen
-     */
-    public function collectionWithIncludes(array $models, string $resourceClass, array $includes = []): array
-    {
-        return array_map(
-            fn($model) => $this->makeWithIncludes($model, $resourceClass, $includes),
-            $models
-        );
-    }
-
-    /**
      * Transformiert einen Paginator mit verschachtelten Beziehungen
      *
      * @param Paginator $paginator Paginator
@@ -263,30 +263,6 @@ class ResourceFactory
     }
 
     /**
-     * Erstellt eine Ressourceninstanz über den Container, falls vorhanden
-     *
-     * @param string $resourceClass Ressourcenklasse
-     * @return Resource Ressourceninstanz
-     */
-    private function resolveResource(string $resourceClass): Resource
-    {
-        // Versuchen, die Ressource über den Container zu erstellen, falls vorhanden
-        try {
-            $container = app();
-            if ($container->has($resourceClass)) {
-                $resource = $container->make($resourceClass);
-                if ($resource instanceof Resource) {
-                    return $resource;
-                }
-            }
-        } catch (\Throwable $e) {
-            // Fallback zur direkten Instanziierung, wenn Container nicht verfügbar ist
-        }
-
-        return $this->createResource($resourceClass);
-    }
-
-    /**
      * Macht die API-Ausgabe kompakt, entfernt leere Arrays und null-Werte
      *
      * @param array $data Zu bereinigende Daten
@@ -309,5 +285,29 @@ class ResourceFactory
         }
 
         return $result;
+    }
+
+    /**
+     * Erstellt eine Ressourceninstanz über den Container, falls vorhanden
+     *
+     * @param string $resourceClass Ressourcenklasse
+     * @return Resource Ressourceninstanz
+     */
+    private function resolveResource(string $resourceClass): Resource
+    {
+        // Versuchen, die Ressource über den Container zu erstellen, falls vorhanden
+        try {
+            $container = app();
+            if ($container->has($resourceClass)) {
+                $resource = $container->make($resourceClass);
+                if ($resource instanceof Resource) {
+                    return $resource;
+                }
+            }
+        } catch (\Throwable $e) {
+            // Fallback zur direkten Instanziierung, wenn Container nicht verfügbar ist
+        }
+
+        return $this->createResource($resourceClass);
     }
 }

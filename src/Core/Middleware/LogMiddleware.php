@@ -39,8 +39,9 @@ class LogMiddleware implements Middleware
      */
     public function __construct(
         string $level = 'debug',
-        array $sensitiveHeaders = []
-    ) {
+        array  $sensitiveHeaders = []
+    )
+    {
         $this->level = $level;
         $this->sensitiveHeaders = array_merge(
             $this->sensitiveHeaders,
@@ -91,24 +92,6 @@ class LogMiddleware implements Middleware
     }
 
     /**
-     * Protokolliert eine ausgehende Response
-     *
-     * @param Response $response Die zu protokollierende Response
-     * @param float $duration Die Verarbeitungsdauer in Sekunden
-     */
-    private function logResponse(Response $response, float $duration): void
-    {
-        $statusCode = $response->getStatusCode();
-        $headers = $this->sanitizeHeaders($response->getHeaders());
-
-        app_log("Ausgehende Response: $statusCode in " . round($duration * 1000) . "ms", [
-            'statusCode' => $statusCode,
-            'headers' => $headers,
-            'duration' => $duration
-        ], $this->level);
-    }
-
-    /**
      * Entfernt sensible Daten aus Headern
      *
      * @param array $headers Die zu bereinigenden Header
@@ -129,5 +112,23 @@ class LogMiddleware implements Middleware
         }
 
         return $headers;
+    }
+
+    /**
+     * Protokolliert eine ausgehende Response
+     *
+     * @param Response $response Die zu protokollierende Response
+     * @param float $duration Die Verarbeitungsdauer in Sekunden
+     */
+    private function logResponse(Response $response, float $duration): void
+    {
+        $statusCode = $response->getStatusCode();
+        $headers = $this->sanitizeHeaders($response->getHeaders());
+
+        app_log("Ausgehende Response: $statusCode in " . round($duration * 1000) . "ms", [
+            'statusCode' => $statusCode,
+            'headers' => $headers,
+            'duration' => $duration
+        ], $this->level);
     }
 }

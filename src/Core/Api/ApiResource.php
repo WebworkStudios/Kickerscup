@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Core\Api;
 
+use App\Core\Database\Paginator;
 use App\Core\Http\Response;
 use App\Core\Http\ResponseFactory;
-use App\Core\Database\Paginator;
 
 /**
  * API-Ressource für standardisierte API-Antworten
@@ -109,8 +109,8 @@ class ApiResource
     public function error(
         string $message,
         string $errorCode = 'ERROR',
-        array $details = [],
-        int $status = 400
+        array  $details = [],
+        int    $status = 400
     ): Response
     {
         return $this->responseFactory->error($message, $errorCode, $details, $status);

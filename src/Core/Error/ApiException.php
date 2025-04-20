@@ -51,6 +51,20 @@ abstract class ApiException extends Exception
     }
 
     /**
+     * Erstellt einen Standardfehlercode aus dem Klassennamen
+     *
+     * @return string
+     */
+    private function getDefaultErrorCode(): string
+    {
+        $className = basename(str_replace('\\', '/', get_class($this)));
+        $className = str_replace('Exception', '', $className);
+
+        // Camel-Case zu Underscore-Case umwandeln
+        return strtoupper(preg_replace('/(?<!^)[A-Z]/', '_$0', $className));
+    }
+
+    /**
      * Gibt den Fehlercode zurück
      *
      * @return string
@@ -78,19 +92,5 @@ abstract class ApiException extends Exception
     public function getDetails(): array
     {
         return $this->details;
-    }
-
-    /**
-     * Erstellt einen Standardfehlercode aus dem Klassennamen
-     *
-     * @return string
-     */
-    private function getDefaultErrorCode(): string
-    {
-        $className = basename(str_replace('\\', '/', get_class($this)));
-        $className = str_replace('Exception', '', $className);
-
-        // Camel-Case zu Underscore-Case umwandeln
-        return strtoupper(preg_replace('/(?<!^)[A-Z]/', '_$0', $className));
     }
 }

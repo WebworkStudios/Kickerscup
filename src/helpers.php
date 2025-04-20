@@ -335,9 +335,9 @@ function api_success(mixed $data = null, int $status = 200, array $headers = [])
 function api_error(
     string $message,
     string $errorCode = 'ERROR',
-    array $details = [],
-    int $status = 400,
-    array $headers = []
+    array  $details = [],
+    int    $status = 400,
+    array  $headers = []
 ): \App\Core\Http\Response
 {
     return app(ResponseFactory::class)->error($message, $errorCode, $details, $status, $headers);
@@ -485,8 +485,7 @@ function dd(mixed $var, bool $exit = true): void
     // Im CLI-Modus ausgeben
     if (PHP_SAPI === 'cli') {
         echo $output . PHP_EOL;
-    }
-    // Im Web-Modus in pre-Tags ausgeben
+    } // Im Web-Modus in pre-Tags ausgeben
     else {
         echo '<pre style="background:#f8f8f8;color:#333;font-size:14px;padding:10px;border-radius:5px;margin:10px 0;border:1px solid #ddd;overflow:auto;">' .
             htmlspecialchars($output, ENT_QUOTES) .

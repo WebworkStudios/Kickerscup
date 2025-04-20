@@ -41,10 +41,11 @@ class AuthMiddleware implements Middleware
      * @param array $ignoredPaths Zu ignorierende Pfade (kein Auth-Check)
      */
     public function __construct(
-        Csrf $csrf,
+        Csrf            $csrf,
         ResponseFactory $responseFactory,
-        array $ignoredPaths = []
-    ) {
+        array           $ignoredPaths = []
+    )
+    {
         $this->csrf = $csrf;
         $this->responseFactory = $responseFactory;
         $this->ignoredPaths = $ignoredPaths;
@@ -96,6 +97,6 @@ class AuthMiddleware implements Middleware
     {
         // Muster in regulären Ausdruck umwandeln (einfache * Wildcards unterstützen)
         $regex = str_replace('\\*', '.*', preg_quote($pattern, '/'));
-        return (bool) preg_match('/^' . $regex . '$/', $path);
+        return (bool)preg_match('/^' . $regex . '$/', $path);
     }
 }

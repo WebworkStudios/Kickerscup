@@ -24,12 +24,13 @@ class BadRequestException extends ApiException
      * @param \Throwable|null $previous Vorangegangene Exception (optional)
      */
     public function __construct(
-        string $message = 'Ungültige Anfrage.',
-        ?string $errorCode = null,
-        array $details = [],
-        ?int $code = 0,
+        string      $message = 'Ungültige Anfrage.',
+        ?string     $errorCode = null,
+        array       $details = [],
+        ?int        $code = 0,
         ?\Throwable $previous = null
-    ) {
+    )
+    {
         parent::__construct($message, $errorCode ?? 'BAD_REQUEST', $details, $code, $previous);
     }
 }

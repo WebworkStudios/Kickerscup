@@ -104,6 +104,7 @@ class ErrorHandler
 
         app_log("[$method $uri] {$error->getMessage()}", $context, $logLevel);
     }
+
     /**
      * Erstellt eine Fehlerantwort im API-Format
      *

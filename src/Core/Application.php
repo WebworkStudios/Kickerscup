@@ -102,7 +102,7 @@ class Application
             );
         });
 
-        $this->container->singleton(Security::class, function($container) {
+        $this->container->singleton(Security::class, function ($container) {
             return new Security(
                 $container->make(Session::class),
                 $container->make(Csrf::class),
@@ -110,7 +110,7 @@ class Application
             );
         });
 
-        $this->container->singleton(Csrf::class, function($container) {
+        $this->container->singleton(Csrf::class, function ($container) {
             return new Csrf(
                 $container->make(Session::class)
             );

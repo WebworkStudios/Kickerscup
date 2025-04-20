@@ -53,11 +53,12 @@ class Translator
      * @param string|null $langPath Benutzerdefinierter Pfad für Sprachdateien
      */
     public function __construct(
-        string $locale = 'de',
-        string $fallbackLocale = 'en',
-        ?Cache $cache = null,
+        string  $locale = 'de',
+        string  $fallbackLocale = 'en',
+        ?Cache  $cache = null,
         ?string $langPath = null
-    ) {
+    )
+    {
         $this->locale = $locale;
         $this->fallbackLocale = $fallbackLocale;
         $this->cache = $cache;
@@ -296,6 +297,16 @@ class Translator
     }
 
     /**
+     * Gibt den Basispfad für Sprachdateien zurück
+     *
+     * @return string
+     */
+    public function getLangPath(): string
+    {
+        return $this->langPath;
+    }
+
+    /**
      * Setzt den Basispfad für Sprachdateien
      *
      * @param string $path Pfad zu den Sprachdateien
@@ -305,15 +316,5 @@ class Translator
     {
         $this->langPath = rtrim($path, '/');
         return $this;
-    }
-
-    /**
-     * Gibt den Basispfad für Sprachdateien zurück
-     *
-     * @return string
-     */
-    public function getLangPath(): string
-    {
-        return $this->langPath;
     }
 }

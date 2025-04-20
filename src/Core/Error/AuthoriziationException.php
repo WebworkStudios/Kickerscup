@@ -23,12 +23,13 @@ class AuthoriziationException extends ApiException
      * @param \Throwable|null $previous Vorangegangene Exception (optional)
      */
     public function __construct(
-        string $message = 'Zugriff verweigert. Sie haben nicht die erforderlichen Berechtigungen.',
-        ?string $errorCode = null,
-        array $details = [],
-        ?int $code = 0,
+        string      $message = 'Zugriff verweigert. Sie haben nicht die erforderlichen Berechtigungen.',
+        ?string     $errorCode = null,
+        array       $details = [],
+        ?int        $code = 0,
         ?\Throwable $previous = null
-    ) {
+    )
+    {
         parent::__construct($message, $errorCode ?? 'FORBIDDEN', $details, $code, $previous);
     }
 }

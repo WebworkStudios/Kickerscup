@@ -6,14 +6,6 @@ namespace App\Core\Api;
 abstract class AbstractResource implements Resource
 {
     /**
-     * Transformiert ein Modell in eine Ressource
-     *
-     * @param mixed $model Zu transformierendes Modell
-     * @return array Transformierte Ressource
-     */
-    abstract public function toArray(mixed $model): array;
-
-    /**
      * Erzeugt eine Ressource aus einem Modell
      *
      * @param mixed $model Zu transformierendes Modell
@@ -23,6 +15,14 @@ abstract class AbstractResource implements Resource
     {
         return (new static())->toArray($model);
     }
+
+    /**
+     * Transformiert ein Modell in eine Ressource
+     *
+     * @param mixed $model Zu transformierendes Modell
+     * @return array Transformierte Ressource
+     */
+    abstract public function toArray(mixed $model): array;
 
     /**
      * Transformiert eine Sammlung von Modellen in eine Sammlung von Ressourcen
@@ -38,21 +38,6 @@ abstract class AbstractResource implements Resource
             fn($model) => $resource->toArray($model),
             $models
         );
-    }
-
-    /**
-     * Fügt Metadaten zu einer Ressourcensammlung hinzu
-     *
-     * @param array $resources Ressourcen
-     * @param array $meta Metadaten
-     * @return array Ressourcen mit Metadaten
-     */
-    protected function withMeta(array $resources, array $meta): array
-    {
-        return [
-            'data' => $resources,
-            'meta' => $meta
-        ];
     }
 
     /**
@@ -80,6 +65,21 @@ abstract class AbstractResource implements Resource
             'next_page_url' => $paginator->getNextPageUrl(),
             'previous_page_url' => $paginator->getPreviousPageUrl()
         ]);
+    }
+
+    /**
+     * Fügt Metadaten zu einer Ressourcensammlung hinzu
+     *
+     * @param array $resources Ressourcen
+     * @param array $meta Metadaten
+     * @return array Ressourcen mit Metadaten
+     */
+    protected function withMeta(array $resources, array $meta): array
+    {
+        return [
+            'data' => $resources,
+            'meta' => $meta
+        ];
     }
 
     /**
