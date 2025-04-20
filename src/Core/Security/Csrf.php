@@ -5,21 +5,20 @@ declare(strict_types=1);
 namespace App\Core\Security;
 
 /**
- * Verbesserte CSRF-Schutzklasse
+ * API-Token-Sicherheitsklasse für REST APIs
  *
- * Bietet erweiterten Schutz vor Cross-Site Request Forgery mit
- * unterstützung für formularbasierte und API-basierte Anwendungen
+ * Diese Klasse ersetzt den klassischen CSRF-Schutz durch einen
+ * für APIs optimierten Token-basierten Sicherheitsmechanismus.
  */
 class Csrf
 {
     /**
-     * Session-Keys für CSRF-Token
+     * Session-Keys für API-Tokens
      */
-    private const SESSION_KEY = 'csrf_token';
-    private const SESSION_KEY_EXPIRY = 'csrf_token_expiry';
+    private const SESSION_KEY_API_TOKENS = 'api_tokens';
 
     /**
-     * Default Token-Lebensdauer in Sekunden
+     * Standard Token-Lebensdauer in Sekunden
      */
     private const DEFAULT_TOKEN_LIFETIME = 7200; // 2 Stunden
 
@@ -41,11 +40,187 @@ class Csrf
      */
     public function __construct(
         Session $session,
-        ?int    $tokenLifetime = null
-    )
-    {
+        ?int $tokenLifetime = null
+    ) {
         $this->session = $session;
         $this->tokenLifetime = $tokenLifetime ?? self::DEFAULT_TOKEN_LIFETIME;
+    }
+
+    /**
+     * Generiert ein neues API-Token für Client-Anfragen
+     *
+     * @param string|null $scope Optionaler Bereich für das Token (z.B. 'admin', 'user')
+     * @param int|null $customLifetime Optionale benutzerdefinierte Lebensdauer
+     * @return array{token: string, expires: int, scope: string} Token-Daten
+     */
+    public function generateApiToken(?string $scope = null, ?int $customLifetime = null): array
+    {
+        $tokenValue = $this->createSecureToken();
+        $expiryTime = time() + ($customLifetime ?? $this->tokenLifetime);
+        $scope = $scope ?? 'default';
+
+        // Token und Metadaten speichern
+        $apiTokens = $this->session->get(self::SESSION_KEY_API_TOKENS, []);
+
+        $apiTokens[$tokenValue] = [
+            'expires' => $expiryTime,
+            'scope' => $scope,
+            'created' => time(),
+            'last_used' => null
+        ];
+
+        // Alte Tokens aufräumen
+        $apiTokens = $this->cleanExpiredTokens($apiTokens);
+
+        $this->session->set(self::SESSION_KEY_API_TOKENS, $apiTokens);
+
+        return [
+            'token' => $tokenValue,
+            'expires' => $expiryTime,
+            'scope' => $scope
+        ];
+    }
+
+    /**
+     * Validiert ein API-Token
+     *
+     * @param string $token Das zu validierende Token
+     * @param string|null $requiredScope Optionaler erforderlicher Bereich
+     * @return bool True, wenn das Token gültig ist
+     */
+    public function validateApiToken(string $token, ?string $requiredScope = null): bool
+    {
+        $apiTokens = $this->session->get(self::SESSION_KEY_API_TOKENS, []);
+
+        if (!isset($apiTokens[$token])) {
+            return false;
+        }
+
+        $tokenData = $apiTokens[$token];
+        $now = time();
+
+        // Prüfen, ob Token abgelaufen ist
+        if ($tokenData['expires'] < $now) {
+            unset($apiTokens[$token]);
+            $this->session->set(self::SESSION_KEY_API_TOKENS, $apiTokens);
+            return false;
+        }
+
+        // Scope prüfen, falls erforderlich
+        if ($requiredScope !== null && $tokenData['scope'] !== $requiredScope) {
+            return false;
+        }
+
+        // Token-Verwendung aktualisieren
+        $apiTokens[$token]['last_used'] = $now;
+        $this->session->set(self::SESSION_KEY_API_TOKENS, $apiTokens);
+
+        return true;
+    }
+
+    /**
+     * Validiert ein API-Token aus dem Authorization-Header
+     *
+     * @param array $headers Request-Headers
+     * @param string|null $requiredScope Optionaler erforderlicher Bereich
+     * @return bool True, wenn das Token gültig ist
+     */
+    public function validateTokenFromHeaders(array $headers, ?string $requiredScope = null): bool
+    {
+        $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? '';
+
+        if (empty($authHeader)) {
+            return false;
+        }
+
+        // Bearer-Token extrahieren
+        if (preg_match('/Bearer\s+(.+)$/i', $authHeader, $matches)) {
+            return $this->validateApiToken($matches[1], $requiredScope);
+        }
+
+        // X-API-Token-Header prüfen als Fallback
+        $tokenHeader = $headers['X-API-Token'] ?? $headers['x-api-token'] ?? null;
+
+        if ($tokenHeader) {
+            return $this->validateApiToken($tokenHeader, $requiredScope);
+        }
+
+        return false;
+    }
+
+    /**
+     * Widerruft ein bestimmtes API-Token
+     *
+     * @param string $token Das zu widerrufende Token
+     * @return bool True, wenn erfolgreich widerrufen
+     */
+    public function revokeApiToken(string $token): bool
+    {
+        $apiTokens = $this->session->get(self::SESSION_KEY_API_TOKENS, []);
+
+        if (!isset($apiTokens[$token])) {
+            return false;
+        }
+
+        unset($apiTokens[$token]);
+        $this->session->set(self::SESSION_KEY_API_TOKENS, $apiTokens);
+
+        return true;
+    }
+
+    /**
+     * Widerruft alle API-Tokens eines bestimmten Bereichs
+     *
+     * @param string|null $scope Bereich oder null für alle Tokens
+     * @return int Anzahl der widerrufenen Tokens
+     */
+    public function revokeAllTokens(?string $scope = null): int
+    {
+        $apiTokens = $this->session->get(self::SESSION_KEY_API_TOKENS, []);
+        $count = 0;
+
+        if ($scope === null) {
+            $count = count($apiTokens);
+            $apiTokens = [];
+        } else {
+            $originalCount = count($apiTokens);
+            $apiTokens = array_filter(
+                $apiTokens,
+                fn($data) => $data['scope'] !== $scope
+            );
+            $count = $originalCount - count($apiTokens);
+        }
+
+        $this->session->set(self::SESSION_KEY_API_TOKENS, $apiTokens);
+
+        return $count;
+    }
+
+    /**
+     * Erneuert ein API-Token und gibt ein neues mit aktualisierter Ablaufzeit zurück
+     *
+     * @param string $oldToken Das zu erneuernde Token
+     * @return array|null Neue Token-Daten oder null bei Fehler
+     */
+    public function refreshApiToken(string $oldToken): ?array
+    {
+        $apiTokens = $this->session->get(self::SESSION_KEY_API_TOKENS, []);
+
+        if (!isset($apiTokens[$oldToken])) {
+            return null;
+        }
+
+        $oldData = $apiTokens[$oldToken];
+
+        // Altes Token entfernen
+        unset($apiTokens[$oldToken]);
+        $this->session->set(self::SESSION_KEY_API_TOKENS, $apiTokens);
+
+        // Neues Token mit gleichen Berechtigungen erstellen
+        return $this->generateApiToken(
+            $oldData['scope'],
+            $this->tokenLifetime
+        );
     }
 
     /**
@@ -53,160 +228,71 @@ class Csrf
      *
      * @return string
      */
-    private function createTokenString(): string
+    private function createSecureToken(): string
     {
-        // 32 Bytes erzeugen 64 Hex-Zeichen, die sicherer sind als base64
         return bin2hex(random_bytes(32));
     }
 
     /**
-     * Gibt das aktuelle CSRF-Token zurück
+     * Entfernt abgelaufene Tokens aus dem Token-Store
      *
-     * @return string|null
+     * @param array $tokens Alle Tokens
+     * @return array Bereinigte Tokens
      */
-    public function getToken(): ?string
+    private function cleanExpiredTokens(array $tokens): array
     {
-        $token = $this->session->get(self::SESSION_KEY);
-        $expiryTime = $this->session->get(self::SESSION_KEY_EXPIRY);
+        $now = time();
 
-        // Überprüfe, ob Token abgelaufen ist
-        if ($token !== null && $expiryTime !== null && time() > $expiryTime) {
-            // Token ist abgelaufen, generiere ein neues
-            return $this->generateToken();
+        return array_filter(
+            $tokens,
+            fn($data) => $data['expires'] > $now
+        );
+    }
+
+    /**
+     * Gibt Informationen zu einem Token zurück
+     *
+     * @param string $token Das Token
+     * @return array|null Token-Informationen oder null, wenn nicht gefunden
+     */
+    public function getTokenInfo(string $token): ?array
+    {
+        $apiTokens = $this->session->get(self::SESSION_KEY_API_TOKENS, []);
+
+        if (!isset($apiTokens[$token])) {
+            return null;
         }
 
-        return $token;
-    }
-
-    /**
-     * Generiert ein CSRF-Token und speichert es in der Session
-     *
-     * @return string
-     */
-    public function generateToken(): string
-    {
-        $token = $this->createTokenString();
-        $expiryTime = time() + $this->tokenLifetime;
-
-        $this->session->set(self::SESSION_KEY, $token);
-        $this->session->set(self::SESSION_KEY_EXPIRY, $expiryTime);
-
-        return $token;
-    }
-
-    /**
-     * Erzeugt ein JSON-Web-Token für API-Anfragen
-     *
-     * @param int $validity Gültigkeitsdauer in Sekunden
-     * @return array{token: string, expires: int} Token und Ablaufzeit
-     */
-    public function generateApiToken(int $validity = 3600): array
-    {
-        $token = $this->createTokenString();
-        $expiryTime = time() + $validity;
-
-        // Für API-Anfragen speichern wir ein separates Token
-        $apiTokens = $this->session->get('api_csrf_tokens', []);
-        $apiTokens[$token] = $expiryTime;
-
-        // Bereinige ältere API-Tokens
-        $now = time();
-        $apiTokens = array_filter($apiTokens, fn($expiry) => $expiry > $now);
-
-        $this->session->set('api_csrf_tokens', $apiTokens);
+        $data = $apiTokens[$token];
 
         return [
             'token' => $token,
-            'expires' => $expiryTime
+            'expires' => $data['expires'],
+            'expires_in' => max(0, $data['expires'] - time()),
+            'scope' => $data['scope'],
+            'created' => $data['created'],
+            'last_used' => $data['last_used']
         ];
     }
 
     /**
-     * Validiert ein API-CSRF-Token
+     * Verlängert die Lebensdauer eines Tokens
      *
-     * @param string $token API-CSRF-Token
-     * @return bool True, wenn gültig, sonst false
+     * @param string $token Das Token
+     * @param int $additionalTime Zusätzliche Zeit in Sekunden
+     * @return bool True bei Erfolg, sonst false
      */
-    public function validateApiToken(string $token): bool
+    public function extendTokenLifetime(string $token, int $additionalTime): bool
     {
-        $apiTokens = $this->session->get('api_csrf_tokens', []);
+        $apiTokens = $this->session->get(self::SESSION_KEY_API_TOKENS, []);
 
         if (!isset($apiTokens[$token])) {
             return false;
         }
 
-        $expiryTime = $apiTokens[$token];
-
-        // Prüfe, ob Token abgelaufen ist
-        if (time() > $expiryTime) {
-            // Entferne abgelaufenes Token
-            unset($apiTokens[$token]);
-            $this->session->set('api_csrf_tokens', $apiTokens);
-            return false;
-        }
+        $apiTokens[$token]['expires'] += $additionalTime;
+        $this->session->set(self::SESSION_KEY_API_TOKENS, $apiTokens);
 
         return true;
-    }
-
-    /**
-     * Prüft ein CSRF-Token aus einem HTTP-Request-Header
-     *
-     * @param array<string, string> $headers HTTP-Header
-     * @return bool True, wenn gültig, sonst false
-     */
-    public function validateHeaderToken(array $headers): bool
-    {
-        $token = $headers['X-CSRF-TOKEN'] ?? $headers['x-csrf-token'] ?? null;
-
-        if ($token === null) {
-            return false;
-        }
-
-        return $this->validateToken($token);
-    }
-
-    /**
-     * Validiert ein CSRF-Token
-     *
-     * @param string $token CSRF-Token
-     * @param string|null $formId Optional: Formular-ID für spezifische Token-Validierung
-     * @return bool True, wenn gültig, sonst false
-     */
-    public function validateToken(string $token, ?string $formId = null): bool
-    {
-        // Überprüfung des benutzerspezifischen Tokens, wenn formId angegeben wurde
-        if ($formId !== null) {
-            return $this->validateFormToken($token, $formId);
-        }
-
-        // Prüfe, ob Token in der Session existiert
-        $storedToken = $this->session->get(self::SESSION_KEY);
-        if ($storedToken === null) {
-            return false;
-        }
-
-        // Prüfe, ob Token abgelaufen ist
-        $expiryTime = $this->session->get(self::SESSION_KEY_EXPIRY);
-        if ($expiryTime !== null && time() > $expiryTime) {
-            // Token abgelaufen, generiere ein neues
-            $this->generateToken();
-            return false;
-        }
-
-        // Vergleiche Token mit constant-time Vergleich gegen Timing-Attacken
-        return hash_equals($storedToken, $token);
-    }
-
-    /**
-     * Entfernt alle CSRF-Token aus der Session
-     *
-     * @return void
-     */
-    public function clearAllTokens(): void
-    {
-        $this->session->remove(self::SESSION_KEY);
-        $this->session->remove(self::SESSION_KEY_EXPIRY);
-        $this->session->remove(self::SESSION_KEY_PER_FORM);
-        $this->session->remove('api_csrf_tokens');
     }
 }
