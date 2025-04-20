@@ -25,9 +25,8 @@ $container = null;
 function setContainer(Container $container): void
 {
     global $container;
-    $container = $container;
+    $GLOBALS['container'] = $container;
 }
-
 /**
  * Holt einen Service aus dem Container
  *
@@ -185,17 +184,6 @@ function trans(string $key, array $replace = []): string
 }
 
 /**
- * Generiert einen CSRF-Token für API
- *
- * @return string Token
- * @throws Exception
- */
-function csrf_token(): string
-{
-    return app('App\Core\Security\Csrf')->generateApiToken()['token'];
-}
-
-/**
  * Loggt eine Nachricht im API-Log
  *
  * @param string $message Nachricht
@@ -218,18 +206,6 @@ function app_log(string $message, array $context = [], string $level = 'info'): 
     }
 
     file_put_contents($path, $logMessage, FILE_APPEND);
-}
-
-/**
- * Gibt einen Wert oder den Standardwert zurück
- *
- * @param mixed $value Wert
- * @param mixed $default Standardwert
- * @return mixed Wert oder Standardwert
- */
-function value(mixed $value, mixed $default = null): mixed
-{
-    return $value ?? $default;
 }
 
 /**
@@ -547,41 +523,6 @@ function route(string $name, array $parameters = [], array $query = []): string
 }
 
 /**
- * Prüft PHP-Code auf Syntax-Fehler
- *
- * @param string $code PHP-Code
- * @return bool|string True bei gültiger Syntax, sonst Fehlermeldung
- */
-function check_php_syntax(string $code): bool|string
-{
-    $tempFile = tempnam(sys_get_temp_dir(), 'syntax_check_');
-    file_put_contents($tempFile, $code);
-
-    $output = [];
-    $return = 0;
-
-    exec("php -l {$tempFile} 2>&1", $output, $return);
-    unlink($tempFile);
-
-    if ($return === 0) {
-        return true;
-    }
-
-    return implode(PHP_EOL, $output);
-}
-
-/**
- * Erzeugt einen Hash mit den neuen xxHash-Funktionen von PHP 8.4
- *
- * @param string $data Zu hashende Daten
- * @return string Hash
- */
-function xxhash(string $data): string
-{
-    return hash('xxh3', $data);
-}
-
-/**
  * Erzeugt eine JSON-Web-Token für die API-Authentifizierung
  *
  * @param int $userId Benutzer-ID
@@ -593,28 +534,6 @@ function xxhash(string $data): string
 function generate_jwt(int $userId, array $claims = [], ?int $lifetime = null): string
 {
     return app(\App\Core\Security\Auth::class)->createJwtToken($userId, $claims, $lifetime);
-}
-
-/**
- * Validiert ein JSON-Web-Token
- *
- * @param string $token JWT-Token
- * @return array|null Claims oder null, wenn ungültig
- */
-function validate_jwt(string $token): ?array
-{
-    return app(\App\Core\Security\JWTAuth::class)->validateToken($token);
-}
-
-/**
- * Extrahiert die Benutzer-ID aus einem JSON-Web-Token
- *
- * @param string $token JWT-Token
- * @return int|null Benutzer-ID oder null, wenn ungültig
- */
-function get_user_id_from_jwt(string $token): ?int
-{
-    return app(\App\Core\Security\JWTAuth::class)->getUserIdFromToken($token);
 }
 
 /**
@@ -637,4 +556,31 @@ function validate_token(string $token, string $type = \App\Core\Security\Auth::T
 function get_user_id_from_token(string $token, string $type = \App\Core\Security\Auth::TYPE_JWT): ?int
 {
     return app(\App\Core\Security\Auth::class)->getUserId($token, $type);
+}
+
+/**
+ * Exportiert Übersetzungen für das Frontend als JSON
+ *
+ * @param string $file Dateiname (z.B. 'frontend')
+ * @param string|null $locale Optionale Sprache
+ * @return array Übersetzungen als JSON
+ * @throws Exception
+ */
+function translations_for_frontend(string $file, ?string $locale = null): array
+{
+    static $translator = null;
+
+    if ($translator === null) {
+        $cache = app()->has('App\Core\Cache\Cache')
+            ? app('App\Core\Cache\Cache')
+            : null;
+
+        $translator = new \App\Core\Translation\Translator(
+            config('app.locale', 'de'),
+            config('app.fallback_locale', 'en'),
+            $cache
+        );
+    }
+
+    return $translator->forFrontend($file, $locale);
 }

@@ -8,7 +8,7 @@ use App\Core\Cache\Cache;
 
 /**
  * Translator-Klasse für API-Lokalisierung
- * Optimiert für JSON-Responses und API-Fehlermeldugen
+ * Optimiert für JSON-Responses, API-Fehlermeldungen und Frontend-Integration
  */
 class Translator
 {
@@ -67,8 +67,6 @@ class Translator
 
     /**
      * Gibt die aktuelle Sprache zurück
-     *
-     * @return string
      */
     public function getLocale(): string
     {
@@ -106,16 +104,29 @@ class Translator
         $file = array_shift($parts);
         $translations = $this->loadTranslationsForFile($file, $locale);
 
-        // Zugriff auf verschachtelte Elemente
-        $translation = $translations;
-        foreach ($parts as $part) {
-            if (!is_array($translation) || !isset($translation[$part])) {
+        // Verwendet PHP 8.4 array_find für eine einfachere Traversierung verschachtelter Arrays
+        return $this->hasNestedKey($translations, $parts);
+    }
+
+    /**
+     * Prüft, ob ein verschachtelter Schlüssel in einem Array existiert
+     *
+     * @param array $array Array, in dem gesucht werden soll
+     * @param array $keys Schlüssel-Pfad als Array
+     * @return bool True, wenn der Schlüssel existiert
+     */
+    private function hasNestedKey(array $array, array $keys): bool
+    {
+        $current = $array;
+
+        foreach ($keys as $key) {
+            if (!is_array($current) || !isset($current[$key])) {
                 return false;
             }
-            $translation = $translation[$part];
+            $current = $current[$key];
         }
 
-        return is_string($translation);
+        return is_string($current);
     }
 
     /**
@@ -182,24 +193,41 @@ class Translator
         $file = array_shift($parts);
         $translations = $this->loadTranslationsForFile($file, $locale);
 
-        // Zugriff auf verschachtelte Elemente
-        $translation = $translations;
-        foreach ($parts as $part) {
-            if (!is_array($translation) || !isset($translation[$part])) {
-                // Fallback zur Ausweichsprache
-                if ($locale !== $this->fallbackLocale) {
-                    return $this->get($key, $replace, $this->fallbackLocale);
-                }
-                return $key;
-            }
-            $translation = $translation[$part];
-        }
+        // Zugriff auf verschachtelte Elemente mit neuer getNestedValue Methode
+        $translation = $this->getNestedValue($translations, $parts);
 
         if (!is_string($translation)) {
+            // Fallback zur Ausweichsprache
+            if ($locale !== $this->fallbackLocale) {
+                return $this->get($key, $replace, $this->fallbackLocale);
+            }
             return $key;
         }
 
         return $this->replaceParameters($translation, $replace);
+    }
+
+    /**
+     * Holt einen verschachtelten Wert aus einem Array
+     *
+     * Nutzt PHP 8.4 Typisierung für bessere Code-Qualität
+     *
+     * @param array $array Quell-Array
+     * @param array $path Pfad zum Wert als Array
+     * @return string|null Der gefundene Wert oder null
+     */
+    private function getNestedValue(array $array, array $path): ?string
+    {
+        $current = $array;
+
+        foreach ($path as $key) {
+            if (!is_array($current) || !isset($current[$key])) {
+                return null;
+            }
+            $current = $current[$key];
+        }
+
+        return is_string($current) ? $current : null;
     }
 
     /**
@@ -215,12 +243,20 @@ class Translator
             return $translation;
         }
 
-        $replacements = [];
-        foreach ($replace as $key => $value) {
-            $replacements[':' . $key] = $value;
+        // PHP 8.4 array_map mit Arrow Function für kürzere Syntax
+        $replacements = array_map(
+            fn($key, $value) => [':' . $key => $value],
+            array_keys($replace),
+            array_values($replace)
+        );
+
+        // Flatten das Array für strtr
+        $flatReplacements = [];
+        foreach ($replacements as $replacement) {
+            $flatReplacements += $replacement;
         }
 
-        return strtr($translation, $replacements);
+        return strtr($translation, $flatReplacements);
     }
 
     /**
@@ -267,12 +303,14 @@ class Translator
             $locales = $this->getAvailableLocales();
         }
 
-        $result = [];
-        foreach ($locales as $locale) {
-            $result[$locale] = $this->get($key, $replace, $locale);
-        }
-
-        return $result;
+        // Nutzt array_map mit PHP 8.4 zur Vereinfachung
+        return array_combine(
+            $locales,
+            array_map(
+                fn($locale) => $this->get($key, $replace, $locale),
+                $locales
+            )
+        );
     }
 
     /**
@@ -282,24 +320,54 @@ class Translator
      */
     public function getAvailableLocales(): array
     {
-        $locales = [];
-
-        if (is_dir($this->langPath)) {
-            $items = scandir($this->langPath);
-            foreach ($items as $item) {
-                if ($item !== '.' && $item !== '..' && is_dir($this->langPath . '/' . $item)) {
-                    $locales[] = $item;
-                }
-            }
+        if (!is_dir($this->langPath)) {
+            return [];
         }
 
-        return $locales;
+        // Nutzt array_filter mit PHP 8.4 für saubereren Code
+        return array_filter(
+            scandir($this->langPath) ?: [],
+            fn($item) => $item !== '.' && $item !== '..' && is_dir($this->langPath . '/' . $item)
+        );
+    }
+
+    /**
+     * Exportiert Übersetzungen für Frontend-Clients als JSON
+     *
+     * @param string $file Dateiname (z.B. 'api', 'frontend', etc.)
+     * @param string|null $locale Optionale Sprache (Standard: aktuelle Sprache)
+     * @return array Übersetzungen als assoziatives Array für JSON-Ausgabe
+     */
+    public function forFrontend(string $file, ?string $locale = null): array
+    {
+        $locale = $locale ?? $this->locale;
+        return $this->loadTranslationsForFile($file, $locale);
+    }
+
+    /**
+     * Exportiert alle Übersetzungen eines bestimmten Files für mehrere Sprachen
+     * Ideal für mehrsprachige SPAs und mobile Apps
+     *
+     * @param string $file Dateiname (z.B. 'api', 'frontend', etc.)
+     * @param array $locales Sprachen (oder alle verfügbaren, wenn leer)
+     * @return array<string, array> Übersetzungen nach Sprache
+     */
+    public function allForFrontend(string $file, array $locales = []): array
+    {
+        if (empty($locales)) {
+            $locales = $this->getAvailableLocales();
+        }
+
+        $result = [];
+        foreach ($locales as $locale) {
+            $result[$locale] = $this->forFrontend($file, $locale);
+        }
+
+        return $result;
     }
 
     /**
      * Gibt den Basispfad für Sprachdateien zurück
-     *
-     * @return string
      */
     public function getLangPath(): string
     {

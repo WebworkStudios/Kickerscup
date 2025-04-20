@@ -68,7 +68,7 @@ class ErrorHandler
             $error instanceof ValidationException => 422,
             $error instanceof NotFoundException => 404,
             $error instanceof AuthenticationException => 401,
-            $error instanceof AuthoriziationException => 403,
+            $error instanceof AuthorizationException => 403,
             $error instanceof BadRequestException => 400,
             $error instanceof \App\Core\Database\Exceptions\ConnectionException,
                 $error instanceof \App\Core\Database\Exceptions\QueryException => 503,
@@ -185,7 +185,7 @@ class ErrorHandler
             $error instanceof ValidationException ||
             $error instanceof NotFoundException ||
             $error instanceof AuthenticationException ||
-            $error instanceof AuthoriziationException ||
+            $error instanceof AuthorizationException ||
             $error instanceof BadRequestException
         ) {
             return $error->getMessage();

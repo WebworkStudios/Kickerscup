@@ -6,7 +6,7 @@ namespace App\Core\Error;
 /**
  * Exception für Autorisierungsfehler
  */
-class AuthoriziationException extends ApiException
+class AuthorizationException extends ApiException
 {
     /**
      * HTTP-Statuscode für Autorisierungsfehler
