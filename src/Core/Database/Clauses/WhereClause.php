@@ -92,7 +92,26 @@ class WhereClause
      */
     public function whereIn(string $column, array $values): void
     {
-        $this->addInCondition('AND', $column, $values, 'IN');
+        if (empty($values)) {
+            $this->conditions[] = [
+                'type' => 'AND',
+                'sql' => '0 = 1' // Immer falsch für leere IN-Klausel
+            ];
+            return;
+        }
+
+        $bindings = [];
+        foreach ($values as $index => $value) {
+            $binding = "where_in_{$this->bindingId}_{$index}";
+            $bindings[] = ":$binding";
+            $this->bindings[$binding] = $value;
+        }
+
+        $this->conditions[] = [
+            'type' => 'AND',
+            'sql' => "$column IN (" . implode(', ', $bindings) . ")"
+        ];
+        $this->bindingId++;
     }
 
     /**

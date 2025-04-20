@@ -119,6 +119,10 @@ class Connection
      */
     private function connect(): void
     {
+        if ($this->pdo !== null && $this->pdo->getAttribute(PDO::ATTR_CONNECTION_STATUS) === 'Connected') {
+            return; // Wiederverwendung vorhandener Verbindungen
+        }
+
         $dsn = $this->createDsn();
         $options = $this->config['options'];
 

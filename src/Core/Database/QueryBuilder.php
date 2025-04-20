@@ -445,6 +445,22 @@ class QueryBuilder
     }
 
     /**
+     * @template T
+     * @param class-string<T> $class
+     * @return T|null
+     */
+    public function firstAs(string $class, ?array $columns = null): ?object
+    {
+        $data = $this->first($columns);
+        if ($data === false) {
+            return null;
+        }
+
+        // Neue PHP 8.4 Funktion für saubere Objekterstellung
+        return new $class(...$data);
+    }
+
+    /**
      * Führt die Abfrage aus und gibt alle Ergebnisse zurück
      *
      * @param string[]|null $columns Spalten

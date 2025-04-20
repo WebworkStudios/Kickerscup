@@ -77,30 +77,33 @@ class ErrorHandler
     }
 
     /**
-     * Protokolliert den Fehler
-     *
-     * @param Throwable $error Der aufgetretene Fehler
-     * @param Request $request Der aktuelle Request
-     * @param int $statusCode HTTP-Statuscode
+     * @param Throwable $error
+     * @param Request $request
+     * @param int $statusCode
      * @return void
+     * @throws \Exception
      */
     private function logError(Throwable $error, Request $request, int $statusCode): void
     {
         $method = $request->getMethod();
         $uri = $request->getUri();
+        $ipAddress = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
 
         $logLevel = $statusCode >= 500 ? 'error' : 'warning';
-
-        app_log("[$method $uri] {$error->getMessage()}", [
+        $context = [
             'exception' => get_class($error),
             'file' => $error->getFile(),
             'line' => $error->getLine(),
             'code' => $error->getCode(),
             'status_code' => $statusCode,
-            'trace' => $error->getTraceAsString(),
-        ], $logLevel);
-    }
+            'ip_address' => $ipAddress,
+            'user_agent' => $request->getHeader('User-Agent', 'unknown'),
+            // Nur gekürzte Trace in Produktion
+            'trace' => $this->debug ? $error->getTraceAsString() : substr($error->getTraceAsString(), 0, 500),
+        ];
 
+        app_log("[$method $uri] {$error->getMessage()}", $context, $logLevel);
+    }
     /**
      * Erstellt eine Fehlerantwort im API-Format
      *
