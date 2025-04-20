@@ -304,4 +304,41 @@ class JWT
 
         return $this->validateToken($token);
     }
+
+    /**
+     * Extrahiert das JWT-Token aus dem Authorization-Header
+     *
+     * @param array|string $headers Request-Headers als Array oder Authorization-Header-String
+     * @return string|null Extrahiertes Token oder null
+     */
+    private function extractTokenFromHeader(array|string $headers): ?string
+    {
+        // Wenn ein String übergeben wird, handelt es sich um den direkten Authorization-Header
+        if (is_string($headers)) {
+            $authHeader = $headers;
+        }
+        // Ansonsten aus dem Headers-Array extrahieren
+        else {
+            // Normalisiere die Header-Keys für Fallunabhängigkeit
+            $normalized = [];
+            foreach ($headers as $key => $value) {
+                $normalized[strtolower($key)] = $value;
+            }
+
+            // Suche nach Authorization-Header
+            $authHeader = $normalized['authorization'] ?? null;
+        }
+
+        // Kein Auth-Header gefunden
+        if (!$authHeader) {
+            return null;
+        }
+
+        // Bearer-Token extrahieren
+        if (preg_match('/Bearer\s+(.*)$/i', $authHeader, $matches)) {
+            return $matches[1];
+        }
+
+        return null;
+    }
 }
