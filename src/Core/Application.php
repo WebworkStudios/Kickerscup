@@ -85,6 +85,9 @@ class Application
         // Router als Singleton registrieren
         $this->container->singleton(Router::class, fn() => $this->router);
 
+        // ResourceFactory registrieren
+        $this->container->singleton(\App\Core\Api\ResourceFactory::class);
+
         // Translator als Singleton registrieren
         $this->container->singleton(\App\Core\Translation\Translator::class, function ($container) {
             $cache = null;
