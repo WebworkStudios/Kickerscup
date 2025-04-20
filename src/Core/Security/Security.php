@@ -10,16 +10,6 @@ namespace App\Core\Security;
 class Security
 {
     /**
-     * Session-Management
-     */
-    private Session $session;
-
-    /**
-     * CSRF-Schutz
-     */
-    private Csrf $csrf;
-
-    /**
      * Hash-Funktionen
      */
     private Hash $hash;
@@ -27,35 +17,11 @@ class Security
     /**
      * Konstruktor
      *
-     * @param Session $session Session-Management
-     * @param Csrf $csrf CSRF-Schutz
      * @param Hash $hash Hash-Funktionen
      */
-    public function __construct(Session $session, Csrf $csrf, Hash $hash)
+    public function __construct(Hash $hash)
     {
-        $this->session = $session;
-        $this->csrf = $csrf;
         $this->hash = $hash;
-    }
-
-    /**
-     * Gibt die Session-Instanz zurück
-     *
-     * @return Session
-     */
-    public function getSession(): Session
-    {
-        return $this->session;
-    }
-
-    /**
-     * Gibt die CSRF-Instanz zurück
-     *
-     * @return Csrf
-     */
-    public function getCsrf(): Csrf
-    {
-        return $this->csrf;
     }
 
     /**

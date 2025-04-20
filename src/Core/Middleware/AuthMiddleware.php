@@ -7,57 +7,27 @@ namespace App\Core\Middleware;
 use App\Core\Http\Request;
 use App\Core\Http\Response;
 use App\Core\Http\ResponseFactory;
-use App\Core\Security\Csrf;
+use App\Core\Security\Auth;
 
 /**
- * Authentifizierungs-Middleware
- *
- * Prüft API-Tokens für geschützte Routen
+ * Einheitliche Authentifizierungs-Middleware
  */
 class AuthMiddleware implements Middleware
 {
-    /**
-     * CSRF-Schutz (enthält Token-Validierung)
-     */
-    private readonly Csrf $csrf;
-
-    /**
-     * Response-Factory
-     */
+    private readonly Auth $auth;
     private readonly ResponseFactory $responseFactory;
-
-    /**
-     * Zu ignorierende Pfade
-     *
-     * @var array<string>
-     */
     private array $ignoredPaths = [];
 
-    /**
-     * Konstruktor
-     *
-     * @param Csrf $csrf CSRF-Schutz
-     * @param ResponseFactory $responseFactory Response-Factory
-     * @param array $ignoredPaths Zu ignorierende Pfade (kein Auth-Check)
-     */
     public function __construct(
-        Csrf            $csrf,
+        Auth $auth,
         ResponseFactory $responseFactory,
-        array           $ignoredPaths = []
-    )
-    {
-        $this->csrf = $csrf;
+        array $ignoredPaths = []
+    ) {
+        $this->auth = $auth;
         $this->responseFactory = $responseFactory;
         $this->ignoredPaths = $ignoredPaths;
     }
 
-    /**
-     * Verarbeitet den Request und prüft Authentifizierung
-     *
-     * @param Request $request Der Request
-     * @param callable $next Nächster Handler
-     * @return Response Die Response
-     */
     public function process(Request $request, callable $next): Response
     {
         // Prüfen, ob der Pfad ignoriert werden soll
@@ -74,28 +44,28 @@ class AuthMiddleware implements Middleware
             return $next($request);
         }
 
-        // API-Token aus Headers prüfen
-        if (!$this->csrf->validateTokenFromHeaders($request->getHeaders())) {
+        // Token aus Headers prüfen
+        $claims = $this->auth->validateTokenFromHeaders($request->getHeaders());
+
+        if ($claims === null) {
             return $this->responseFactory->unauthorized([
                 'error' => 'Nicht autorisiert',
                 'code' => 'UNAUTHORIZED',
-                'message' => 'Gültiges API-Token erforderlich'
+                'message' => 'Gültiges Token erforderlich'
             ]);
+        }
+
+        // Benutzer-ID im Request speichern
+        $userId = $claims['sub'] ?? $claims['user_id'] ?? null;
+        if ($userId) {
+            app('auth_user_id', $userId);
         }
 
         return $next($request);
     }
 
-    /**
-     * Prüft, ob ein Pfad einem Muster entspricht (mit Wildcards)
-     *
-     * @param string $path Der zu prüfende Pfad
-     * @param string $pattern Das Muster (kann * enthalten)
-     * @return bool True, wenn der Pfad dem Muster entspricht
-     */
     private function pathMatches(string $path, string $pattern): bool
     {
-        // Muster in regulären Ausdruck umwandeln (einfache * Wildcards unterstützen)
         $regex = str_replace('\\*', '.*', preg_quote($pattern, '/'));
         return (bool)preg_match('/^' . $regex . '$/', $path);
     }

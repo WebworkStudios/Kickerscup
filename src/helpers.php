@@ -589,9 +589,10 @@ function xxhash(string $data): string
  * @param int|null $lifetime Lebensdauer in Sekunden
  * @return string JWT-Token
  */
+
 function generate_jwt(int $userId, array $claims = [], ?int $lifetime = null): string
 {
-    return app(\App\Core\Security\JWTAuth::class)->createToken($userId, $claims, $lifetime);
+    return app(\App\Core\Security\Auth::class)->createJwtToken($userId, $claims, $lifetime);
 }
 
 /**
@@ -614,4 +615,26 @@ function validate_jwt(string $token): ?array
 function get_user_id_from_jwt(string $token): ?int
 {
     return app(\App\Core\Security\JWTAuth::class)->getUserIdFromToken($token);
+}
+
+/**
+ * Validiert ein Token
+ */
+function validate_token(string $token, string $type = \App\Core\Security\Auth::TYPE_JWT): ?array
+{
+    $auth = app(\App\Core\Security\Auth::class);
+
+    if ($type === \App\Core\Security\Auth::TYPE_JWT) {
+        return $auth->validateJwtToken($token);
+    } else {
+        return $auth->validateApiToken($token);
+    }
+}
+
+/**
+ * Extrahiert die Benutzer-ID aus einem Token
+ */
+function get_user_id_from_token(string $token, string $type = \App\Core\Security\Auth::TYPE_JWT): ?int
+{
+    return app(\App\Core\Security\Auth::class)->getUserId($token, $type);
 }

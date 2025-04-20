@@ -11,12 +11,12 @@ use App\Core\Http\ResponseFactory;
 use App\Core\Middleware\Middleware;
 use App\Core\Middleware\MiddlewareStack;
 use App\Core\Routing\Router;
-use App\Core\Security\Csrf;
+use App\Core\Security\Auth;
 use App\Core\Security\Hash;
 use App\Core\Security\JWT;
 use App\Core\Security\JWTAuth;
 use App\Core\Security\Security;
-use App\Core\Security\Session;
+use App\Core\Security\TokenStorage;
 
 /**
  * Hauptklasse der API-Anwendung
@@ -102,33 +102,32 @@ class Application
             );
         });
 
-        $this->container->singleton(Security::class, function ($container) {
-            return new Security(
-                $container->make(Session::class),
-                $container->make(Csrf::class),
-                $container->make(Hash::class)
+        $this->container->singleton(TokenStorage::class, function ($container) {
+            return new TokenStorage(
+                $container->make('App\Core\Cache\Cache')
             );
         });
 
-        $this->container->singleton(Csrf::class, function ($container) {
-            return new Csrf(
-                $container->make(Session::class)
-            );
-        });
-
-        // JWT-Services registrieren
-        $this->container->singleton(JWT::class);
-
-        $this->container->singleton(JWTAuth::class, function ($container) {
-            return new JWTAuth(
+        $this->container->singleton(Auth::class, function ($container) {
+            return new Auth(
                 $container->make(JWT::class),
+                $container->make(TokenStorage::class),
                 config('auth.jwt.secret', env('JWT_SECRET', 'your-secret-key')),
                 config('auth.jwt.algorithm', JWT::ALGO_HS256),
                 config('auth.jwt.lifetime', 3600)
             );
         });
 
-        // Cache-Service registrieren
+        $this->container->singleton(Security::class, function ($container) {
+            return new Security(
+                $container->make(Hash::class)
+            );
+        });
+
+
+        // JWT-Services registrieren
+        $this->container->singleton(JWT::class);
+
         $this->container->bind(\App\Core\Cache\Cache::class, function ($container) {
             $cacheConfig = config('cache.default', 'file');
 
