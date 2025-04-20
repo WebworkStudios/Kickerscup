@@ -153,6 +153,22 @@ class Application
             $dbManager = new \App\Core\Database\DatabaseManager($config, $defaultConnection);
             return $dbManager;
         });
+
+        // ErrorHandler registrieren
+        $this->container->singleton(\App\Core\Error\ErrorHandler::class, function ($container) {
+            return new \App\Core\Error\ErrorHandler(
+                $container->make(ResponseFactory::class),
+                config('app.debug', false)
+            );
+        });
+
+        // ApiResource registrieren
+        $this->container->singleton(\App\Core\Api\ApiResource::class, function ($container) {
+            return new \App\Core\Api\ApiResource(
+                $container->make(\App\Core\Api\ResourceFactory::class),
+                $container->make(ResponseFactory::class)
+            );
+        });
     }
 
     /**
@@ -203,85 +219,76 @@ class Application
     /**
      * Verarbeitet den Request und gibt eine Response zurück
      */
-    /**
-     * Verarbeitet den Request und gibt eine Response zurück
-     */
     public function handle(Request $request): Response
     {
         // Request im Container registrieren
         $this->container->singleton(Request::class, fn() => $request);
 
         // Middleware-Handler mit der Core-Anwendungslogik als innersten Handler
-        return $this->middlewareStack->process($request, function (Request $request) {
-            try {
-                // Route finden
-                $route = $this->router->resolve($request);
+        try {
+            return $this->middlewareStack->process($request, function (Request $request) {
+                try {
+                    // Route finden
+                    $route = $this->router->resolve($request);
 
-                if ($route === null) {
-                    return $this->container->make(ResponseFactory::class)->notFound();
-                }
-
-                // Action auflösen
-                $action = $route->getAction();
-
-                // Wenn Action ein Array ist [Controller::class, 'method']
-                if (is_array($action) && count($action) === 2 && is_string($action[0]) && is_string($action[1])) {
-                    $controller = $this->container->make($action[0]);
-                    $action = [$controller, $action[1]];
-                }
-
-                // Wenn Action ein Classname ist, instanziieren und invoke-Methode aufrufen
-                if (is_string($action) && class_exists($action)) {
-                    $controller = $this->container->make($action);
-
-                    if (method_exists($controller, '__invoke')) {
-                        $action = [$controller, '__invoke'];
-                    } else {
-                        return $this->container->make(ResponseFactory::class)->serverError([
-                            'error' => 'Controller hat keine __invoke-Methode',
-                            'code' => 'CONTROLLER_INVALID'
-                        ]);
-                    }
-                }
-
-                // Parameter vorbereiten
-                $parameters = array_merge([$request], $route->getParameters());
-
-                // Action ausführen
-                if (is_callable($action)) {
-                    $response = $action(...$parameters);
-
-                    // Wenn keine Response zurückgegeben wurde, 204 No Content zurückgeben
-                    if (!$response instanceof Response) {
-                        return $this->container->make(ResponseFactory::class)->noContent();
+                    if ($route === null) {
+                        throw new \App\Core\Error\NotFoundException(
+                            "Die Route für {$request->getMethod()} {$request->getUri()} wurde nicht gefunden."
+                        );
                     }
 
-                    return $response;
+                    // Action auflösen
+                    $action = $route->getAction();
+
+                    // Wenn Action ein Array ist [Controller::class, 'method']
+                    if (is_array($action) && count($action) === 2 && is_string($action[0]) && is_string($action[1])) {
+                        $controller = $this->container->make($action[0]);
+                        $action = [$controller, $action[1]];
+                    }
+
+                    // Wenn Action ein Classname ist, instanziieren und invoke-Methode aufrufen
+                    if (is_string($action) && class_exists($action)) {
+                        $controller = $this->container->make($action);
+
+                        if (method_exists($controller, '__invoke')) {
+                            $action = [$controller, '__invoke'];
+                        } else {
+                            throw new \App\Core\Error\BadRequestException(
+                                'Controller hat keine __invoke-Methode',
+                                'CONTROLLER_INVALID'
+                            );
+                        }
+                    }
+
+                    // Parameter vorbereiten
+                    $parameters = array_merge([$request], $route->getParameters());
+
+                    // Action ausführen
+                    if (is_callable($action)) {
+                        $response = $action(...$parameters);
+
+                        // Wenn keine Response zurückgegeben wurde, 204 No Content zurückgeben
+                        if (!$response instanceof Response) {
+                            return $this->container->make(ResponseFactory::class)->noContent();
+                        }
+
+                        return $response;
+                    }
+
+                    // Wenn Action nicht aufrufbar ist, 500 Internal Server Error zurückgeben
+                    throw new \App\Core\Error\BadRequestException(
+                        'Route-Action ist nicht aufrufbar',
+                        'ACTION_NOT_CALLABLE'
+                    );
+                } catch (\Throwable $e) {
+                    // Fehlerbehandler verwenden
+                    return $this->container->make(\App\Core\Error\ErrorHandler::class)->handleError($e, $request);
                 }
-
-                // Wenn Action nicht aufrufbar ist, 500 Internal Server Error zurückgeben
-                return $this->container->make(ResponseFactory::class)->serverError([
-                    'error' => 'Route-Action ist nicht aufrufbar',
-                    'code' => 'ACTION_NOT_CALLABLE'
-                ]);
-            } catch (\Throwable $e) {
-                // Fehler protokollieren
-                app_log($e->getMessage(), [
-                    'file' => $e->getFile(),
-                    'line' => $e->getLine(),
-                    'trace' => $e->getTraceAsString()
-                ], 'error');
-
-                // API-freundliche Fehlerantwort
-                return $this->container->make(ResponseFactory::class)->serverError([
-                    'error' => config('app.debug', false)
-                        ? $e->getMessage()
-                        : 'Ein interner Serverfehler ist aufgetreten',
-                    'code' => 'SERVER_ERROR',
-                    'trace' => config('app.debug', false) ? $e->getTraceAsString() : null
-                ]);
-            }
-        });
+            });
+        } catch (\Throwable $e) {
+            // Globale Fehlerbehandlung für Fehler in der Middleware
+            return $this->container->make(\App\Core\Error\ErrorHandler::class)->handleError($e, $request);
+        }
     }
 
     /**
@@ -298,5 +305,43 @@ class Application
     public function getRouter(): Router
     {
         return $this->router;
+    }
+
+    /**
+     * Gibt den Basis-Pfad der Anwendung zurück
+     */
+    public function getBasePath(): string
+    {
+        return $this->basePath;
+    }
+
+    /**
+     * Gibt die MiddlewareStack zurück
+     */
+    public function getMiddlewareStack(): MiddlewareStack
+    {
+        return $this->middlewareStack;
+    }
+
+    /**
+     * Gibt an, ob die Anwendung im Debug-Modus läuft
+     */
+    public function isDebugMode(): bool
+    {
+        return config('app.debug', false);
+    }
+
+    /**
+     * Beendet die Anwendung und gibt den Statuscode zurück
+     */
+    public function terminate(int $status = 0): int
+    {
+        // Datenbankverbindungen schließen
+        try {
+            $this->container->make(\App\Core\Database\DatabaseManager::class)->disconnect();
+        } catch (\Throwable $e) {
+        }
+
+        return $status;
     }
 }
