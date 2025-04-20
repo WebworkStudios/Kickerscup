@@ -26,6 +26,8 @@ class Router
      */
     private ?string $currentPrefix = null;
 
+    private array $patternCache = [];
+
     /**
      * Konstruktor
      */
@@ -191,34 +193,37 @@ class Router
         $uri = $this->normalizeUri($request->getUri());
         $host = $request->getHost();
 
-        // Debug-Logging kann entfernt oder angepasst werden
-        error_log("Resolving route: Method=$method, URI=$uri, Host=$host");
+        // Debug-Logging mit konfigurierter Loglevel
+        if (config('app.debug', false)) {
+            app_log("Resolving route: Method=$method, URI=$uri, Host=$host", [], 'debug');
+        }
 
-        foreach ($this->routes as $route) {
-            // Methoden prüfen
+        // PHP 8.4 array_find nutzen
+        return array_find($this->routes->all(), function(Route $route) use ($method, $uri, $host) {
+            // Methode prüfen
             if (!in_array($method, $route->getMethods())) {
-                continue;
+                return false;
             }
 
             // Domain prüfen (wenn definiert)
             $routeDomain = $route->getDomain();
             if ($routeDomain !== null && $routeDomain !== $host) {
-                continue;
+                return false;
             }
 
-            // Route-Pattern generieren und prüfen
+            // Route-Pattern generieren und prüfen (mit Caching)
             $pattern = $this->createRoutePattern($route->getUri());
 
-            if (preg_match($pattern, $uri, $matches)) {
-                // Parameter extrahieren
-                $parameters = $this->extractParameters($route->getUri(), $matches);
-                $route->setParameters($parameters);
-
-                return $route;
+            if (!preg_match($pattern, $uri, $matches)) {
+                return false;
             }
-        }
 
-        return null;
+            // Parameter extrahieren und an Route übergeben
+            $parameters = $this->extractParameters($matches);
+            $route->setParameters($parameters);
+
+            return true;
+        });
     }
 
     /**
@@ -242,31 +247,36 @@ class Router
      */
     private function createRoutePattern(string $uri): string
     {
+        if (isset($this->patternCache[$uri])) {
+            return $this->patternCache[$uri];
+        }
+
         // Dynamische Platzhalter in Regex-Gruppen umwandeln
         $pattern = preg_replace('/\{([a-zA-Z0-9_]+)\}/', '(?P<$1>[^/]+)', $uri);
-        return '#^' . $pattern . '$#';
+        $this->patternCache[$uri] = '#^' . $pattern . '$#';
+
+        return $this->patternCache[$uri];
     }
 
     /**
      * Extrahiert Parameter aus einem URI
      *
-     * @param string $routeUri URI der Route
      * @param array $matches Regex-Matches
      * @return array Parameter
      */
-    private function extractParameters(string $routeUri, array $matches): array
+    private function extractParameters(array $matches): array
     {
-        preg_match_all('/\{([a-zA-Z0-9_]+)\}/', $routeUri, $parameterNames);
-
         $parameters = [];
-        foreach ($parameterNames[1] as $name) {
-            if (isset($matches[$name])) {
-                $parameters[$name] = $matches[$name];
+        foreach ($matches as $key => $value) {
+            // Ignoriere numerische Keys (die Gesamtübereinstimmung und Gruppen-Indizes)
+            if (is_string($key) && !is_numeric($key)) {
+                $parameters[$key] = $value;
             }
         }
 
         return $parameters;
     }
+
 
     /**
      * Gibt die RouteCollection zurück

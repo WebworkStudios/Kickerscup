@@ -77,10 +77,8 @@ class Route
     public function setDomain(string $domain): self
     {
         $this->domain = $domain;
-
         return $this;
     }
-
     /**
      * Gibt die Parameter der Route zurück
      *
@@ -110,10 +108,10 @@ class Route
      * @param string $name Name
      * @return self
      */
+
     public function name(string $name): self
     {
         $this->name = $name;
-
         return $this;
     }
 

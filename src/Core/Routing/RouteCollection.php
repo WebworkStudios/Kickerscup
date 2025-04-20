@@ -24,7 +24,12 @@ class RouteCollection implements \Iterator, \Countable
     public function add(Route $route): self
     {
         $this->routes[] = $route;
-        error_log("Route added: " . $route->getUri() . " with methods: " . implode(', ', $route->getMethods()));
+
+        // Nur im Debug-Modus loggen
+        if (config('app.debug', false)) {
+            app_log("Route added: " . $route->getUri() . " with methods: " . implode(', ', $route->getMethods()), [], 'debug');
+        }
+
         return $this;
     }
 

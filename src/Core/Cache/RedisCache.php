@@ -140,15 +140,16 @@ class RedisCache implements Cache
         return $this->redis->setex($key, $ttl, $value) === 'OK';
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function deletePattern(string $pattern): bool
     {
         $keys = $this->redis->keys($this->prefix . $pattern);
 
+        // Bei großen Datensätzen in Blöcken löschen
         if (!empty($keys)) {
-            return (bool)$this->redis->del($keys);
+            // In Blöcken von 1000 Schlüsseln löschen
+            foreach (array_chunk($keys, 1000) as $chunk) {
+                $this->redis->del($chunk);
+            }
         }
 
         return true;

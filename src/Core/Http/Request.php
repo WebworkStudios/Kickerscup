@@ -11,6 +11,7 @@ namespace App\Core\Http;
  */
 class Request
 {
+    private ?array $jsonCache = null;
     /**
      * Konstruktor
      *
@@ -141,6 +142,11 @@ class Request
         return $this->query;
     }
 
+    private function getFromArray(array $array, string $key, mixed $default = null): mixed
+    {
+        return $array[$key] ?? $default;
+    }
+
     /**
      * Gibt einen GET-Parameter zurück
      *
@@ -150,7 +156,7 @@ class Request
      */
     public function getQueryParam(string $name, mixed $default = null): mixed
     {
-        return $this->query[$name] ?? $default;
+        return $this->getFromArray($this->query, $name, $default);
     }
 
     /**
@@ -183,7 +189,7 @@ class Request
      */
     public function getPostParam(string $name, mixed $default = null): mixed
     {
-        return $this->request[$name] ?? $default;
+        return $this->getFromArray($this->request, $name, $default);
     }
 
     /**
@@ -270,7 +276,15 @@ class Request
      */
     public function getJson(bool $assoc = true): mixed
     {
-        return json_decode($this->content, $assoc) ?: null;
+        if ($this->jsonCache === null) {
+            $this->jsonCache = json_decode($this->content, true) ?: null;
+        }
+
+        if (!$assoc && is_array($this->jsonCache)) {
+            return json_decode(json_encode($this->jsonCache));
+        }
+
+        return $this->jsonCache;
     }
 
     /**
