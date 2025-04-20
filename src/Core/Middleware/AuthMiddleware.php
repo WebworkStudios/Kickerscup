@@ -19,10 +19,11 @@ class AuthMiddleware implements Middleware
     private array $ignoredPaths = [];
 
     public function __construct(
-        Auth $auth,
+        Auth            $auth,
         ResponseFactory $responseFactory,
-        array $ignoredPaths = []
-    ) {
+        array           $ignoredPaths = []
+    )
+    {
         $this->auth = $auth;
         $this->responseFactory = $responseFactory;
         $this->ignoredPaths = $ignoredPaths;
@@ -66,7 +67,13 @@ class AuthMiddleware implements Middleware
 
     private function pathMatches(string $path, string $pattern): bool
     {
-        $regex = str_replace('\\*', '.*', preg_quote($pattern, '/'));
+        // Escape all regex special characters except asterisk
+        $regex = preg_quote($pattern, '/');
+
+        // Convert asterisks to regex pattern (. for any character, * for zero or more occurrences)
+        $regex = str_replace('\*', '.*', $regex);
+
+        // Add boundary markers and execute regex
         return (bool)preg_match('/^' . $regex . '$/', $path);
     }
 }

@@ -22,6 +22,28 @@ class Auth
     }
 
     /**
+     * Validiert ein Token aus dem Authorization-Header
+     *
+     * @param array|string $headers Headers als Array oder Authorization-Header-String
+     * @return array|null Token-Claims oder null bei ungültigem Token
+     */
+    public function validateTokenFromHeaders(array|string $headers): ?array
+    {
+        $extractedToken = $this->extractTokenFromHeader($headers);
+
+        if (!$extractedToken) {
+            return null;
+        }
+
+        // Je nach Token-Typ validieren
+        return match ($extractedToken['type']) {
+            self::TYPE_JWT => $this->validateJwtToken($extractedToken['token']),
+            self::TYPE_API => $this->validateApiToken($extractedToken['token']),
+            default => null
+        };
+    }
+
+    /**
      * Extrahiert Token aus Authorization-Header mit PHP 8.4 Features
      *
      * @param array|string $headers Headers als Array oder Authorization-Header-String
@@ -70,28 +92,6 @@ class Auth
         }
 
         return null;
-    }
-
-    /**
-     * Validiert ein Token aus dem Authorization-Header
-     *
-     * @param array|string $headers Headers als Array oder Authorization-Header-String
-     * @return array|null Token-Claims oder null bei ungültigem Token
-     */
-    public function validateTokenFromHeaders(array|string $headers): ?array
-    {
-        $extractedToken = $this->extractTokenFromHeader($headers);
-
-        if (!$extractedToken) {
-            return null;
-        }
-
-        // Je nach Token-Typ validieren
-        return match($extractedToken['type']) {
-            self::TYPE_JWT => $this->validateJwtToken($extractedToken['token']),
-            self::TYPE_API => $this->validateApiToken($extractedToken['token']),
-            default => null
-        };
     }
 
     /**
@@ -244,7 +244,7 @@ class Auth
      */
     public function getUserId(string $token, string $type = self::TYPE_JWT): ?int
     {
-        return match($type) {
+        return match ($type) {
             self::TYPE_JWT => $this->jwt->getUserIdFromToken($token),
             self::TYPE_API => ($this->validateApiToken($token)['user_id'] ?? null),
             default => null

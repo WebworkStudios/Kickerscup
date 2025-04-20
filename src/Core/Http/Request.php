@@ -12,6 +12,7 @@ namespace App\Core\Http;
 class Request
 {
     private ?array $jsonCache = null;
+
     /**
      * Konstruktor
      *
@@ -142,11 +143,6 @@ class Request
         return $this->query;
     }
 
-    private function getFromArray(array $array, string $key, mixed $default = null): mixed
-    {
-        return $array[$key] ?? $default;
-    }
-
     /**
      * Gibt einen GET-Parameter zurück
      *
@@ -157,6 +153,11 @@ class Request
     public function getQueryParam(string $name, mixed $default = null): mixed
     {
         return $this->getFromArray($this->query, $name, $default);
+    }
+
+    private function getFromArray(array $array, string $key, mixed $default = null): mixed
+    {
+        return $array[$key] ?? $default;
     }
 
     /**

@@ -82,40 +82,33 @@ class CorsMiddleware implements Middleware
         $origin = $request->getHeader('Origin');
 
         if ($origin) {
-            // Zulässigen Origin setzen
-            if (in_array('*', $this->config['allowedOrigins'], true) ||
-                in_array($origin, $this->config['allowedOrigins'], true)) {
+            // Zulässigen Origin setzen mit array_any
+            if (array_any($this->config['allowedOrigins'], fn($allowed) => $allowed === '*' || $allowed === $origin)) {
                 $response->setHeader('Access-Control-Allow-Origin', $origin);
             }
 
             // Bei Nutzung von Wildcards 'Vary: Origin' setzen
-            if (in_array('*', $this->config['allowedOrigins'], true)) {
+            if (array_any($this->config['allowedOrigins'], fn($allowed) => $allowed === '*')) {
                 $response->setHeader('Vary', 'Origin');
             }
         }
 
-        // Methoden zulassen
+        // Rest des Codes bleibt unverändert
         $response->setHeader('Access-Control-Allow-Methods', implode(', ', $this->config['allowedMethods']));
-
-        // Header zulassen
         $response->setHeader('Access-Control-Allow-Headers', implode(', ', $this->config['allowedHeaders']));
 
-        // Credentials
         if ($this->config['supportsCredentials']) {
             $response->setHeader('Access-Control-Allow-Credentials', 'true');
         }
 
-        // Cache-Dauer
         if ($this->config['maxAge'] > 0) {
             $response->setHeader('Access-Control-Max-Age', (string)$this->config['maxAge']);
         }
 
-        // Private Network Access
         if ($this->config['allowPrivateNetwork']) {
             $response->setHeader('Access-Control-Allow-Private-Network', 'true');
         }
 
-        // Exponierte Header
         if (!empty($this->config['exposedHeaders'])) {
             $response->setHeader('Access-Control-Expose-Headers', implode(', ', $this->config['exposedHeaders']));
         }

@@ -199,7 +199,7 @@ class Router
         }
 
         // PHP 8.4 array_find nutzen
-        return array_find($this->routes->all(), function(Route $route) use ($method, $uri, $host) {
+        return array_find($this->routes->all(), function (Route $route) use ($method, $uri, $host) {
             // Methode prüfen
             if (!in_array($method, $route->getMethods())) {
                 return false;

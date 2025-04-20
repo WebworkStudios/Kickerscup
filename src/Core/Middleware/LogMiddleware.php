@@ -66,13 +66,26 @@ class LogMiddleware implements Middleware
         // Request weiterleiten und Response erhalten
         $response = $next($request);
 
-        // Ausgehende Response protokollieren
+        // Verarbeitungszeit berechnen und auf langsame Requests prüfen
         $duration = microtime(true) - $startTime;
         $this->logResponse($response, $duration);
 
+        // Performance-Warnung bei langsamen Requests (> 1 Sekunde)
+        if ($duration > 1.0) {
+            app_log(
+                "Langsame Anfrage erkannt: " . $request->getMethod() . " " . $request->getUri(),
+                [
+                    'duration' => $duration,
+                    'method' => $request->getMethod(),
+                    'uri' => $request->getUri(),
+                    'response_code' => $response->getStatusCode()
+                ],
+                'warning'
+            );
+        }
+
         return $response;
     }
-
     /**
      * Protokolliert einen eingehenden Request
      *

@@ -79,6 +79,7 @@ class Route
         $this->domain = $domain;
         return $this;
     }
+
     /**
      * Gibt die Parameter der Route zurück
      *

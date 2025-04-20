@@ -21,20 +21,6 @@ class TokenStorage
     }
 
     /**
-     * Speichert Token-Daten mit automatischen Verfallszeiten
-     */
-    public function store(string $token, array $data, int $lifetime): bool
-    {
-        // In PHP 8.4 können wir array_filter mit kürzerer Syntax verwenden
-        $data = array_filter($data, fn($value) => $value !== null);
-
-        // Sicherstellen, dass Last-Used immer gesetzt ist
-        $data['last_used'] ??= time();
-
-        return $this->cache->set(self::PREFIX . $token, $data, $lifetime);
-    }
-
-    /**
      * Batch-Operation für mehrere Tokens gleichzeitig (Performance-Optimierung)
      */
     public function batchStore(array $tokens, array $data, int $lifetime): bool
@@ -62,11 +48,17 @@ class TokenStorage
     }
 
     /**
-     * Holt Token-Daten
+     * Speichert Token-Daten mit automatischen Verfallszeiten
      */
-    public function get(string $token): ?array
+    public function store(string $token, array $data, int $lifetime): bool
     {
-        return $this->cache->get(self::PREFIX . $token);
+        // In PHP 8.4 können wir array_filter mit kürzerer Syntax verwenden
+        $data = array_filter($data, fn($value) => $value !== null);
+
+        // Sicherstellen, dass Last-Used immer gesetzt ist
+        $data['last_used'] ??= time();
+
+        return $this->cache->set(self::PREFIX . $token, $data, $lifetime);
     }
 
     /**
@@ -99,5 +91,13 @@ class TokenStorage
     public function getRateLimit(string $key): array
     {
         return $this->cache->get(self::PREFIX . "rate_limit:{$key}", []);
+    }
+
+    /**
+     * Holt Token-Daten
+     */
+    public function get(string $token): ?array
+    {
+        return $this->cache->get(self::PREFIX . $token);
     }
 }
