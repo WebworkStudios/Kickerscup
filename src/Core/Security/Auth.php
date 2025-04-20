@@ -1,6 +1,4 @@
 <?php
-
-
 declare(strict_types=1);
 
 namespace App\Core\Security;
@@ -11,11 +9,6 @@ namespace App\Core\Security;
 class Auth
 {
     /**
-     * Benutzer-ID-Schlüssel im Token
-     */
-    private const USER_ID_CLAIM = 'sub'; // subject
-
-    /**
      * Token-Typen
      */
     public const TYPE_JWT = 'jwt';
@@ -23,10 +16,7 @@ class Auth
 
     public function __construct(
         private readonly JWT          $jwt,
-        private readonly TokenStorage $tokenStorage,
-        private readonly string       $secretKey,
-        private readonly string       $algorithm = JWT::ALGO_HS256,
-        private readonly int          $tokenLifetime = 3600
+        private readonly TokenStorage $tokenStorage
     )
     {
     }
@@ -97,12 +87,7 @@ class Auth
      */
     public function validateJwtToken(string $token): ?array
     {
-        try {
-            return $this->jwt->decode($token, $this->secretKey, $this->algorithm);
-        } catch (\Exception $e) {
-            app_log('JWT-Validierungsfehler: ' . $e->getMessage(), [], 'warning');
-            return null;
-        }
+        return $this->jwt->validateToken($token);
     }
 
     /**
@@ -133,16 +118,7 @@ class Auth
      */
     public function createJwtToken(int $userId, array $customClaims = [], ?int $lifetime = null): string
     {
-        $claims = array_merge([
-            self::USER_ID_CLAIM => $userId
-        ], $customClaims);
-
-        return $this->jwt->encode(
-            $claims,
-            $this->secretKey,
-            $this->algorithm,
-            $lifetime ?? $this->tokenLifetime
-        );
+        return $this->jwt->createUserToken($userId, $customClaims, $lifetime);
     }
 
     /**
@@ -151,7 +127,7 @@ class Auth
     public function createApiToken(int $userId, ?string $scope = null, ?int $lifetime = null): array
     {
         $token = bin2hex(random_bytes(32));
-        $expiryTime = time() + ($lifetime ?? $this->tokenLifetime);
+        $expiryTime = time() + ($lifetime ?? 3600);
 
         $tokenData = [
             'user_id' => $userId,
@@ -161,7 +137,7 @@ class Auth
             'last_used' => time()
         ];
 
-        $this->tokenStorage->store($token, $tokenData, $lifetime ?? $this->tokenLifetime);
+        $this->tokenStorage->store($token, $tokenData, $lifetime ?? 3600);
 
         return [
             'token' => $token,
@@ -184,8 +160,7 @@ class Auth
     public function getUserId(string $token, string $type = self::TYPE_JWT): ?int
     {
         if ($type === self::TYPE_JWT) {
-            $claims = $this->validateJwtToken($token);
-            return $claims[self::USER_ID_CLAIM] ?? null;
+            return $this->jwt->getUserIdFromToken($token);
         } else {
             $tokenData = $this->validateApiToken($token);
             return $tokenData['user_id'] ?? null;
