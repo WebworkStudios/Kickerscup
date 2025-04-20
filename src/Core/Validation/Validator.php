@@ -36,7 +36,8 @@ readonly class Validator
         $this->rules = [
             'required', 'string', 'email', 'numeric', 'integer', 'boolean',
             'min', 'max', 'between', 'in', 'not_in', 'date', 'url',
-            'alpha', 'alpha_num', 'alpha_dash', 'regex', 'unique', 'exists'
+            'alpha', 'alpha_num', 'alpha_dash', 'regex', 'unique', 'exists',
+            'enum' // Neue PHP 8.4 Enum-Validierung
         ];
 
         // Standard-Fehlermeldungen auf Englisch
@@ -60,7 +61,8 @@ readonly class Validator
             'alpha_dash' => 'The :attribute field may only contain letters, numbers, dashes and underscores.',
             'regex' => 'The :attribute field format is invalid.',
             'unique' => 'The :attribute has already been taken.',
-            'exists' => 'The selected :attribute is invalid.'
+            'exists' => 'The selected :attribute is invalid.',
+            'enum' => 'The selected :attribute is not a valid option.'
         ];
 
         // Translator erstellen, wenn nicht übergeben
@@ -122,18 +124,7 @@ readonly class Validator
             // Jede Regel prüfen
             foreach ($fieldRules as $rule) {
                 // Parameter aus der Regel extrahieren
-                $parameters = [];
-                $ruleName = $rule;
-
-                if (is_string($rule)) {
-                    if (str_contains($rule, ':')) {
-                        [$ruleName, $paramStr] = explode(':', $rule, 2);
-                        $parameters = explode(',', $paramStr);
-                    }
-                } else if (is_array($rule)) {
-                    $parameters = array_slice($rule, 1);
-                    $ruleName = $rule[0];
-                }
+                [$ruleName, $parameters] = $this->parseRule($rule);
 
                 // Methode für die Regel bestimmen
                 $method = 'validate' . str_replace('_', '', ucwords($ruleName, '_'));
@@ -162,7 +153,13 @@ readonly class Validator
                             $replace[$i] = $parameter;
 
                             // Benannte Parameter ersetzen
-                            $paramName = ['min', 'max', 'value', 'other'][$i] ?? "param$i";
+                            $paramName = match($i) {
+                                0 => 'min',
+                                1 => 'max',
+                                2 => 'value',
+                                3 => 'other',
+                                default => "param$i"
+                            };
                             $replace[$paramName] = $parameter;
                         }
 
@@ -182,6 +179,30 @@ readonly class Validator
         }
 
         return new ValidationResult($validated, $errors);
+    }
+
+    /**
+     * Extrahiert Regelnamen und Parameter aus einer Regel
+     *
+     * @param string|array $rule Die zu parsende Regel
+     * @return array [ruleName, parameters]
+     */
+    private function parseRule(string|array $rule): array
+    {
+        $parameters = [];
+        $ruleName = $rule;
+
+        if (is_string($rule)) {
+            if (str_contains($rule, ':')) {
+                [$ruleName, $paramStr] = explode(':', $rule, 2);
+                $parameters = explode(',', $paramStr);
+            }
+        } else if (is_array($rule)) {
+            $parameters = array_slice($rule, 1);
+            $ruleName = $rule[0];
+        }
+
+        return [$ruleName, $parameters];
     }
 
     /**
@@ -529,7 +550,7 @@ readonly class Validator
      */
     protected function validateUnique(string $field, mixed $value, array $parameters, array $data): bool
     {
-        if ($this->db === null || count($parameters) < 1) {
+        if ($this->db === null || empty($parameters)) {
             return false;
         }
 
@@ -558,7 +579,7 @@ readonly class Validator
      */
     protected function validateExists(string $field, mixed $value, array $parameters, array $data): bool
     {
-        if ($this->db === null || count($parameters) < 1) {
+        if ($this->db === null || empty($parameters)) {
             return false;
         }
 
@@ -566,5 +587,36 @@ readonly class Validator
         $column = $parameters[1] ?? $field;
 
         return $this->db->table($table)->where($column, '=', $value)->count() > 0;
+    }
+
+    /**
+     * Validiert, ob ein Wert ein gültiger Enum-Wert ist
+     *
+     * @param string $field Feldname
+     * @param mixed $value Wert
+     * @param array $parameters Parameter (erste Parameter sollte ein Enum-Klassenname sein)
+     * @param array $data Alle Daten
+     * @return bool
+     */
+    protected function validateEnum(string $field, mixed $value, array $parameters, array $data): bool
+    {
+        if (empty($parameters) || !class_exists($parameters[0]) || !enum_exists($parameters[0])) {
+            return false;
+        }
+
+        $enumClass = $parameters[0];
+
+        // Für backed Enums
+        if (method_exists($enumClass, 'tryFrom')) {
+            return $enumClass::tryFrom($value) !== null;
+        }
+
+        // Für reguläre Enums
+        try {
+            $cases = $enumClass::cases();
+            return array_any($cases, fn($case) => $case->name === $value);
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 }
