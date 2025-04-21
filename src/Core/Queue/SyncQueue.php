@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Core\Queue;
 
 use App\Core\Container\Container;
+use Random\RandomException;
 
 /**
  * Synchrone Queue-Implementierung für Tests und Entwicklung
@@ -43,8 +44,10 @@ class SyncQueue implements Queue
      * Fügt einen Job zur Queue hinzu und führt ihn sofort aus
      *
      * @param Job $job Job, der zur Queue hinzugefügt wird
-     * @param int|null $delay Verzögerung wird ignoriert
+     * @param int|null $delay Verzögerung wird bei synchroner Ausführung simuliert
      * @return string Job-Identifier
+     * @throws RandomException
+     * @throws \Throwable
      */
     public function push(Job $job, ?int $delay = null): string
     {
@@ -52,32 +55,67 @@ class SyncQueue implements Queue
         $jobId = $job->getId() ?? bin2hex(random_bytes(16));
         $job->setId($jobId);
 
+        // Verzögerung simulieren, wenn im Entwicklungsmodus
+        if ($delay !== null && $delay > 0 && config('app.debug', false)) {
+            app_log("SyncQueue: Verzögerung von {$delay}s für Job simuliert", [
+                'job_id' => $jobId,
+                'job_class' => get_class($job),
+                'queue' => $job->getQueue(),
+                'delay' => $delay
+            ], 'debug');
+
+            // Im Debug-Modus können wir einen kleinen Delay simulieren (max 3 Sekunden)
+            if (config('queue.drivers.sync.simulate_delay', false)) {
+                sleep(min($delay, 3));
+            }
+        }
+
         // Job direkt ausführen
         try {
             // Lebenszyklus-Hooks ausführen
             $job->beforeHandle();
+            $job->incrementAttempts(); // Inkrementieren der Versuche wie bei echten Queues
+
+            // Startzeit für Performance-Messung
+            $startTime = microtime(true);
 
             // Job ausführen
             $result = $job->handle();
 
+            // Ausführungszeit berechnen
+            $executionTime = microtime(true) - $startTime;
+
             // After-Hook ausführen
             $job->afterHandle($result);
 
-            app_log("Sync-Job ausgeführt", [
+            app_log("Sync-Job erfolgreich ausgeführt", [
                 'job_id' => $jobId,
                 'job_class' => get_class($job),
-                'queue' => $job->getQueue()
+                'queue' => $job->getQueue(),
+                'execution_time' => round($executionTime * 1000, 2) . 'ms', // in Millisekunden
+                'result_type' => gettype($result)
             ], 'info');
+
+            // Erfolgreiche Ausführung kann durch ein Event signalisiert werden
+            if (method_exists($this->container, 'dispatch') && class_exists('\App\Core\Events\JobProcessed')) {
+                $this->container->dispatch(new \App\Core\Events\JobProcessed($job, $result));
+            }
         } catch (\Throwable $e) {
             app_log("Sync-Job fehlgeschlagen", [
                 'job_id' => $jobId,
                 'job_class' => get_class($job),
                 'queue' => $job->getQueue(),
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'trace' => array_slice(explode("\n", $e->getTraceAsString()), 0, 10)
             ], 'error');
 
             // Failure-Hook ausführen
             $job->onFailure($e);
+
+            // Fehler-Event auslösen
+            if (method_exists($this->container, 'dispatch') && class_exists('\App\Core\Events\JobFailed')) {
+                $this->container->dispatch(new \App\Core\Events\JobFailed($job, $e));
+            }
 
             if ($this->failOnError) {
                 throw $e;

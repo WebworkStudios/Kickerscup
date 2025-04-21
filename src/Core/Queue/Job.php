@@ -102,6 +102,28 @@ abstract class Job
         return $this;
     }
 
+
+    /**
+     * Gibt den Erstellungszeitpunkt zurück
+     *
+     * @return int Timestamp der Erstellung
+     */
+    public function getCreatedAt(): int
+    {
+        return $this->createdAt;
+    }
+
+    /**
+     * Gibt die maximale Anzahl der Ausführungsversuche zurück
+     *
+     * @return int Maximale Versuche
+     */
+    public function getMaxAttempts(): int
+    {
+        return $this->maxAttempts;
+    }
+
+
     /**
      * Getter für Queue-Name
      *
@@ -133,14 +155,14 @@ abstract class Job
     }
 
     /**
-     * Setzt die maximale Anzahl der Ausführungsversuche
+     * Aktualisiert die Anzahl der Ausführungsversuche
      *
-     * @param int $maxAttempts Maximale Anzahl der Versuche
+     * @param int $attempts Neue Anzahl der Versuche
      * @return self
      */
-    public function setMaxAttempts(int $maxAttempts): self
+    public function setAttempts(int $attempts): self
     {
-        $this->maxAttempts = $maxAttempts;
+        $this->attempts = $attempts;
         return $this;
     }
 

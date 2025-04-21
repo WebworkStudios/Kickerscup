@@ -167,13 +167,6 @@ class DatabaseQueue implements Queue
      * @return Job|null Der nächste Job oder null
      * @throws JsonException|Exception Wenn Deserialisierung fehlschlägt
      */
-    /**
-     * Holt und reserviert den nächsten Job aus der Queue
-     *
-     * @param string $queue Spezifische Queue-Instanz
-     * @return Job|null Der nächste Job oder null
-     * @throws JsonException|Exception Wenn Deserialisierung fehlschlägt
-     */
     public function pop(string $queue = 'default'): ?Job
     {
         try {
@@ -210,12 +203,23 @@ class DatabaseQueue implements Queue
                 try {
                     $jobPayload = json_decode($jobData['payload'], true, 512, JSON_THROW_ON_ERROR);
                     $job = Job::unserialize($jobPayload);
+
+                    // Sicherstellen, dass die Job-Versuche korrekt gesetzt sind
+                    if ($job->getAttempts() !== $jobData['attempts']) {
+                        // Setzen der Versuche auf die in der Datenbank gespeicherte Anzahl
+                        for ($i = 0; $i < $jobData['attempts']; $i++) {
+                            $job->incrementAttempts();
+                        }
+                    }
+
                     return $job;
                 } catch (Exception $e) {
                     // Job-Fehler protokollieren und löschen
                     app_log("Fehler beim Deserialisieren des Jobs", [
                         'job_id' => $jobData['id'],
-                        'error' => $e->getMessage()
+                        'error' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString(),
+                        'payload' => $jobData['payload'] ?? 'nicht verfügbar'
                     ], 'error');
 
                     $this->delete($jobData['id']);
@@ -226,7 +230,6 @@ class DatabaseQueue implements Queue
             throw new RuntimeException("Fehler beim Abrufen des Jobs: " . $e->getMessage(), 0, $e);
         }
     }
-
     /**
      * Überprüft, ob ein Job bereits in der Queue existiert
      *
