@@ -210,4 +210,88 @@ class Paginator
 
         return $links;
     }
+
+    /**
+     * Formatiert die Paginierungsdaten im JSON:API-Format
+     *
+     * @return array Paginierungsdaten im JSON:API-Format
+     */
+    public function toJsonApi(): array
+    {
+        return [
+            'meta' => [
+                'total' => $this->getTotal(),
+                'per_page' => $this->getPerPage(),
+                'current_page' => $this->getCurrentPage(),
+                'last_page' => $this->getLastPage(),
+            ],
+            'links' => $this->getJsonApiLinks()
+        ];
+    }
+
+    /**
+     * Erstellt Links im JSON:API-Format
+     *
+     * @return array Links im JSON:API-Format
+     */
+    private function getJsonApiLinks(): array
+    {
+        $links = [
+            'self' => $this->getCurrentUrl(),
+        ];
+
+        if ($this->hasMorePages()) {
+            $links['next'] = $this->getNextPageUrl();
+        }
+
+        if (!$this->isFirstPage()) {
+            $links['prev'] = $this->getPreviousPageUrl();
+        }
+
+        $links['first'] = $this->getUrl(1);
+        $links['last'] = $this->getUrl($this->getLastPage());
+
+        return $links;
+    }
+
+    /**
+     * Gibt die URL für die aktuelle Seite zurück
+     *
+     * @return string|null URL für die aktuelle Seite
+     */
+    public function getCurrentUrl(): ?string
+    {
+        return $this->getUrl($this->getCurrentPage());
+    }
+
+    /**
+     * Konvertiert die Paginierung in ein Array
+     *
+     * @param string $format Format der Paginierung (standard, json_api)
+     * @return array
+     */
+    public function toArray(string $format = 'standard'): array
+    {
+        return match($format) {
+            'json_api' => [
+                'data' => $this->getItems(),
+                'meta' => $this->toJsonApi()['meta'],
+                'links' => $this->toJsonApi()['links']
+            ],
+            default => [
+                'data' => $this->getItems(),
+                'meta' => [
+                    'total' => $this->getTotal(),
+                    'per_page' => $this->getPerPage(),
+                    'current_page' => $this->getCurrentPage(),
+                    'last_page' => $this->getLastPage(),
+                    'has_more_pages' => $this->hasMorePages(),
+                    'next_page_url' => $this->getNextPageUrl(),
+                    'previous_page_url' => $this->getPreviousPageUrl(),
+                ],
+                'links' => $this->getLinks()
+            ]
+        };
+    }
+
 }

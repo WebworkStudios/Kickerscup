@@ -195,16 +195,26 @@ class ResourceFactory
      * @param mixed $model Zu transformierendes Modell
      * @param string $resourceClass Ressourcenklasse
      * @param array $includes Zu inkludierende Beziehungen mit ihren Ressourcenklassen
+     * @param array $conditions Bedingungen für bedingte Includes
      * @return array Transformierte Ressource mit Beziehungen
      */
-    public function makeWithIncludes(mixed $model, string $resourceClass, array $includes = []): array
-    {
+    public function makeWithIncludes(
+        mixed $model,
+        string $resourceClass,
+        array $includes = [],
+        array $conditions = []
+    ): array {
         $result = $this->make($model, $resourceClass);
 
         foreach ($includes as $relation => $relationResourceClass) {
             if (is_numeric($relation) && is_string($relationResourceClass)) {
                 // Wenn nur der Ressourcenname angegeben ist, verwenden wir den gleichen Namen für die Relation
                 $relation = $relationResourceClass;
+            }
+
+            // Prüfen, ob die Bedingung für diesen Include erfüllt ist
+            if (!$this->shouldIncludeRelation($relation, $model, $conditions)) {
+                continue;
             }
 
             // Extrahiere relationData in eine separate Methode
@@ -220,6 +230,109 @@ class ResourceFactory
         }
 
         return $result;
+    }
+
+    /**
+     * Prüft, ob eine Relation basierend auf Bedingungen eingeschlossen werden soll
+     *
+     * @param string $relation Name der Relation
+     * @param mixed $model Das Model
+     * @param array $conditions Bedingungen für Includes
+     * @return bool True, wenn die Relation eingeschlossen werden soll
+     */
+    private function shouldIncludeRelation(string $relation, mixed $model, array $conditions): bool
+    {
+        // Wenn keine Bedingungen definiert sind oder keine für diese Relation, immer einschließen
+        if (empty($conditions) || !isset($conditions[$relation])) {
+            return true;
+        }
+
+        $condition = $conditions[$relation];
+
+        // Wenn die Bedingung ein Callable ist, diesen mit dem Modell aufrufen
+        if (is_callable($condition)) {
+            return $condition($model);
+        }
+
+        // Wenn die Bedingung ein Attribut ist, dessen Wert überprüft werden soll
+        if (is_array($condition) && count($condition) >= 2) {
+            $attribute = $condition[0];
+            $operator = $condition[1];
+            $value = $condition[2] ?? null;
+
+            $modelValue = $this->extractAttributeValue($model, $attribute);
+
+            return match($operator) {
+                '=' => $modelValue == $value,
+                '==' => $modelValue == $value,
+                '===' => $modelValue === $value,
+                '!=' => $modelValue != $value,
+                '!==' => $modelValue !== $value,
+                '>' => $modelValue > $value,
+                '>=' => $modelValue >= $value,
+                '<' => $modelValue < $value,
+                '<=' => $modelValue <= $value,
+                'in' => is_array($value) && in_array($modelValue, $value),
+                'not_in' => is_array($value) && !in_array($modelValue, $value),
+                'null' => $modelValue === null,
+                'not_null' => $modelValue !== null,
+                'empty' => empty($modelValue),
+                'not_empty' => !empty($modelValue),
+                default => false
+            };
+        }
+
+        // Fallback: Wenn die Bedingung ein Boolean ist, diesen direkt zurückgeben
+        return (bool)$condition;
+    }
+
+    /**
+     * Extrahiert einen Attributwert aus einem Modell
+     *
+     * @param mixed $model Das Modell
+     * @param string $attribute Der Attributname
+     * @return mixed Der Attributwert
+     */
+    private function extractAttributeValue(mixed $model, string $attribute): mixed
+    {
+        if (is_object($model)) {
+            return match (true) {
+                method_exists($model, $attribute) => $model->$attribute(),
+                property_exists($model, $attribute) || isset($model->$attribute) => $model->$attribute,
+                method_exists($model, 'get' . ucfirst($attribute)) => $model->{'get' . ucfirst($attribute)}(),
+                default => null
+            };
+        }
+
+        return is_array($model) && array_key_exists($attribute, $model) ? $model[$attribute] : null;
+    }
+
+    /**
+     * Transformiert einen Paginator mit verschachtelten Beziehungen und bedingten Includes
+     *
+     * @param Paginator $paginator Paginator
+     * @param string $resourceClass Ressourcenklasse
+     * @param array $includes Zu inkludierende Beziehungen mit ihren Ressourcenklassen
+     * @param array $conditions Bedingungen für bedingte Includes
+     * @return array Paginierte Ressource mit Beziehungen
+     */
+    public function paginateWithIncludes(
+        Paginator $paginator,
+        string $resourceClass,
+        array $includes = [],
+        array $conditions = []
+    ): array {
+        $items = $paginator->getItems();
+
+        $data = array_map(
+            fn($item) => $this->makeWithIncludes($item, $resourceClass, $includes, $conditions),
+            $items
+        );
+
+        return [
+            'data' => $data,
+            'meta' => $this->extractPaginatorMeta($paginator)
+        ];
     }
 
     /**
@@ -241,29 +354,6 @@ class ResourceFactory
         }
 
         return is_array($model) && array_key_exists($relation, $model) ? $model[$relation] : null;
-    }
-
-    /**
-     * Transformiert einen Paginator mit verschachtelten Beziehungen
-     *
-     * @param Paginator $paginator Paginator
-     * @param string $resourceClass Ressourcenklasse
-     * @param array $includes Zu inkludierende Beziehungen mit ihren Ressourcenklassen
-     * @return array Paginierte Ressource mit Beziehungen
-     */
-    public function paginateWithIncludes(Paginator $paginator, string $resourceClass, array $includes = []): array
-    {
-        $items = $paginator->getItems();
-
-        $data = array_map(
-            fn($item) => $this->makeWithIncludes($item, $resourceClass, $includes),
-            $items
-        );
-
-        return [
-            'data' => $data,
-            'meta' => $this->extractPaginatorMeta($paginator)
-        ];
     }
 
     /**
