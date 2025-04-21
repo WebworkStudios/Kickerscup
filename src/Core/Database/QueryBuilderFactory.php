@@ -44,8 +44,8 @@ class QueryBuilderFactory
         // Ruft den Callback mit dem QueryBuilder auf
         $callback($query);
 
-        // Erstellt die Unterabfrage
-        return new SubQueryBuilder($query, $alias);
+        // Erstellt die Unterabfrage mit der neuen Factory-Methode
+        return SubQueryBuilder::fromQueryBuilder($query, $alias);
     }
 
     /**
