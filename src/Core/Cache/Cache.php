@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Core\Cache;
 
 /**
- * Cache-Interface
+ * Erweitertes Cache-Interface mit besserer Granularität
  */
 interface Cache
 {
@@ -68,4 +68,58 @@ interface Cache
      * @return bool True bei Erfolg, sonst false
      */
     public function deletePattern(string $pattern): bool;
+
+    /**
+     * Speichert mehrere Werte gleichzeitig im Cache
+     *
+     * @param array<string, mixed> $values Schlüssel-Wert-Paare
+     * @param int|null $ttl Gültigkeitsdauer in Sekunden (null für unbegrenzt)
+     * @return bool True bei Erfolg, sonst false
+     */
+    public function setMultiple(array $values, ?int $ttl = null): bool;
+
+    /**
+     * Holt mehrere Werte gleichzeitig aus dem Cache
+     *
+     * @param array<string> $keys Liste von Schlüsseln
+     * @param mixed $default Standardwert für nicht gefundene Schlüssel
+     * @return array<string, mixed> Schlüssel-Wert-Paare
+     */
+    public function getMultiple(array $keys, mixed $default = null): array;
+
+    /**
+     * Löscht mehrere Schlüssel gleichzeitig
+     *
+     * @param array<string> $keys Liste von Schlüsseln
+     * @return bool True bei Erfolg, sonst false
+     */
+    public function deleteMultiple(array $keys): bool;
+
+    /**
+     * Inkrementiert einen numerischen Wert im Cache
+     *
+     * @param string $key Schlüssel
+     * @param int $amount Inkrementierungswert (default: 1)
+     * @return int|false Neuer Wert oder false bei Fehler
+     */
+    public function increment(string $key, int $amount = 1): int|false;
+
+    /**
+     * Dekrementiert einen numerischen Wert im Cache
+     *
+     * @param string $key Schlüssel
+     * @param int $amount Dekrementierungswert (default: 1)
+     * @return int|false Neuer Wert oder false bei Fehler
+     */
+    public function decrement(string $key, int $amount = 1): int|false;
+
+    /**
+     * Speichert einen Wert im Cache, nur wenn der Schlüssel noch nicht existiert
+     *
+     * @param string $key Schlüssel
+     * @param mixed $value Wert
+     * @param int|null $ttl Gültigkeitsdauer in Sekunden (null für unbegrenzt)
+     * @return bool True bei Erfolg, sonst false
+     */
+    public function add(string $key, mixed $value, ?int $ttl = null): bool;
 }

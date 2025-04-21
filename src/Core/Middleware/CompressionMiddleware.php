@@ -66,14 +66,7 @@ class CompressionMiddleware implements Middleware
         return $response;
     }
 
-    /**
-     * Prüft, ob die Response komprimiert werden sollte
-     *
-     * @param Request $request Der Request
-     * @param Response $response Die Response
-     * @return bool True, wenn komprimiert werden sollte, sonst false
-     */
-    private function shouldCompress(Request $request, Response $response): bool
+    public function shouldCompress(Request $request, Response $response): bool
     {
         // Akzeptiert der Client Kompression?
         $acceptEncoding = $request->getHeader('Accept-Encoding', '');
@@ -88,8 +81,7 @@ class CompressionMiddleware implements Middleware
 
         // Ist der Content-Type komprimierbar?
         $contentType = $response->getHeader('Content-Type', '');
-        $isCompressibleType = array_any($this->compressibleTypes, fn($type) => str_contains(strtolower($contentType), $type)
-        );
+        $isCompressibleType = array_any($this->compressibleTypes, fn($type) => str_contains(strtolower($contentType), $type));
 
         if (!$isCompressibleType) {
             return false;
@@ -101,6 +93,56 @@ class CompressionMiddleware implements Middleware
             return false;
         }
 
+        // NEU: Geschätzte Kompressionsrate basierend auf Content-Type
+        $compressionRatio = $this->estimateCompressionRatio($contentType, $content);
+
+        // Keine Kompression wenn der erwartete Gewinn unter 10% liegt
+        if ($compressionRatio < 0.1) {
+            return false;
+        }
+
         return true;
+    }
+
+    /**
+     * Schätzt die Kompressionsrate basierend auf Content-Type und Stichprobe
+     *
+     * @param string $contentType Der Content-Type
+     * @param string $content Der zu komprimierende Inhalt
+     * @return float Geschätzte Kompressionsrate (0-1)
+     */
+    private function estimateCompressionRatio(string $contentType, string $content): float
+    {
+        // Für sehr kurze Inhalte lohnt sich die Kompression nie
+        if (strlen($content) < $this->minSize * 2) {
+            return 0;
+        }
+
+        // Schnelle Schätzung für verschiedene Content-Types
+        if (str_contains($contentType, 'application/json')) {
+            // JSON hat typischerweise eine gute Kompressionsrate
+            return 0.6;
+        }
+
+        if (str_contains($contentType, 'text/html') || str_contains($contentType, 'text/plain')) {
+            // Text komprimiert in der Regel gut
+            return 0.7;
+        }
+
+        if (str_contains($contentType, 'application/javascript') || str_contains($contentType, 'text/css')) {
+            // Code komprimiert auch gut
+            return 0.65;
+        }
+
+        // Für große Inhalte (>50KB) eine Stichprobe komprimieren
+        if (strlen($content) > 50000) {
+            // Nimm eine 5KB Stichprobe aus der Mitte
+            $sample = substr($content, strlen($content) / 2 - 2500, 5000);
+            $compressedSample = gzencode($sample, 1); // Schnellste Kompression
+            return 1 - (strlen($compressedSample) / strlen($sample));
+        }
+
+        // Standard-Fallback: 30% Kompressionsrate annehmen
+        return 0.3;
     }
 }

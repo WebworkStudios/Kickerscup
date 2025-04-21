@@ -164,4 +164,91 @@ class RedisCache implements Cache
     {
         return $this->redis;
     }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function setMultiple(array $values, ?int $ttl = null): bool
+    {
+        // Optimierte Implementierung für Redis
+        $pipeline = $this->redis->pipeline();
+
+        foreach ($values as $key => $value) {
+            $prefixedKey = $this->prefix . $key;
+            $serialized = $this->serialize($value);
+
+            if ($ttl === null) {
+                $pipeline->set($prefixedKey, $serialized);
+            } else {
+                $pipeline->setex($prefixedKey, $ttl, $serialized);
+            }
+        }
+
+        $results = $pipeline->execute();
+
+        // Wenn alle Befehle erfolgreich waren, ist jeder Wert 'OK'
+        return !array_any($results, fn($result) => $result !== 'OK');
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getMultiple(array $keys, mixed $default = null): array
+    {
+        $prefixedKeys = array_map(fn($key) => $this->prefix . $key, $keys);
+        $values = $this->redis->mget($prefixedKeys);
+
+        $result = [];
+        foreach ($keys as $i => $key) {
+            $value = $values[$i] ?? null;
+            $result[$key] = $value !== null ? $this->unserialize($value) : $default;
+        }
+
+        return $result;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function deleteMultiple(array $keys): bool
+    {
+        if (empty($keys)) {
+            return true;
+        }
+
+        $prefixedKeys = array_map(fn($key) => $this->prefix . $key, $keys);
+        return (bool)$this->redis->del($prefixedKeys);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function increment(string $key, int $amount = 1): int|false
+    {
+        return $this->redis->incrby($this->prefix . $key, $amount);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function decrement(string $key, int $amount = 1): int|false
+    {
+        return $this->redis->decrby($this->prefix . $key, $amount);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function add(string $key, mixed $value, ?int $ttl = null): bool
+    {
+        $prefixedKey = $this->prefix . $key;
+        $serialized = $this->serialize($value);
+
+        // Redis NX-Option für "nur setzen wenn nicht existiert"
+        if ($ttl === null) {
+            return $this->redis->set($prefixedKey, $serialized, ['nx']) === 'OK';
+        } else {
+            return $this->redis->set($prefixedKey, $serialized, ['ex' => $ttl, 'nx']) === 'OK';
+        }
+    }
 }

@@ -231,4 +231,90 @@ class FileCache implements Cache
 
         return true;
     }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function setMultiple(array $values, ?int $ttl = null): bool
+    {
+        $success = true;
+
+        foreach ($values as $key => $value) {
+            $success = $this->set($key, $value, $ttl) && $success;
+        }
+
+        return $success;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getMultiple(array $keys, mixed $default = null): array
+    {
+        $result = [];
+
+        foreach ($keys as $key) {
+            $result[$key] = $this->get($key, $default);
+        }
+
+        return $result;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function deleteMultiple(array $keys): bool
+    {
+        $success = true;
+
+        foreach ($keys as $key) {
+            $success = $this->delete($key) && $success;
+        }
+
+        return $success;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function increment(string $key, int $amount = 1): int|false
+    {
+        if (!$this->has($key)) {
+            // Wenn der Schlüssel nicht existiert, initialisieren mit $amount
+            $this->set($key, $amount);
+            return $amount;
+        }
+
+        $value = $this->get($key);
+
+        // Prüfen, ob der Wert inkrementiert werden kann
+        if (!is_numeric($value)) {
+            return false;
+        }
+
+        $value = (int)$value + $amount;
+        $this->set($key, $value);
+
+        return $value;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function decrement(string $key, int $amount = 1): int|false
+    {
+        return $this->increment($key, -$amount);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function add(string $key, mixed $value, ?int $ttl = null): bool
+    {
+        if ($this->has($key)) {
+            return false;
+        }
+
+        return $this->set($key, $value, $ttl);
+    }
 }
