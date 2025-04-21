@@ -155,6 +155,18 @@ abstract class Job
     }
 
     /**
+     * Setzt die maximale Anzahl der Ausführungsversuche
+     *
+     * @param int $maxAttempts Maximale Anzahl der Versuche
+     * @return self
+     */
+    public function setMaxAttempts(int $maxAttempts): self
+    {
+        $this->maxAttempts = $maxAttempts;
+        return $this;
+    }
+
+    /**
      * Aktualisiert die Anzahl der Ausführungsversuche
      *
      * @param int $attempts Neue Anzahl der Versuche
