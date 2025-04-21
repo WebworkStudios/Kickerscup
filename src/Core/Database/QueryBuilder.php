@@ -107,6 +107,7 @@ use App\Core\Database\Exceptions\QueryException;
      * @param string|null $operator Operator (nur bei string für $column)
      * @param mixed|null $value Wert (nur bei string für $column)
      * @return self
+     * @throws \InvalidArgumentException wenn ungültige Parameter übergeben werden
      */
     public function where(string|callable $column, ?string $operator = null, mixed $value = null): self
     {
@@ -115,11 +116,19 @@ use App\Core\Database\Exceptions\QueryException;
             return $this->whereGroup($column);
         }
 
-        // Standard-Verhalten beibehalten
-        $this->getWhereClause()->where($column, $operator, $value);
+        // Wenn nur zwei Parameter übergeben wurden, Operator = verwenden
+        if ($value === null) {
+            $value = $operator;
+            $operator = '=';
+        }
+
+        // Operator validieren
+        $operator = $this->validateOperator($operator);
+
+        // Spaltenname validieren (wird in sanitizeColumnName behandelt)
+        $this->getWhereClause()->where($this->sanitizeColumnName($column), $operator, $value);
         return $this;
     }
-
     /**
      * Gibt die WHERE-Klausel zurück oder erstellt eine neue
      *
@@ -284,6 +293,7 @@ use App\Core\Database\Exceptions\QueryException;
      * @param string $second Zweite Spalte
      * @param string $type Typ des Joins (INNER, LEFT, RIGHT, etc.)
      * @return self
+     * @throws \InvalidArgumentException wenn ungültige Parameter übergeben werden
      */
     public function join(
         string $table,
@@ -293,7 +303,23 @@ use App\Core\Database\Exceptions\QueryException;
         string $type = 'INNER'
     ): self
     {
-        $this->joinClause->join($table, $first, $operator, $second, $type);
+        // Validiere Join-Typ
+        $validJoinTypes = ['INNER', 'LEFT', 'RIGHT', 'FULL', 'CROSS'];
+        $normalizedType = strtoupper(trim($type));
+
+        if (!in_array($normalizedType, $validJoinTypes, true)) {
+            throw new \InvalidArgumentException("Ungültiger JOIN-Typ: '{$type}'");
+        }
+
+        // Validiere Operator
+        $operator = $this->validateOperator($operator);
+
+        // Validiere Tabellen- und Spaltennamen
+        $sanitizedTable = $this->sanitizeTableName($table);
+        $sanitizedFirst = $this->sanitizeColumnName($first);
+        $sanitizedSecond = $this->sanitizeColumnName($second);
+
+        $this->joinClause->join($sanitizedTable, $sanitizedFirst, $operator, $sanitizedSecond, $normalizedType);
         return $this;
     }
 
@@ -704,24 +730,19 @@ use App\Core\Database\Exceptions\QueryException;
      */
     private function sanitizeTableName(string $table): string
     {
-        // Validieren des Tabellennamens mit einem strengen Pattern
-        if (!preg_match('/^[a-zA-Z0-9_]+$/', $table)) {
-            throw new \InvalidArgumentException("Ungültiger Tabellenname: '{$table}'");
+        // Unterstützung für Tabellennamen mit Schema/Datenbank (schema.table)
+        $parts = explode('.', $table);
+        $validatedParts = [];
+
+        foreach ($parts as $part) {
+            // Validieren mit einer strengeren Regel
+            if (!preg_match('/^[a-zA-Z][a-zA-Z0-9_]*$/', $part)) {
+                throw new \InvalidArgumentException("Ungültiger Tabellenname: '{$part}' in '{$table}'");
+            }
+            $validatedParts[] = $this->quoteIdentifier($part);
         }
 
-        // Mit Backticks umgeben (MySQL-spezifisch)
-        $driver = $this->connectionConfig['driver'] ?? 'mysql';
-
-        if ($driver === 'mysql') {
-            return "`{$table}`";
-        }
-
-        // Für PostgreSQL mit Anführungszeichen umgeben
-        if ($driver === 'pgsql') {
-            return "\"{$table}\"";
-        }
-
-        return $table;
+        return implode('.', $validatedParts);
     }
 
     public function query(string $query, array $params = []): \PDOStatement
@@ -1112,27 +1133,89 @@ use App\Core\Database\Exceptions\QueryException;
      *
      * @param string $column Spaltenname
      * @return string Maskierter Spaltenname
+     * @throws \InvalidArgumentException wenn der Spaltenname ungültig ist
      */
     private function sanitizeColumnName(string $column): string
     {
-        // Validieren des Spaltennamens mit einem strengen Pattern
-        if (!preg_match('/^[a-zA-Z0-9_]+$/', $column)) {
+        // Behandlung von Funktionen und Ausdrücken
+        if (str_contains($column, '(') && str_contains($column, ')')) {
+            return $column; // SQL-Funktionen direkt durchlassen
+        }
+
+        // Unterstützung für Spalten mit Tabellen-Präfix (table.column)
+        if (str_contains($column, '.')) {
+            $parts = explode('.', $column);
+            $validatedParts = [];
+
+            foreach ($parts as $part) {
+                if ($part === '*') {
+                    $validatedParts[] = $part;
+                } else {
+                    // Validieren des Spaltennamens mit einem strengeren Pattern
+                    if (!preg_match('/^[a-zA-Z][a-zA-Z0-9_]*$/', $part)) {
+                        throw new \InvalidArgumentException("Ungültiger Spaltenname: '{$part}' in '{$column}'");
+                    }
+                    $validatedParts[] = $this->quoteIdentifier($part);
+                }
+            }
+
+            return implode('.', $validatedParts);
+        }
+
+        // Einfache Spalte
+        if ($column === '*') {
+            return $column;
+        }
+
+        // Validieren des Spaltennamens mit einem strengeren Pattern
+        if (!preg_match('/^[a-zA-Z][a-zA-Z0-9_]*$/', $column)) {
             throw new \InvalidArgumentException("Ungültiger Spaltenname: '{$column}'");
         }
 
-        // Mit Backticks umgeben (MySQL-spezifisch)
+        return $this->quoteIdentifier($column);
+    }
+
+    /**
+     * Maskiert einen Bezeichner entsprechend des Datenbank-Dialekts
+     *
+     * @param string $identifier Bezeichner (Tabellen- oder Spaltenname)
+     * @return string Maskierter Bezeichner
+     */
+    private function quoteIdentifier(string $identifier): string
+    {
         $driver = $this->connectionConfig['driver'] ?? 'mysql';
 
-        if ($driver === 'mysql') {
-            return "`{$column}`";
+        return match ($driver) {
+            'mysql' => "`{$identifier}`",
+            'pgsql' => "\"{$identifier}\"",
+            'sqlite' => "\"{$identifier}\"",
+            default => $identifier,
+        };
+    }
+
+    /**
+     * Validiert einen SQL-Operator
+     *
+     * @param string $operator Der zu validierende Operator
+     * @return string Der validierte Operator
+     * @throws \InvalidArgumentException wenn der Operator ungültig ist
+     */
+    private function validateOperator(string $operator): string
+    {
+        $validOperators = [
+            '=', '<', '>', '<=', '>=', '<>', '!=',
+            'LIKE', 'NOT LIKE', 'IN', 'NOT IN',
+            'IS', 'IS NOT', 'EXISTS', 'NOT EXISTS',
+            'BETWEEN', 'NOT BETWEEN'
+        ];
+
+        $normalizedOperator = strtoupper(trim($operator));
+
+        if (!in_array($normalizedOperator, $validOperators, true)) {
+            throw new \InvalidArgumentException("Ungültiger SQL-Operator: '{$operator}'");
         }
 
-        // Für PostgreSQL mit Anführungszeichen umgeben
-        if ($driver === 'pgsql') {
-            return "\"{$column}\"";
-        }
-
-        return $column;
+        return $normalizedOperator;
     }
 
     /**
