@@ -206,7 +206,7 @@ class JWT
     }
 
     /**
-     * Erstellt ein Token für einen Benutzer
+     * Erstellt ein Token für einen Benutzer mit verbesserten Sicherheitsparametern
      *
      * @param int $userId Benutzer-ID
      * @param array $customClaims Zusätzliche Claims
@@ -215,15 +215,28 @@ class JWT
      */
     public function createUserToken(int $userId, array $customClaims = [], ?int $lifetime = null): string
     {
+        // Standardclaims mit verbesserter Sicherheit
+        $now = new DateTime();
         $claims = array_merge([
-            self::USER_ID_CLAIM => $userId
+            self::USER_ID_CLAIM => $userId,
+            'iat' => $now->getTimestamp(),          // Issued At
+            'nbf' => $now->getTimestamp(),          // Not Before
+            'jti' => bin2hex(random_bytes(16))      // Unique JWT ID zur Verhinderung von Replay-Attacken
         ], $customClaims);
+
+        // Ablaufzeit immer setzen (Standard oder parameter)
+        $expireTime = ($lifetime !== null) ? $lifetime : $this->tokenLifetime;
+        $expires = (clone $now)->modify("+{$expireTime} seconds");
+        $claims['exp'] = $expires->getTimestamp();  // Expiration Time
+
+        // Standardmäßig sichersten Algorithmus verwenden
+        $algorithm = $this->algorithm ?? self::ALGO_HS512;
 
         return $this->encode(
             $claims,
             null,
-            null,
-            $lifetime ?? $this->tokenLifetime
+            $algorithm,
+            $expireTime
         );
     }
 

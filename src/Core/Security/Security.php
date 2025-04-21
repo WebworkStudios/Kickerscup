@@ -99,25 +99,24 @@ class Security
         $keyInEnv = getenv('APP_KEY');
 
         // In PHP 8.4 können wir den ternary-Operator mit nullsafe-Operator kombinieren
-        $keyFile = getenv('APP_KEY_PATH') ?: dirname(__DIR__, 3) . '/config/encryption_key.php';
+        $keyFile = getenv('APP_KEY_PATH') ?: dirname(__DIR__, 3) . '/config/encryption_key.bin';
 
         // Wenn Neugenerierung erzwungen wird oder kein Schlüssel in der Umgebungsvariable ist
         if ($forceRegenerate || empty($keyInEnv)) {
             // Generiere einen neuen Schlüssel (32 Bytes für AES-256)
-            $newKey = bin2hex(random_bytes(32));
+            $newKey = random_bytes(32);
 
             // Wenn die APP_KEY Umgebungsvariable nicht gesetzt ist, speichere den Schlüssel in einer Datei
-            // SICHERHEITSVERBESSERUNG: Speichern als binäre Datei statt PHP (verhindert versehentliche Ausführung)
             if (empty($keyInEnv)) {
                 $keyDir = dirname($keyFile);
                 if (!is_dir($keyDir)) {
                     mkdir($keyDir, 0750, true);
                 }
 
-                // Verwenden wir jetzt einen binären Speichermechanismus statt PHP-Code
-                $tempFile = $keyFile . '.bin.temp.' . bin2hex(random_bytes(8));
+                // Temporäre Datei mit zufälligem Namen erstellen
+                $tempFile = $keyFile . '.temp.' . bin2hex(random_bytes(8));
 
-                if (!file_put_contents($tempFile, base64_encode($newKey), LOCK_EX)) {
+                if (!file_put_contents($tempFile, $newKey, LOCK_EX)) {
                     throw new \Exception('Konnte den Verschlüsselungsschlüssel nicht speichern. Bitte überprüfen Sie die Schreibrechte.');
                 }
 
@@ -125,13 +124,13 @@ class Security
                 chmod($tempFile, 0400); // Noch restriktiver: nur lesbar, nicht ausführbar
 
                 // Atomares Umbenennen (verhindert Race-Conditions)
-                if (!rename($tempFile, $keyFile . '.bin')) {
+                if (!rename($tempFile, $keyFile)) {
                     @unlink($tempFile); // Aufräumen im Fehlerfall
                     throw new \Exception('Konnte den Verschlüsselungsschlüssel nicht speichern (Umbenennung fehlgeschlagen).');
                 }
             }
 
-            return $newKey;
+            return bin2hex($newKey); // Konvertieren von Binär zu Hex für Verwendung im Code
         }
 
         // Versuche den Schlüssel aus der Umgebungsvariable zu lesen
@@ -140,25 +139,15 @@ class Security
         }
 
         // Versuche den Schlüssel aus der binären Datei zu lesen
-        $binKeyFile = $keyFile . '.bin';
-        if (file_exists($binKeyFile)) {
-            $keyData = file_get_contents($binKeyFile);
-            if (!empty($keyData)) {
-                return base64_decode($keyData);
-            }
-        }
-
-        // Fallback auf die PHP-Datei (für Abwärtskompatibilität)
         if (file_exists($keyFile)) {
-            $keyFromFile = include $keyFile;
-            if (!empty($keyFromFile)) {
-                return $keyFromFile;
+            $keyData = file_get_contents($keyFile);
+            if (!empty($keyData)) {
+                return bin2hex($keyData);
             }
         }
 
         throw new \Exception('Kein Verschlüsselungsschlüssel definiert. Bitte APP_KEY Umgebungsvariable setzen oder Schlüsseldatei erstellen.');
     }
-
     /**
      * Entschlüsselt verschlüsselte Daten mit AES-256-GCM
      *
