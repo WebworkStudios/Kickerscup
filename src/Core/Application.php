@@ -8,8 +8,12 @@ use App\Core\Container\Container;
 use App\Core\Http\Request;
 use App\Core\Http\Response;
 use App\Core\Http\ResponseFactory;
+use App\Core\Middleware\AuthMiddleware;
+use App\Core\Middleware\CorsMiddleware;
+use App\Core\Middleware\LogMiddleware;
 use App\Core\Middleware\Middleware;
 use App\Core\Middleware\MiddlewareStack;
+use App\Core\Middleware\RateLimitMiddleware;
 use App\Core\Routing\Router;
 use App\Core\Security\Auth;
 use App\Core\Security\Hash;
@@ -75,6 +79,9 @@ class Application
         // Core-Services registrieren
         $this->registerCoreServices();
 
+        // Middleware registrieren
+        $this->registerMiddleware();
+
         // Datenbank initialisieren
         $this->initializeDatabase();
 
@@ -115,6 +122,19 @@ class Application
             return new \App\Core\Api\ApiResource(
                 $container->make(\App\Core\Api\ResourceFactory::class),
                 $container->make(ResponseFactory::class)
+            );
+        });
+
+        // Rate-Limiting Middleware registrieren
+        $this->container->singleton(RateLimitMiddleware::class, function ($container) {
+            $cache = $container->make('App\Core\Cache\Cache');
+            $responseFactory = $container->make(ResponseFactory::class);
+
+            return new RateLimitMiddleware(
+                $cache,
+                $responseFactory,
+                config('rate_limit.limiters', []),
+                config('rate_limit.ignored_paths', [])
             );
         });
 
@@ -295,6 +315,19 @@ class Application
         return $this;
     }
 
+    private function registerMiddleware(): void
+    {
+        // Standard-Middleware hinzufügen
+        $this->addMiddleware($this->container->make(CorsMiddleware::class));
+        $this->addMiddleware($this->container->make(LogMiddleware::class));
+        $this->addMiddleware($this->container->make(RateLimitMiddleware::class));
+
+        // Weitere Middleware je nach Konfiguration
+        if (config('auth.enabled', true)) {
+            $this->addMiddleware($this->container->make(AuthMiddleware::class));
+        }
+    }
+
     /**
      * Verarbeitet einen HTTP-Request und gibt eine Response zurück
      *
@@ -303,6 +336,7 @@ class Application
      *
      * @param Request $request Der zu verarbeitende HTTP-Request
      * @return Response Die generierte HTTP-Response
+     * @throws \Exception
      */
     public function handle(Request $request): Response
     {

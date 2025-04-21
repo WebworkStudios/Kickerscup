@@ -85,6 +85,7 @@ class TokenStorage
         return $this->cache->set(self::PREFIX . "rate_limit:{$key}", $timestamps, $window);
     }
 
+
     /**
      * Holt Rate-Limit-Info
      */
