@@ -348,7 +348,6 @@ class Application
             require $routesFile;
         }
     }
-
     /**
      * Verarbeitet einen HTTP-Request und gibt eine Response zurück
      *
@@ -357,7 +356,6 @@ class Application
      *
      * @param Request $request Der zu verarbeitende HTTP-Request
      * @return Response Die generierte HTTP-Response
-     * @throws \Exception
      */
     public function handle(Request $request): Response
     {
@@ -375,8 +373,32 @@ class Application
                 }
             });
         } catch (\Throwable $e) {
-            // Globale Fehlerbehandlung für Fehler in der Middleware
-            return $this->container->make(\App\Core\Error\ErrorHandler::class)->handleError($e, $request);
+            // Globale Fehlerbehandlung für Fehler in der Middleware oder anderen Bereichen
+            try {
+                return $this->container->make(\App\Core\Error\ErrorHandler::class)->handleError($e, $request);
+            } catch (\Throwable $fallbackError) {
+                // Fallback für den Fall, dass der ErrorHandler selbst fehlschlägt
+                $fallbackResponse = new \App\Core\Http\Response(
+                    json_encode([
+                        'success' => false,
+                        'error' => [
+                            'code' => 'CRITICAL_ERROR',
+                            'message' => 'Ein kritischer Fehler ist aufgetreten: ' . $fallbackError->getMessage()
+                        ]
+                    ]),
+                    500,
+                    ['Content-Type' => 'application/json; charset=UTF-8']
+                );
+
+                // Kritischen Fehler loggen
+                app_log('Kritischer Fehler im ErrorHandler: ' . $fallbackError->getMessage(), [
+                    'original_error' => $e->getMessage(),
+                    'fallback_error' => $fallbackError->getMessage(),
+                    'trace' => $fallbackError->getTraceAsString()
+                ], 'critical');
+
+                return $fallbackResponse;
+            }
         }
     }
 
