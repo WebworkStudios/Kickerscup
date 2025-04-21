@@ -137,6 +137,8 @@ class Application
                 config('app.debug', false)
             );
         });
+
+        $this->registerQueueServices();
     }
 
     /**
@@ -155,6 +157,20 @@ class Application
                 config('app.fallback_locale', 'en'),
                 $cache
             );
+        });
+    }
+
+    /**
+     * Registriert die Queue-Services
+     */
+    private function registerQueueServices(): void
+    {
+        // QueueManager als Singleton registrieren
+        $this->container->singleton(\App\Core\Queue\QueueManager::class);
+
+        // Standard-Queue als Singleton registrieren
+        $this->container->singleton(\App\Core\Queue\Queue::class, function ($container) {
+            return $container->make(\App\Core\Queue\QueueManager::class)->connection();
         });
     }
 

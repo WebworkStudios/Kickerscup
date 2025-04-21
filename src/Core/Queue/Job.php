@@ -1,17 +1,21 @@
 <?php
 
-
 declare(strict_types=1);
 
 namespace App\Core\Queue;
 
 use Exception;
+use Throwable;
 use ReflectionClass;
 use ReflectionException;
-use Throwable;
+use ReflectionProperty;
 
 /**
  * Repräsentiert einen Job in der Queue
+ *
+ * Basisklasse für alle Jobs, die in der Queue verarbeitet werden können.
+ * Jobs können verzögert, wiederholt und basierend auf Fehlern unterschiedlich
+ * behandelt werden.
  */
 abstract class Job
 {
@@ -21,7 +25,7 @@ abstract class Job
     private ?string $id = null;
 
     /**
-     * Queue, in der der Job eingeiht wurde
+     * Queue, in der der Job eingereiht wurde
      */
     private string $queue = 'default';
 
@@ -38,14 +42,22 @@ abstract class Job
     /**
      * Zeitstempel der Erstellung
      */
-    private int $createdAt;
+    private readonly int $createdAt;
+
+    /**
+     * Tag für Gruppierung oder Filterung
+     */
+    private ?string $tag = null;
 
     /**
      * Konstruktor
+     *
+     * @param string|null $tag Optionaler Tag für Job-Gruppierung
      */
-    public function __construct()
+    public function __construct(?string $tag = null)
     {
         $this->createdAt = time();
+        $this->tag = $tag;
     }
 
     /**
@@ -69,6 +81,16 @@ abstract class Job
     }
 
     /**
+     * Getter für Job-ID
+     *
+     * @return string|null Die ID des Jobs oder null
+     */
+    public function getId(): ?string
+    {
+        return $this->id;
+    }
+
+    /**
      * Setzen der Queue
      *
      * @param string $queue Name der Queue
@@ -78,6 +100,16 @@ abstract class Job
     {
         $this->queue = $queue;
         return $this;
+    }
+
+    /**
+     * Getter für Queue-Name
+     *
+     * @return string Der Name der Queue
+     */
+    public function getQueue(): string
+    {
+        return $this->queue;
     }
 
     /**
@@ -91,10 +123,42 @@ abstract class Job
     }
 
     /**
+     * Getter für Ausführungsversuche
+     *
+     * @return int Anzahl der Versuche
+     */
+    public function getAttempts(): int
+    {
+        return $this->attempts;
+    }
+
+    /**
+     * Setzt die maximale Anzahl der Ausführungsversuche
+     *
+     * @param int $maxAttempts Maximale Anzahl der Versuche
+     * @return self
+     */
+    public function setMaxAttempts(int $maxAttempts): self
+    {
+        $this->maxAttempts = $maxAttempts;
+        return $this;
+    }
+
+    /**
+     * Gibt den Tag des Jobs zurück
+     *
+     * @return string|null Der Tag des Jobs oder null
+     */
+    public function getTag(): ?string
+    {
+        return $this->tag;
+    }
+
+    /**
      * Serialisiert den Job zur Speicherung
      *
-     * @return array Serialisierte Job-Daten
-     * @throws ReflectionException
+     * @return array<string, mixed> Serialisierte Job-Daten
+     * @throws ReflectionException Wenn ein Reflektionsfehler auftritt
      */
     public function serialize(): array
     {
@@ -104,18 +168,30 @@ abstract class Job
             'id' => $this->id,
             'queue' => $this->queue,
             'attempts' => $this->attempts,
+            'maxAttempts' => $this->maxAttempts,
             'createdAt' => $this->createdAt,
+            'tag' => $this->tag,
             'properties' => []
         ];
 
-        foreach ($reflection->getProperties() as $property) {
-            $property->setAccessible(true);
-            $value = $property->getValue($this);
+        foreach ($reflection->getProperties(ReflectionProperty::IS_PROTECTED | ReflectionProperty::IS_PRIVATE) as $property) {
+            // Nur Job-spezifische Properties serialisieren
+            if ($property->getDeclaringClass()->getName() === $reflection->getName()) {
+                $property->setAccessible(true);
+                $value = $property->getValue($this);
 
-            // Nur serialisierbare Werte speichern
-            if (is_scalar($value) || $value === null ||
-                (is_object($value) && method_exists($value, '__serialize'))) {
-                $data['properties'][$property->getName()] = $value;
+                // Nur serialisierbare Werte speichern
+                if (is_scalar($value) || $value === null || is_array($value) ||
+                    (is_object($value) && (method_exists($value, '__serialize') || $value instanceof \Serializable))) {
+                    $data['properties'][$property->getName()] = $value;
+                } else {
+                    // Warnung loggen bei nicht-serialisierbaren Werten
+                    app_log("Nicht-serialisierbarer Wert in Job-Property: " . $property->getName(), [
+                        'job_class' => $reflection->getName(),
+                        'property' => $property->getName(),
+                        'type' => gettype($value)
+                    ], 'warning');
+                }
             }
         }
 
@@ -127,22 +203,30 @@ abstract class Job
      *
      * @param array $data Serialisierte Job-Daten
      * @return static Deserializierter Job
-     * @throws ReflectionException
+     * @throws ReflectionException Wenn ein Reflektionsfehler auftritt
      */
     public static function unserialize(array $data): static
     {
         /** @var static $job */
-        $job = new $data['class']();
+        $job = new $data['class']($data['tag'] ?? null);
         $reflection = new ReflectionClass($job);
 
-        foreach ($data['properties'] as $name => $value) {
-            $property = $reflection->getProperty($name);
-            $property->setAccessible(true);
-            $property->setValue($job, $value);
+        if (isset($data['properties']) && is_array($data['properties'])) {
+            foreach ($data['properties'] as $name => $value) {
+                if ($reflection->hasProperty($name)) {
+                    $property = $reflection->getProperty($name);
+                    $property->setAccessible(true);
+                    $property->setValue($job, $value);
+                }
+            }
         }
 
         $job->setId($data['id']);
         $job->setQueue($data['queue']);
+
+        if (isset($data['maxAttempts'])) {
+            $job->setMaxAttempts($data['maxAttempts']);
+        }
 
         return $job;
     }
@@ -165,37 +249,39 @@ abstract class Job
      */
     public function shouldRetry(Throwable $exception): bool
     {
-        // Standardimplementierung
-        return !$exception instanceof Exception;
+        // Standardimplementierung - kann von abgeleiteten Klassen überschrieben werden
+        return true;
     }
 
     /**
-     * Getter für Job-ID
+     * Methode, die vor der Ausführung des Jobs aufgerufen wird
      *
-     * @return string|null
+     * @return void
      */
-    public function getId(): ?string
+    public function beforeHandle(): void
     {
-        return $this->id;
+        // Kann von abgeleiteten Klassen überschrieben werden
     }
 
     /**
-     * Getter für Queue-Name
+     * Methode, die nach erfolgreicher Ausführung des Jobs aufgerufen wird
      *
-     * @return string
+     * @param mixed $result Das Ergebnis des Jobs
+     * @return void
      */
-    public function getQueue(): string
+    public function afterHandle(mixed $result): void
     {
-        return $this->queue;
+        // Kann von abgeleiteten Klassen überschrieben werden
     }
 
     /**
-     * Getter für Ausführungsversuche
+     * Methode, die bei einem Fehler während der Ausführung aufgerufen wird
      *
-     * @return int
+     * @param Throwable $exception Die aufgetretene Exception
+     * @return void
      */
-    public function getAttempts(): int
+    public function onFailure(Throwable $exception): void
     {
-        return $this->attempts;
+        // Kann von abgeleiteten Klassen überschrieben werden
     }
 }
