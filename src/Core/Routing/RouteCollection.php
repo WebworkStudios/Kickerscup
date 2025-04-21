@@ -7,7 +7,8 @@ namespace App\Core\Routing;
 /**
  * Sammlung von Routen
  *
- * Implementiert Iterator, um über Routen iterieren zu können
+ * Implementiert Iterator, um über Routen iterieren zu können.
+ * Routen werden standardmäßig mit Action-Klassen verknüpft, die eine __invoke-Methode haben.
  */
 class RouteCollection implements \Iterator, \Countable
 {

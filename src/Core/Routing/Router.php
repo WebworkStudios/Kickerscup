@@ -259,6 +259,58 @@ class Router
     }
 
     /**
+     * Verarbeitet einen Request gemäß der definierten Routen
+     *
+     * Sucht die passende Route, löst die Action auf und führt sie aus.
+     *
+     * @param Request $request Der zu verarbeitende Request
+     * @return Response Die erzeugte Response
+     * @throws \App\Core\Error\NotFoundException Wenn keine passende Route gefunden wurde
+     * @throws \App\Core\Error\BadRequestException Wenn die Action nicht ausführbar ist
+     */
+    private function processRouteRequest(Request $request): Response
+    {
+        // Route finden
+        $route = $this->router->resolve($request);
+
+        if ($route === null) {
+            throw new \App\Core\Error\NotFoundException(
+                "Die Route für {$request->getMethod()} {$request->getUri()} wurde nicht gefunden."
+            );
+        }
+
+        // Action auflösen
+        $action = $route->getAction();
+
+        // Wenn Action ein String ist, als Action-Klasse instanziieren und __invoke aufrufen
+        if (is_string($action) && class_exists($action)) {
+            $actionInstance = $this->container->make($action);
+            $action = [$actionInstance, '__invoke'];
+        }
+
+        // Parameter vorbereiten
+        $parameters = array_merge([$request], $route->getParameters());
+
+        // Action ausführen
+        if (is_callable($action)) {
+            $response = $action(...$parameters);
+
+            // Wenn keine Response zurückgegeben wurde, 204 No Content zurückgeben
+            if (!$response instanceof Response) {
+                return $this->container->make(ResponseFactory::class)->noContent();
+            }
+
+            return $response;
+        }
+
+        // Wenn Action nicht aufrufbar ist, 400 Bad Request zurückgeben
+        throw new \App\Core\Error\BadRequestException(
+            'Route-Action ist nicht aufrufbar',
+            'ACTION_NOT_CALLABLE'
+        );
+    }
+
+    /**
      * Extrahiert Parameter aus einem URI
      *
      * @param array $matches Regex-Matches

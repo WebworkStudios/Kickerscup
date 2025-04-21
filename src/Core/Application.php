@@ -383,7 +383,7 @@ class Application
     /**
      * Verarbeitet einen Request gemäß der definierten Routen
      *
-     * Sucht die passende Route, löst die Controller/Action auf und führt sie aus.
+     * Sucht die passende Route, löst die Action auf und führt sie aus.
      *
      * @param Request $request Der zu verarbeitende Request
      * @return Response Die erzeugte Response
@@ -404,24 +404,9 @@ class Application
         // Action auflösen
         $action = $route->getAction();
 
-        // Wenn Action ein Array ist [Controller::class, 'method']
-        if (is_array($action) && count($action) === 2 && is_string($action[0]) && is_string($action[1])) {
-            $controller = $this->container->make($action[0]);
-            $action = [$controller, $action[1]];
-        }
-
-        // Wenn Action ein Classname ist, instanziieren und invoke-Methode aufrufen
+        // Wenn Action ein String ist, als Action-Klasse instanziieren
         if (is_string($action) && class_exists($action)) {
-            $controller = $this->container->make($action);
-
-            if (method_exists($controller, '__invoke')) {
-                $action = [$controller, '__invoke'];
-            } else {
-                throw new \App\Core\Error\BadRequestException(
-                    'Controller hat keine __invoke-Methode',
-                    'CONTROLLER_INVALID'
-                );
-            }
+            $action = $this->container->make($action);
         }
 
         // Parameter vorbereiten
