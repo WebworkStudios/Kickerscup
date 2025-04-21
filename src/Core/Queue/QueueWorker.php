@@ -6,8 +6,8 @@ namespace App\Core\Queue;
 
 use App\Core\Container\Container;
 use Exception;
-use Throwable;
 use RuntimeException;
+use Throwable;
 
 /**
  * Queue-Worker für die Verarbeitung von Jobs
@@ -208,8 +208,8 @@ class QueueWorker
      *
      * @param Job $job Fehlgeschlagener Job
      * @param Throwable $exception Aufgetretene Exception
-     * @throws Exception Bei nicht wiederholbaren Fehlern
      * @return void
+     * @throws Exception Bei nicht wiederholbaren Fehlern
      */
     private function handleJobFailure(Job $job, Throwable $exception): void
     {

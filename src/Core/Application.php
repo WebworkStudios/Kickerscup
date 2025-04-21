@@ -9,6 +9,7 @@ use App\Core\Http\Request;
 use App\Core\Http\Response;
 use App\Core\Http\ResponseFactory;
 use App\Core\Middleware\AuthMiddleware;
+use App\Core\Middleware\CompressionMiddleware;
 use App\Core\Middleware\CorsMiddleware;
 use App\Core\Middleware\LogMiddleware;
 use App\Core\Middleware\Middleware;
@@ -138,6 +139,23 @@ class Application
             );
         });
 
+        // CompressionMiddleware registrieren
+        $this->container->singleton(CompressionMiddleware::class, function () {
+            return new CompressionMiddleware(
+                config('compression.min_size', 1024),
+                config('compression.types', [
+                    'application/json',
+                    'text/html',
+                    'text/plain',
+                    'text/css',
+                    'text/javascript',
+                    'application/javascript',
+                    'application/xml',
+                    'text/xml'
+                ])
+            );
+        });
+
         // Übersetzung
         $this->registerTranslationService();
 
@@ -177,20 +195,6 @@ class Application
                 config('app.fallback_locale', 'en'),
                 $cache
             );
-        });
-    }
-
-    /**
-     * Registriert die Queue-Services
-     */
-    private function registerQueueServices(): void
-    {
-        // QueueManager als Singleton registrieren
-        $this->container->singleton(\App\Core\Queue\QueueManager::class);
-
-        // Standard-Queue als Singleton registrieren
-        $this->container->singleton(\App\Core\Queue\Queue::class, function ($container) {
-            return $container->make(\App\Core\Queue\QueueManager::class)->connection();
         });
     }
 
@@ -264,6 +268,51 @@ class Application
     }
 
     /**
+     * Registriert die Queue-Services
+     */
+    private function registerQueueServices(): void
+    {
+        // QueueManager als Singleton registrieren
+        $this->container->singleton(\App\Core\Queue\QueueManager::class);
+
+        // Standard-Queue als Singleton registrieren
+        $this->container->singleton(\App\Core\Queue\Queue::class, function ($container) {
+            return $container->make(\App\Core\Queue\QueueManager::class)->connection();
+        });
+    }
+
+    private function registerMiddleware(): void
+    {
+        // Standard-Middleware hinzufügen
+        $this->addMiddleware($this->container->make(CorsMiddleware::class));
+        $this->addMiddleware($this->container->make(LogMiddleware::class));
+        $this->addMiddleware($this->container->make(RateLimitMiddleware::class));
+
+        // Kompression-Middleware hinzufügen
+        $this->addMiddleware($this->container->make(CompressionMiddleware::class));
+
+        // Weitere Middleware je nach Konfiguration
+        if (config('app.debug', false)) {
+            $this->addMiddleware($this->container->make(AuthMiddleware::class));
+        }
+    }
+
+    /**
+     * Fügt eine Middleware zur Anwendung hinzu
+     *
+     * Middlewares werden in der Reihenfolge ausgeführt, in der sie hinzugefügt wurden.
+     * Sie können zur Authentifizierung, Logging, CORS-Handling etc. verwendet werden.
+     *
+     * @param Middleware $middleware Die hinzuzufügende Middleware
+     * @return self Für Method Chaining
+     */
+    public function addMiddleware(Middleware $middleware): self
+    {
+        $this->middlewareStack->add($middleware);
+        return $this;
+    }
+
+    /**
      * Initialisiert die Datenbankverbindung
      *
      * @return bool True bei erfolgreicher Initialisierung, sonst false
@@ -297,34 +346,6 @@ class Application
             // $app als Variable für das Routing-File bereitstellen
             $app = $this;
             require $routesFile;
-        }
-    }
-
-    /**
-     * Fügt eine Middleware zur Anwendung hinzu
-     *
-     * Middlewares werden in der Reihenfolge ausgeführt, in der sie hinzugefügt wurden.
-     * Sie können zur Authentifizierung, Logging, CORS-Handling etc. verwendet werden.
-     *
-     * @param Middleware $middleware Die hinzuzufügende Middleware
-     * @return self Für Method Chaining
-     */
-    public function addMiddleware(Middleware $middleware): self
-    {
-        $this->middlewareStack->add($middleware);
-        return $this;
-    }
-
-    private function registerMiddleware(): void
-    {
-        // Standard-Middleware hinzufügen
-        $this->addMiddleware($this->container->make(CorsMiddleware::class));
-        $this->addMiddleware($this->container->make(LogMiddleware::class));
-        $this->addMiddleware($this->container->make(RateLimitMiddleware::class));
-
-        // Weitere Middleware je nach Konfiguration
-        if (config('auth.enabled', true)) {
-            $this->addMiddleware($this->container->make(AuthMiddleware::class));
         }
     }
 

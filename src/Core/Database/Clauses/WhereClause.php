@@ -310,6 +310,46 @@ class WhereClause
     }
 
     /**
+     * Generiert die SQL-Abfrage für die WHERE-Klausel
+     *
+     * @return string
+     */
+    public function toSql(): string
+    {
+        if (empty($this->conditions)) {
+            return '';
+        }
+
+        $sql = 'WHERE ';
+        $isFirst = true;
+
+        foreach ($this->conditions as $condition) {
+            if ($condition['sql'] === '(') {
+                $sql .= ($isFirst ? '' : " {$condition['type']} ") . '(';
+                $isFirst = true;
+            } elseif ($condition['sql'] === ')') {
+                $sql .= ')';
+                $isFirst = false;
+            } else {
+                $sql .= ($isFirst ? '' : " {$condition['type']} ") . $condition['sql'];
+                $isFirst = false;
+            }
+        }
+
+        return $sql;
+    }
+
+    /**
+     * Gibt die Parameter für die Abfrage zurück
+     *
+     * @return array
+     */
+    public function getBindings(): array
+    {
+        return $this->bindings;
+    }
+
+    /**
      * Fügt eine WHERE LIKE-Bedingung hinzu
      *
      * @param string $column Spalte
@@ -355,46 +395,6 @@ class WhereClause
     public function orWhereNotLike(string $column, string $value): void
     {
         $this->addCondition('OR', $column, 'NOT LIKE', $value);
-    }
-
-    /**
-     * Generiert die SQL-Abfrage für die WHERE-Klausel
-     *
-     * @return string
-     */
-    public function toSql(): string
-    {
-        if (empty($this->conditions)) {
-            return '';
-        }
-
-        $sql = 'WHERE ';
-        $isFirst = true;
-
-        foreach ($this->conditions as $condition) {
-            if ($condition['sql'] === '(') {
-                $sql .= ($isFirst ? '' : " {$condition['type']} ") . '(';
-                $isFirst = true;
-            } elseif ($condition['sql'] === ')') {
-                $sql .= ')';
-                $isFirst = false;
-            } else {
-                $sql .= ($isFirst ? '' : " {$condition['type']} ") . $condition['sql'];
-                $isFirst = false;
-            }
-        }
-
-        return $sql;
-    }
-
-    /**
-     * Gibt die Parameter für die Abfrage zurück
-     *
-     * @return array
-     */
-    public function getBindings(): array
-    {
-        return $this->bindings;
     }
 
     /**

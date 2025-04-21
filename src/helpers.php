@@ -226,6 +226,22 @@ function app_log(string $message, array $context = [], string $level = 'info'): 
 }
 
 /**
+ * Gibt einen formatierten Wert als komprimierte JSON-Response zurück und beendet die Anwendung
+ *
+ * @param mixed $value Wert
+ * @param int $status HTTP-Statuscode
+ * @param array $headers HTTP-Header
+ * @return void
+ * @throws Exception
+ */
+#[NoReturn] function compressed_json(mixed $value, int $status = 200, array $headers = []): void
+{
+    $response = response()->compressed($value, $status, $headers);
+    $response->send();
+    exit;
+}
+
+/**
  * Wirft eine NotFoundException
  *
  * @param string $message Fehlermeldung

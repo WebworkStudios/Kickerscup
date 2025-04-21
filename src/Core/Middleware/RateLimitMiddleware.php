@@ -49,11 +49,12 @@ class RateLimitMiddleware implements Middleware
      * @param array $ignoredPaths Pfade, die vom Rate-Limiting ausgenommen sind
      */
     public function __construct(
-        Cache $cache,
+        Cache           $cache,
         ResponseFactory $responseFactory,
-        array $limiters = [],
-        array $ignoredPaths = []
-    ) {
+        array           $limiters = [],
+        array           $ignoredPaths = []
+    )
+    {
         $this->cache = $cache;
         $this->responseFactory = $responseFactory;
         $this->limiters = $limiters;
@@ -130,81 +131,6 @@ class RateLimitMiddleware implements Middleware
         }
 
         return $response;
-    }
-
-    /**
-     * Prüft, ob ein Rate-Limit überschritten wurde
-     *
-     * @param string $key Cache-Schlüssel
-     * @param int $limit Maximale Anzahl von Requests
-     * @param int $window Zeitfenster in Sekunden
-     * @return bool True, wenn Rate-Limit überschritten wurde
-     */
-    private function checkRateLimit(string $key, int $limit, int $window): bool
-    {
-        $timestamps = $this->cache->get($key, []);
-        $now = time();
-
-        // Alte Timestamps entfernen
-        $timestamps = array_filter($timestamps, fn($timestamp) => $timestamp >= $now - $window);
-
-        // Prüfen, ob das Limit überschritten wurde
-        if (count($timestamps) >= $limit) {
-            return true;
-        }
-
-        // Aktuellen Timestamp hinzufügen
-        $timestamps[] = $now;
-
-        // Im Cache speichern
-        $this->cache->set($key, $timestamps, $window);
-
-        return false;
-    }
-
-    /**
-     * Ermittelt, wie viele Versuche noch übrig sind
-     *
-     * @param string $key Cache-Schlüssel
-     * @param int $limit Maximale Anzahl von Requests
-     * @return int Anzahl der verbleibenden Versuche
-     */
-    private function getRemainingAttempts(string $key, int $limit): int
-    {
-        $timestamps = $this->cache->get($key, []);
-        return $limit - count($timestamps);
-    }
-
-    /**
-     * Ermittelt den Zeitpunkt, an dem das Rate-Limit zurückgesetzt wird
-     *
-     * @param string $key Cache-Schlüssel
-     * @param int $window Zeitfenster in Sekunden
-     * @return int Timestamp für das Zurücksetzen
-     */
-    private function getResetTime(string $key, int $window): int
-    {
-        $timestamps = $this->cache->get($key, []);
-
-        if (empty($timestamps)) {
-            return time() + $window;
-        }
-
-        // Ältester Timestamp + Zeitfenster
-        return min($timestamps) + $window;
-    }
-
-    /**
-     * Ermittelt, wie lange gewartet werden muss, bis der nächste Request möglich ist
-     *
-     * @param string $key Cache-Schlüssel
-     * @param int $window Zeitfenster in Sekunden
-     * @return int Wartezeit in Sekunden
-     */
-    private function getRetryAfter(string $key, int $window): int
-    {
-        $resetTime = $this->getResetTime($key, $window);
-        return max(1, $resetTime - time());
     }
 
     /**
@@ -295,5 +221,80 @@ class RateLimitMiddleware implements Middleware
         }
 
         return $applicableLimits;
+    }
+
+    /**
+     * Prüft, ob ein Rate-Limit überschritten wurde
+     *
+     * @param string $key Cache-Schlüssel
+     * @param int $limit Maximale Anzahl von Requests
+     * @param int $window Zeitfenster in Sekunden
+     * @return bool True, wenn Rate-Limit überschritten wurde
+     */
+    private function checkRateLimit(string $key, int $limit, int $window): bool
+    {
+        $timestamps = $this->cache->get($key, []);
+        $now = time();
+
+        // Alte Timestamps entfernen
+        $timestamps = array_filter($timestamps, fn($timestamp) => $timestamp >= $now - $window);
+
+        // Prüfen, ob das Limit überschritten wurde
+        if (count($timestamps) >= $limit) {
+            return true;
+        }
+
+        // Aktuellen Timestamp hinzufügen
+        $timestamps[] = $now;
+
+        // Im Cache speichern
+        $this->cache->set($key, $timestamps, $window);
+
+        return false;
+    }
+
+    /**
+     * Ermittelt, wie lange gewartet werden muss, bis der nächste Request möglich ist
+     *
+     * @param string $key Cache-Schlüssel
+     * @param int $window Zeitfenster in Sekunden
+     * @return int Wartezeit in Sekunden
+     */
+    private function getRetryAfter(string $key, int $window): int
+    {
+        $resetTime = $this->getResetTime($key, $window);
+        return max(1, $resetTime - time());
+    }
+
+    /**
+     * Ermittelt den Zeitpunkt, an dem das Rate-Limit zurückgesetzt wird
+     *
+     * @param string $key Cache-Schlüssel
+     * @param int $window Zeitfenster in Sekunden
+     * @return int Timestamp für das Zurücksetzen
+     */
+    private function getResetTime(string $key, int $window): int
+    {
+        $timestamps = $this->cache->get($key, []);
+
+        if (empty($timestamps)) {
+            return time() + $window;
+        }
+
+        // Ältester Timestamp + Zeitfenster
+        return min($timestamps) + $window;
+    }
+
+    /**
+     * Ermittelt, wie viele Versuche noch übrig sind
+     *
+     * @param string $key Cache-Schlüssel
+     * @param int $limit Maximale Anzahl von Requests
+     * @return int Anzahl der verbleibenden Versuche
+     */
+    private function getRemainingAttempts(string $key, int $limit): int
+    {
+        $timestamps = $this->cache->get($key, []);
+        return $limit - count($timestamps);
     }
 }

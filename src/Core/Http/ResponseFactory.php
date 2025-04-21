@@ -56,16 +56,24 @@ class ResponseFactory
     }
 
     /**
-     * Erstellt eine JSON-Response
+     * Erweiterte JSON-Methode mit optionaler Kompression
      *
      * @param mixed $data Daten
      * @param int $statusCode HTTP-Statuscode
      * @param array $headers HTTP-Header
+     * @param bool $compress Ob die Response komprimiert werden soll
      * @return Response
+     * @throws \JsonException
      */
-    public function json(mixed $data, int $statusCode = 200, array $headers = []): Response
+    public function json(mixed $data, int $statusCode = 200, array $headers = [], bool $compress = false): Response
     {
-        return Response::json($data, $statusCode, $headers);
+        $response = Response::json($data, $statusCode, $headers);
+
+        if ($compress) {
+            $response->compress();
+        }
+
+        return $response;
     }
 
     /**
@@ -218,6 +226,20 @@ class ResponseFactory
             'success' => true,
             'message' => $message
         ], $statusCode, $headers);
+    }
+
+    /**
+     * Erstellt eine komprimierte Response
+     *
+     * @param mixed $data Daten
+     * @param int $statusCode HTTP-Statuscode
+     * @param array $headers HTTP-Header
+     * @return Response
+     */
+    public function compressed(mixed $data, int $statusCode = 200, array $headers = []): Response
+    {
+        $response = $this->json($data, $statusCode, $headers);
+        return $response->compress();
     }
 
     /**

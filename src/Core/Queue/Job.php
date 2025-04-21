@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Core\Queue;
 
 use Exception;
-use Throwable;
 use ReflectionClass;
 use ReflectionException;
 use ReflectionProperty;
+use Throwable;
 
 /**
  * Repräsentiert einen Job in der Queue
@@ -61,24 +61,45 @@ abstract class Job
     }
 
     /**
+     * Deserialisiert einen Job
+     *
+     * @param array $data Serialisierte Job-Daten
+     * @return static Deserializierter Job
+     * @throws ReflectionException Wenn ein Reflektionsfehler auftritt
+     */
+    public static function unserialize(array $data): static
+    {
+        /** @var static $job */
+        $job = new $data['class']($data['tag'] ?? null);
+        $reflection = new ReflectionClass($job);
+
+        if (isset($data['properties']) && is_array($data['properties'])) {
+            foreach ($data['properties'] as $name => $value) {
+                if ($reflection->hasProperty($name)) {
+                    $property = $reflection->getProperty($name);
+                    $property->setAccessible(true);
+                    $property->setValue($job, $value);
+                }
+            }
+        }
+
+        $job->setId($data['id']);
+        $job->setQueue($data['queue']);
+
+        if (isset($data['maxAttempts'])) {
+            $job->setMaxAttempts($data['maxAttempts']);
+        }
+
+        return $job;
+    }
+
+    /**
      * Abstrakte Methode zur Job-Ausführung
      *
      * @return mixed Rückgabewert der Job-Ausführung
      * @throws Exception Bei Ausführungsfehlern
      */
     abstract public function handle(): mixed;
-
-    /**
-     * Setzen der Job-ID
-     *
-     * @param string $id Eindeutige Job-ID
-     * @return self
-     */
-    public function setId(string $id): self
-    {
-        $this->id = $id;
-        return $this;
-    }
 
     /**
      * Getter für Job-ID
@@ -91,17 +112,16 @@ abstract class Job
     }
 
     /**
-     * Setzen der Queue
+     * Setzen der Job-ID
      *
-     * @param string $queue Name der Queue
+     * @param string $id Eindeutige Job-ID
      * @return self
      */
-    public function setQueue(string $queue): self
+    public function setId(string $id): self
     {
-        $this->queue = $queue;
+        $this->id = $id;
         return $this;
     }
-
 
     /**
      * Gibt den Erstellungszeitpunkt zurück
@@ -123,6 +143,17 @@ abstract class Job
         return $this->maxAttempts;
     }
 
+    /**
+     * Setzt die maximale Anzahl der Ausführungsversuche
+     *
+     * @param int $maxAttempts Maximale Anzahl der Versuche
+     * @return self
+     */
+    public function setMaxAttempts(int $maxAttempts): self
+    {
+        $this->maxAttempts = $maxAttempts;
+        return $this;
+    }
 
     /**
      * Getter für Queue-Name
@@ -132,6 +163,18 @@ abstract class Job
     public function getQueue(): string
     {
         return $this->queue;
+    }
+
+    /**
+     * Setzen der Queue
+     *
+     * @param string $queue Name der Queue
+     * @return self
+     */
+    public function setQueue(string $queue): self
+    {
+        $this->queue = $queue;
+        return $this;
     }
 
     /**
@@ -152,18 +195,6 @@ abstract class Job
     public function getAttempts(): int
     {
         return $this->attempts;
-    }
-
-    /**
-     * Setzt die maximale Anzahl der Ausführungsversuche
-     *
-     * @param int $maxAttempts Maximale Anzahl der Versuche
-     * @return self
-     */
-    public function setMaxAttempts(int $maxAttempts): self
-    {
-        $this->maxAttempts = $maxAttempts;
-        return $this;
     }
 
     /**
@@ -230,39 +261,6 @@ abstract class Job
         }
 
         return $data;
-    }
-
-    /**
-     * Deserialisiert einen Job
-     *
-     * @param array $data Serialisierte Job-Daten
-     * @return static Deserializierter Job
-     * @throws ReflectionException Wenn ein Reflektionsfehler auftritt
-     */
-    public static function unserialize(array $data): static
-    {
-        /** @var static $job */
-        $job = new $data['class']($data['tag'] ?? null);
-        $reflection = new ReflectionClass($job);
-
-        if (isset($data['properties']) && is_array($data['properties'])) {
-            foreach ($data['properties'] as $name => $value) {
-                if ($reflection->hasProperty($name)) {
-                    $property = $reflection->getProperty($name);
-                    $property->setAccessible(true);
-                    $property->setValue($job, $value);
-                }
-            }
-        }
-
-        $job->setId($data['id']);
-        $job->setQueue($data['queue']);
-
-        if (isset($data['maxAttempts'])) {
-            $job->setMaxAttempts($data['maxAttempts']);
-        }
-
-        return $job;
     }
 
     /**

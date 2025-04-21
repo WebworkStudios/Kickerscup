@@ -44,6 +44,24 @@ class QueueManager
     }
 
     /**
+     * Erstellt einen QueueWorker
+     *
+     * @param string|null $driver Treiber-Name, null für Standard-Treiber
+     * @param array $config Worker-Konfiguration
+     * @return QueueWorker
+     */
+    public function worker(?string $driver = null, array $config = []): QueueWorker
+    {
+        $queue = $this->connection($driver);
+
+        return new QueueWorker(
+            $queue,
+            $this->container,
+            array_merge($this->config['worker'] ?? [], $config)
+        );
+    }
+
+    /**
      * Gibt eine Queue-Instanz zurück
      *
      * @param string|null $driver Treiber-Name, null für Standard-Treiber
@@ -117,23 +135,5 @@ class QueueManager
         $failOnError = $config['fail_on_error'] ?? true;
 
         return new SyncQueue($this->container, $failOnError);
-    }
-
-    /**
-     * Erstellt einen QueueWorker
-     *
-     * @param string|null $driver Treiber-Name, null für Standard-Treiber
-     * @param array $config Worker-Konfiguration
-     * @return QueueWorker
-     */
-    public function worker(?string $driver = null, array $config = []): QueueWorker
-    {
-        $queue = $this->connection($driver);
-
-        return new QueueWorker(
-            $queue,
-            $this->container,
-            array_merge($this->config['worker'] ?? [], $config)
-        );
     }
 }

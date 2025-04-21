@@ -129,6 +129,46 @@ use App\Core\Database\Exceptions\QueryException;
         $this->getWhereClause()->where($this->sanitizeColumnName($column), $operator, $value);
         return $this;
     }
+
+    /**
+     * Startet eine gruppierte Bedingung mit WHERE
+     *
+     * @param callable $callback Callback-Funktion
+     * @return self
+     */
+    public function whereGroup(callable $callback): self
+    {
+        $this->whereClause->beginGroup();
+        $callback($this);
+        $this->whereClause->endGroup();
+        return $this;
+    }
+
+    /**
+     * Validiert einen SQL-Operator
+     *
+     * @param string $operator Der zu validierende Operator
+     * @return string Der validierte Operator
+     * @throws \InvalidArgumentException wenn der Operator ungültig ist
+     */
+    private function validateOperator(string $operator): string
+    {
+        $validOperators = [
+            '=', '<', '>', '<=', '>=', '<>', '!=',
+            'LIKE', 'NOT LIKE', 'IN', 'NOT IN',
+            'IS', 'IS NOT', 'EXISTS', 'NOT EXISTS',
+            'BETWEEN', 'NOT BETWEEN'
+        ];
+
+        $normalizedOperator = strtoupper(trim($operator));
+
+        if (!in_array($normalizedOperator, $validOperators, true)) {
+            throw new \InvalidArgumentException("Ungültiger SQL-Operator: '{$operator}'");
+        }
+
+        return $normalizedOperator;
+    }
+
     /**
      * Gibt die WHERE-Klausel zurück oder erstellt eine neue
      *
@@ -140,6 +180,71 @@ use App\Core\Database\Exceptions\QueryException;
             $this->whereClause = new WhereClause();
         }
         return $this->whereClause;
+    }
+
+    /**
+     * Überprüft und maskiert einen Spaltennamen
+     *
+     * @param string $column Spaltenname
+     * @return string Maskierter Spaltenname
+     * @throws \InvalidArgumentException wenn der Spaltenname ungültig ist
+     */
+    private function sanitizeColumnName(string $column): string
+    {
+        // Behandlung von Funktionen und Ausdrücken
+        if (str_contains($column, '(') && str_contains($column, ')')) {
+            return $column; // SQL-Funktionen direkt durchlassen
+        }
+
+        // Unterstützung für Spalten mit Tabellen-Präfix (table.column)
+        if (str_contains($column, '.')) {
+            $parts = explode('.', $column);
+            $validatedParts = [];
+
+            foreach ($parts as $part) {
+                if ($part === '*') {
+                    $validatedParts[] = $part;
+                } else {
+                    // Validieren des Spaltennamens mit einem strengeren Pattern
+                    if (!preg_match('/^[a-zA-Z][a-zA-Z0-9_]*$/', $part)) {
+                        throw new \InvalidArgumentException("Ungültiger Spaltenname: '{$part}' in '{$column}'");
+                    }
+                    $validatedParts[] = $this->quoteIdentifier($part);
+                }
+            }
+
+            return implode('.', $validatedParts);
+        }
+
+        // Einfache Spalte
+        if ($column === '*') {
+            return $column;
+        }
+
+        // Validieren des Spaltennamens mit einem strengeren Pattern
+        if (!preg_match('/^[a-zA-Z][a-zA-Z0-9_]*$/', $column)) {
+            throw new \InvalidArgumentException("Ungültiger Spaltenname: '{$column}'");
+        }
+
+        return $this->quoteIdentifier($column);
+    }
+
+    /**
+     * Maskiert einen Bezeichner entsprechend des Datenbank-Dialekts
+     *
+     * @param string $identifier Bezeichner (Tabellen- oder Spaltenname)
+     * @return string Maskierter Bezeichner
+     */
+    private function quoteIdentifier(string $identifier): string
+    {
+        $driver = $this->connectionConfig['driver'] ?? 'mysql';
+
+        return match ($driver) {
+            'mysql' => "`{$identifier}`",
+            'pgsql' => "\"{$identifier}\"",
+            'sqlite' => "\"{$identifier}\"",
+            default => $identifier,
+        };
     }
 
     /**
@@ -324,6 +429,30 @@ use App\Core\Database\Exceptions\QueryException;
     }
 
     /**
+     * Überprüft und maskiert einen Tabellennamen
+     *
+     * @param string $table Tabellenname
+     * @return string Maskierter Tabellenname
+     * @throws \InvalidArgumentException wenn der Tabellenname ungültig ist
+     */
+    private function sanitizeTableName(string $table): string
+    {
+        // Unterstützung für Tabellennamen mit Schema/Datenbank (schema.table)
+        $parts = explode('.', $table);
+        $validatedParts = [];
+
+        foreach ($parts as $part) {
+            // Validieren mit einer strengeren Regel
+            if (!preg_match('/^[a-zA-Z][a-zA-Z0-9_]*$/', $part)) {
+                throw new \InvalidArgumentException("Ungültiger Tabellenname: '{$part}' in '{$table}'");
+            }
+            $validatedParts[] = $this->quoteIdentifier($part);
+        }
+
+        return implode('.', $validatedParts);
+    }
+
+    /**
      * Fügt eine LEFT JOIN-Klausel hinzu
      *
      * @param string $table Tabellenname
@@ -456,58 +585,6 @@ use App\Core\Database\Exceptions\QueryException;
     public function limit(int $limit): self
     {
         $this->limitOffsetClause->limit($limit);
-        return $this;
-    }
-
-    /**
-     * Fügt eine WHERE LIKE-Bedingung hinzu
-     *
-     * @param string $column Spalte
-     * @param string $value Wert (kann Wildcards % oder _ enthalten)
-     * @return self
-     */
-    public function whereLike(string $column, string $value): self
-    {
-        $this->getWhereClause()->whereLike($column, $value);
-        return $this;
-    }
-
-    /**
-     * Fügt eine WHERE LIKE-Bedingung mit OR hinzu
-     *
-     * @param string $column Spalte
-     * @param string $value Wert (kann Wildcards % oder _ enthalten)
-     * @return self
-     */
-    public function orWhereLike(string $column, string $value): self
-    {
-        $this->getWhereClause()->orWhereLike($column, $value);
-        return $this;
-    }
-
-    /**
-     * Fügt eine WHERE NOT LIKE-Bedingung hinzu
-     *
-     * @param string $column Spalte
-     * @param string $value Wert (kann Wildcards % oder _ enthalten)
-     * @return self
-     */
-    public function whereNotLike(string $column, string $value): self
-    {
-        $this->getWhereClause()->whereNotLike($column, $value);
-        return $this;
-    }
-
-    /**
-     * Fügt eine WHERE NOT LIKE-Bedingung mit OR hinzu
-     *
-     * @param string $column Spalte
-     * @param string $value Wert (kann Wildcards % oder _ enthalten)
-     * @return self
-     */
-    public function orWhereNotLike(string $column, string $value): self
-    {
-        $this->getWhereClause()->orWhereNotLike($column, $value);
         return $this;
     }
 
@@ -654,6 +731,58 @@ use App\Core\Database\Exceptions\QueryException;
     }
 
     /**
+     * Fügt eine WHERE LIKE-Bedingung hinzu
+     *
+     * @param string $column Spalte
+     * @param string $value Wert (kann Wildcards % oder _ enthalten)
+     * @return self
+     */
+    public function whereLike(string $column, string $value): self
+    {
+        $this->getWhereClause()->whereLike($column, $value);
+        return $this;
+    }
+
+    /**
+     * Fügt eine WHERE LIKE-Bedingung mit OR hinzu
+     *
+     * @param string $column Spalte
+     * @param string $value Wert (kann Wildcards % oder _ enthalten)
+     * @return self
+     */
+    public function orWhereLike(string $column, string $value): self
+    {
+        $this->getWhereClause()->orWhereLike($column, $value);
+        return $this;
+    }
+
+    /**
+     * Fügt eine WHERE NOT LIKE-Bedingung hinzu
+     *
+     * @param string $column Spalte
+     * @param string $value Wert (kann Wildcards % oder _ enthalten)
+     * @return self
+     */
+    public function whereNotLike(string $column, string $value): self
+    {
+        $this->getWhereClause()->whereNotLike($column, $value);
+        return $this;
+    }
+
+    /**
+     * Fügt eine WHERE NOT LIKE-Bedingung mit OR hinzu
+     *
+     * @param string $column Spalte
+     * @param string $value Wert (kann Wildcards % oder _ enthalten)
+     * @return self
+     */
+    public function orWhereNotLike(string $column, string $value): self
+    {
+        $this->getWhereClause()->orWhereNotLike($column, $value);
+        return $this;
+    }
+
+    /**
      * @template T
      * @param class-string<T> $class
      * @return T|null
@@ -719,30 +848,6 @@ use App\Core\Database\Exceptions\QueryException;
         $statement = $this->connection->query($query, $data);
 
         return (int)$this->connection->getPdo()->lastInsertId();
-    }
-
-    /**
-     * Überprüft und maskiert einen Tabellennamen
-     *
-     * @param string $table Tabellenname
-     * @return string Maskierter Tabellenname
-     * @throws \InvalidArgumentException wenn der Tabellenname ungültig ist
-     */
-    private function sanitizeTableName(string $table): string
-    {
-        // Unterstützung für Tabellennamen mit Schema/Datenbank (schema.table)
-        $parts = explode('.', $table);
-        $validatedParts = [];
-
-        foreach ($parts as $part) {
-            // Validieren mit einer strengeren Regel
-            if (!preg_match('/^[a-zA-Z][a-zA-Z0-9_]*$/', $part)) {
-                throw new \InvalidArgumentException("Ungültiger Tabellenname: '{$part}' in '{$table}'");
-            }
-            $validatedParts[] = $this->quoteIdentifier($part);
-        }
-
-        return implode('.', $validatedParts);
     }
 
     public function query(string $query, array $params = []): \PDOStatement
@@ -1036,20 +1141,6 @@ use App\Core\Database\Exceptions\QueryException;
     }
 
     /**
-     * Startet eine gruppierte Bedingung mit WHERE
-     *
-     * @param callable $callback Callback-Funktion
-     * @return self
-     */
-    public function whereGroup(callable $callback): self
-    {
-        $this->whereClause->beginGroup();
-        $callback($this);
-        $this->whereClause->endGroup();
-        return $this;
-    }
-
-    /**
      * Startet eine gruppierte Bedingung mit OR WHERE
      *
      * @param callable $callback Callback-Funktion
@@ -1126,96 +1217,6 @@ use App\Core\Database\Exceptions\QueryException;
         $statement = $this->query($query, array_merge($setParams, $whereParams));
 
         return $statement->rowCount();
-    }
-
-    /**
-     * Überprüft und maskiert einen Spaltennamen
-     *
-     * @param string $column Spaltenname
-     * @return string Maskierter Spaltenname
-     * @throws \InvalidArgumentException wenn der Spaltenname ungültig ist
-     */
-    private function sanitizeColumnName(string $column): string
-    {
-        // Behandlung von Funktionen und Ausdrücken
-        if (str_contains($column, '(') && str_contains($column, ')')) {
-            return $column; // SQL-Funktionen direkt durchlassen
-        }
-
-        // Unterstützung für Spalten mit Tabellen-Präfix (table.column)
-        if (str_contains($column, '.')) {
-            $parts = explode('.', $column);
-            $validatedParts = [];
-
-            foreach ($parts as $part) {
-                if ($part === '*') {
-                    $validatedParts[] = $part;
-                } else {
-                    // Validieren des Spaltennamens mit einem strengeren Pattern
-                    if (!preg_match('/^[a-zA-Z][a-zA-Z0-9_]*$/', $part)) {
-                        throw new \InvalidArgumentException("Ungültiger Spaltenname: '{$part}' in '{$column}'");
-                    }
-                    $validatedParts[] = $this->quoteIdentifier($part);
-                }
-            }
-
-            return implode('.', $validatedParts);
-        }
-
-        // Einfache Spalte
-        if ($column === '*') {
-            return $column;
-        }
-
-        // Validieren des Spaltennamens mit einem strengeren Pattern
-        if (!preg_match('/^[a-zA-Z][a-zA-Z0-9_]*$/', $column)) {
-            throw new \InvalidArgumentException("Ungültiger Spaltenname: '{$column}'");
-        }
-
-        return $this->quoteIdentifier($column);
-    }
-
-    /**
-     * Maskiert einen Bezeichner entsprechend des Datenbank-Dialekts
-     *
-     * @param string $identifier Bezeichner (Tabellen- oder Spaltenname)
-     * @return string Maskierter Bezeichner
-     */
-    private function quoteIdentifier(string $identifier): string
-    {
-        $driver = $this->connectionConfig['driver'] ?? 'mysql';
-
-        return match ($driver) {
-            'mysql' => "`{$identifier}`",
-            'pgsql' => "\"{$identifier}\"",
-            'sqlite' => "\"{$identifier}\"",
-            default => $identifier,
-        };
-    }
-
-    /**
-     * Validiert einen SQL-Operator
-     *
-     * @param string $operator Der zu validierende Operator
-     * @return string Der validierte Operator
-     * @throws \InvalidArgumentException wenn der Operator ungültig ist
-     */
-    private function validateOperator(string $operator): string
-    {
-        $validOperators = [
-            '=', '<', '>', '<=', '>=', '<>', '!=',
-            'LIKE', 'NOT LIKE', 'IN', 'NOT IN',
-            'IS', 'IS NOT', 'EXISTS', 'NOT EXISTS',
-            'BETWEEN', 'NOT BETWEEN'
-        ];
-
-        $normalizedOperator = strtoupper(trim($operator));
-
-        if (!in_array($normalizedOperator, $validOperators, true)) {
-            throw new \InvalidArgumentException("Ungültiger SQL-Operator: '{$operator}'");
-        }
-
-        return $normalizedOperator;
     }
 
     /**

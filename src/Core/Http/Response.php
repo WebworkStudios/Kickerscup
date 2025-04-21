@@ -153,6 +153,49 @@ class Response
         return $this->headers[$name] ?? $default;
     }
 
+    public function compress(?string $encoding = null): self
+    {
+        // Wenn keine explizite Kodierung angegeben ist, automatisch wählen
+        if ($encoding === null) {
+            $acceptEncoding = $_SERVER['HTTP_ACCEPT_ENCODING'] ?? '';
+
+            if (str_contains($acceptEncoding, 'br') && extension_loaded('brotli')) {
+                $encoding = 'br';
+            } elseif (str_contains($acceptEncoding, 'gzip') && extension_loaded('zlib')) {
+                $encoding = 'gzip';
+            } else {
+                // Keine unterstützte Kompression verfügbar
+                return $this;
+            }
+        }
+
+        if (!is_string($this->content)) {
+            return $this;
+        }
+
+        $compressed = match ($encoding) {
+            'br' => brotli_compress($this->content, 4),  // Level 4 bietet eine gute Balance
+            'gzip' => gzencode($this->content, 6),       // Level 6 bietet eine gute Balance
+            default => null
+        };
+
+        if ($compressed !== false && $compressed !== null) {
+            $this->content = $compressed;
+            $this->setHeader('Content-Encoding', $encoding);
+            $this->setHeader('Vary', 'Accept-Encoding');
+
+            // Entfernen ggf. vorhandener Content-Length, da sich die Länge geändert hat
+            foreach (array_keys($this->headers) as $name) {
+                if (strtolower($name) === 'content-length') {
+                    unset($this->headers[$name]);
+                    break;
+                }
+            }
+        }
+
+        return $this;
+    }
+
     /**
      * Setzt einen Header
      *
@@ -173,6 +216,14 @@ class Response
      */
     public function send(): void
     {
+        // Content-Length-Header setzen, falls noch nicht vorhanden
+        $hasContentLength = array_any(array_keys($this->headers), fn($name) => strtolower($name) === 'content-length'
+        );
+
+        if (!$hasContentLength && is_string($this->content)) {
+            $this->setHeader('Content-Length', (string)strlen($this->content));
+        }
+
         // HTTP-Statuscode setzen
         http_response_code($this->statusCode);
 

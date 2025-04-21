@@ -8,7 +8,6 @@ use App\Core\Database\DatabaseManager;
 use App\Core\Database\QueryBuilder;
 use Exception;
 use JsonException;
-use PDO;
 use RuntimeException;
 use Throwable;
 
@@ -52,9 +51,9 @@ class DatabaseQueue implements Queue
      */
     public function __construct(
         DatabaseManager $db,
-        string $table = 'jobs',
-        int $retryAfter = 90,
-        ?string $connection = null
+        string          $table = 'jobs',
+        int             $retryAfter = 90,
+        ?string         $connection = null
     )
     {
         $this->db = $db;
@@ -69,6 +68,24 @@ class DatabaseQueue implements Queue
     }
 
     /**
+     * Stellt sicher, dass die Jobs-Tabelle existiert
+     *
+     * @return void
+     * @throws RuntimeException Bei Migrations-Fehler
+     */
+    private function ensureTableExists(): void
+    {
+        try {
+            // Prüfen, ob Tabelle existiert mit QueryBuilder
+            $this->table()->first();
+            return;
+        } catch (Exception $e) {
+            // Tabelle existiert nicht, erstellen
+            $this->createJobsTable();
+        }
+    }
+
+    /**
      * Gibt den QueryBuilder für die Jobs-Tabelle zurück
      *
      * @return QueryBuilder
@@ -76,6 +93,38 @@ class DatabaseQueue implements Queue
     private function table(): QueryBuilder
     {
         return $this->db->table($this->table, $this->connection);
+    }
+
+    /**
+     * Erstellt die Jobs-Tabelle
+     *
+     * @return void
+     * @throws RuntimeException Bei Migrations-Fehler
+     */
+    private function createJobsTable(): void
+    {
+        try {
+            $sql = "CREATE TABLE IF NOT EXISTS {$this->table} (
+                id VARCHAR(50) NOT NULL PRIMARY KEY,
+                queue VARCHAR(50) NOT NULL,
+                payload LONGTEXT NOT NULL,
+                attempts INTEGER UNSIGNED NOT NULL,
+                available_at DATETIME NOT NULL,
+                created_at DATETIME NOT NULL,
+                reserved_at DATETIME NULL,
+                INDEX queue_index (queue),
+                INDEX available_at_index (available_at),
+                INDEX reserved_at_index (reserved_at)
+            )";
+
+            $this->db->connection($this->connection)->query($sql);
+
+            app_log("Jobs-Tabelle wurde erstellt", [
+                'table' => $this->table
+            ], 'info');
+        } catch (Exception $e) {
+            throw new RuntimeException("Fehler beim Erstellen der Jobs-Tabelle: " . $e->getMessage(), 0, $e);
+        }
     }
 
     /**
@@ -230,18 +279,6 @@ class DatabaseQueue implements Queue
             throw new RuntimeException("Fehler beim Abrufen des Jobs: " . $e->getMessage(), 0, $e);
         }
     }
-    /**
-     * Überprüft, ob ein Job bereits in der Queue existiert
-     *
-     * @param string $jobId Job-Identifier
-     * @return bool True, wenn Job gefunden, sonst false
-     */
-    public function exists(string $jobId): bool
-    {
-        return $this->table()
-                ->where('id', '=', $jobId)
-                ->count() > 0;
-    }
 
     /**
      * Löscht einen spezifischen Job aus der Queue
@@ -254,6 +291,19 @@ class DatabaseQueue implements Queue
         return $this->table()
                 ->where('id', '=', $jobId)
                 ->delete() > 0;
+    }
+
+    /**
+     * Überprüft, ob ein Job bereits in der Queue existiert
+     *
+     * @param string $jobId Job-Identifier
+     * @return bool True, wenn Job gefunden, sonst false
+     */
+    public function exists(string $jobId): bool
+    {
+        return $this->table()
+                ->where('id', '=', $jobId)
+                ->count() > 0;
     }
 
     /**
@@ -353,54 +403,5 @@ class DatabaseQueue implements Queue
         }
 
         return $jobs;
-    }
-    /**
-     * Stellt sicher, dass die Jobs-Tabelle existiert
-     *
-     * @return void
-     * @throws RuntimeException Bei Migrations-Fehler
-     */
-    private function ensureTableExists(): void
-    {
-        try {
-            // Prüfen, ob Tabelle existiert mit QueryBuilder
-            $this->table()->first();
-            return;
-        } catch (Exception $e) {
-            // Tabelle existiert nicht, erstellen
-            $this->createJobsTable();
-        }
-    }
-
-    /**
-     * Erstellt die Jobs-Tabelle
-     *
-     * @return void
-     * @throws RuntimeException Bei Migrations-Fehler
-     */
-    private function createJobsTable(): void
-    {
-        try {
-            $sql = "CREATE TABLE IF NOT EXISTS {$this->table} (
-                id VARCHAR(50) NOT NULL PRIMARY KEY,
-                queue VARCHAR(50) NOT NULL,
-                payload LONGTEXT NOT NULL,
-                attempts INTEGER UNSIGNED NOT NULL,
-                available_at DATETIME NOT NULL,
-                created_at DATETIME NOT NULL,
-                reserved_at DATETIME NULL,
-                INDEX queue_index (queue),
-                INDEX available_at_index (available_at),
-                INDEX reserved_at_index (reserved_at)
-            )";
-
-            $this->db->connection($this->connection)->query($sql);
-
-            app_log("Jobs-Tabelle wurde erstellt", [
-                'table' => $this->table
-            ], 'info');
-        } catch (Exception $e) {
-            throw new RuntimeException("Fehler beim Erstellen der Jobs-Tabelle: " . $e->getMessage(), 0, $e);
-        }
     }
 }

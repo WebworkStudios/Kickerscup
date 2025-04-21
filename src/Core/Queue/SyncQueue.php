@@ -33,11 +33,29 @@ class SyncQueue implements Queue
      */
     public function __construct(
         Container $container,
-        bool $failOnError = true
+        bool      $failOnError = true
     )
     {
         $this->container = $container;
         $this->failOnError = $failOnError;
+    }
+
+    /**
+     * Fügt mehrere Jobs gleichzeitig zur Queue hinzu und führt sie sofort aus
+     *
+     * @param array<Job> $jobs Liste von Jobs
+     * @param int|null $delay Verzögerung wird ignoriert
+     * @return array<string> Liste der Job-IDs
+     */
+    public function pushBatch(array $jobs, ?int $delay = null): array
+    {
+        $jobIds = [];
+
+        foreach ($jobs as $job) {
+            $jobIds[] = $this->push($job);
+        }
+
+        return $jobIds;
     }
 
     /**
@@ -123,24 +141,6 @@ class SyncQueue implements Queue
         }
 
         return $jobId;
-    }
-
-    /**
-     * Fügt mehrere Jobs gleichzeitig zur Queue hinzu und führt sie sofort aus
-     *
-     * @param array<Job> $jobs Liste von Jobs
-     * @param int|null $delay Verzögerung wird ignoriert
-     * @return array<string> Liste der Job-IDs
-     */
-    public function pushBatch(array $jobs, ?int $delay = null): array
-    {
-        $jobIds = [];
-
-        foreach ($jobs as $job) {
-            $jobIds[] = $this->push($job);
-        }
-
-        return $jobIds;
     }
 
     /**
