@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Core\Queue;
 
 use App\Core\Database\DatabaseManager;
+use App\Core\Database\QueryBuilder;
 use Exception;
 use JsonException;
 use PDO;
@@ -16,6 +17,7 @@ use Throwable;
  *
  * Verwendet eine Datenbanktabelle zur Speicherung von Jobs mit Unterstützung
  * für verzögerte Jobs, Job-Wiederholungen und persistente Job-Daten.
+ * Nutzt den Framework-QueryBuilder für konsistente Datenbankinteraktionen.
  */
 class DatabaseQueue implements Queue
 {
@@ -35,27 +37,45 @@ class DatabaseQueue implements Queue
     private readonly int $retryAfter;
 
     /**
+     * Datenbankverbindung für diese Queue
+     */
+    private ?string $connection = null;
+
+    /**
      * Konstruktor
      *
      * @param DatabaseManager $db Datenbank-Manager
      * @param string $table Tabellenname
      * @param int $retryAfter Retry-Timeout in Sekunden
+     * @param string|null $connection Spezifische Datenbankverbindung oder null für Standard
      * @throws RuntimeException Bei Migrations-Fehler
      */
     public function __construct(
         DatabaseManager $db,
         string $table = 'jobs',
-        int $retryAfter = 90
+        int $retryAfter = 90,
+        ?string $connection = null
     )
     {
         $this->db = $db;
         $this->table = $table;
         $this->retryAfter = $retryAfter;
+        $this->connection = $connection;
 
         // Automatische Migration, wenn nötig
         if (config('queue.drivers.database.migration', true)) {
             $this->ensureTableExists();
         }
+    }
+
+    /**
+     * Gibt den QueryBuilder für die Jobs-Tabelle zurück
+     *
+     * @return QueryBuilder
+     */
+    private function table(): QueryBuilder
+    {
+        return $this->db->table($this->table, $this->connection);
     }
 
     /**
@@ -76,28 +96,22 @@ class DatabaseQueue implements Queue
         $availableAt = $delay ? time() + $delay : time();
         $payload = json_encode($job->serialize(), JSON_THROW_ON_ERROR);
 
-        $conn = $this->db->connection();
-        $conn->beginTransaction();
-
         try {
-            $sql = "INSERT INTO {$this->table} 
-                    (id, queue, payload, attempts, available_at, created_at, reserved_at) 
-                    VALUES (?, ?, ?, ?, ?, ?, NULL)";
+            return $this->db->transaction(function () use ($jobId, $job, $payload, $availableAt) {
+                // Job einfügen mit QueryBuilder
+                $this->table()->insert([
+                    'id' => $jobId,
+                    'queue' => $job->getQueue(),
+                    'payload' => $payload,
+                    'attempts' => 0,
+                    'available_at' => date('Y-m-d H:i:s', $availableAt),
+                    'created_at' => date('Y-m-d H:i:s'),
+                    'reserved_at' => null
+                ]);
 
-            $stmt = $conn->prepare($sql);
-            $stmt->execute([
-                $jobId,
-                $job->getQueue(),
-                $payload,
-                0, // Anfängliche Anzahl an Versuchen
-                date('Y-m-d H:i:s', $availableAt),
-                date('Y-m-d H:i:s')
-            ]);
-
-            $conn->commit();
-            return $jobId;
+                return $jobId;
+            }, $this->connection);
         } catch (Throwable $e) {
-            $conn->rollBack();
             throw new RuntimeException("Fehler beim Speichern des Jobs: " . $e->getMessage(), 0, $e);
         }
     }
@@ -114,38 +128,34 @@ class DatabaseQueue implements Queue
     {
         $jobIds = [];
         $availableAt = $delay ? time() + $delay : time();
-
-        $conn = $this->db->connection();
-        $conn->beginTransaction();
+        $jobsData = [];
 
         try {
-            $sql = "INSERT INTO {$this->table} 
-                    (id, queue, payload, attempts, available_at, created_at, reserved_at) 
-                    VALUES (?, ?, ?, ?, ?, ?, NULL)";
+            return $this->db->transaction(function () use ($jobs, $availableAt, &$jobIds) {
+                $batchData = [];
 
-            $stmt = $conn->prepare($sql);
+                foreach ($jobs as $job) {
+                    $jobId = $job->getId() ?? bin2hex(random_bytes(16));
+                    $job->setId($jobId);
+                    $jobIds[] = $jobId;
 
-            foreach ($jobs as $job) {
-                $jobId = $job->getId() ?? bin2hex(random_bytes(16));
-                $job->setId($jobId);
-                $jobIds[] = $jobId;
+                    $batchData[] = [
+                        'id' => $jobId,
+                        'queue' => $job->getQueue(),
+                        'payload' => json_encode($job->serialize(), JSON_THROW_ON_ERROR),
+                        'attempts' => 0,
+                        'available_at' => date('Y-m-d H:i:s', $availableAt),
+                        'created_at' => date('Y-m-d H:i:s'),
+                        'reserved_at' => null
+                    ];
+                }
 
-                $payload = json_encode($job->serialize(), JSON_THROW_ON_ERROR);
+                // Batch-Insert mit QueryBuilder
+                $this->table()->insertMany($batchData);
 
-                $stmt->execute([
-                    $jobId,
-                    $job->getQueue(),
-                    $payload,
-                    0, // Anfängliche Anzahl an Versuchen
-                    date('Y-m-d H:i:s', $availableAt),
-                    date('Y-m-d H:i:s')
-                ]);
-            }
-
-            $conn->commit();
-            return $jobIds;
+                return $jobIds;
+            }, $this->connection);
         } catch (Throwable $e) {
-            $conn->rollBack();
             throw new RuntimeException("Fehler beim Batch-Speichern der Jobs: " . $e->getMessage(), 0, $e);
         }
     }
@@ -157,60 +167,62 @@ class DatabaseQueue implements Queue
      * @return Job|null Der nächste Job oder null
      * @throws JsonException|Exception Wenn Deserialisierung fehlschlägt
      */
+    /**
+     * Holt und reserviert den nächsten Job aus der Queue
+     *
+     * @param string $queue Spezifische Queue-Instanz
+     * @return Job|null Der nächste Job oder null
+     * @throws JsonException|Exception Wenn Deserialisierung fehlschlägt
+     */
     public function pop(string $queue = 'default'): ?Job
     {
-        $conn = $this->db->connection();
-        $conn->beginTransaction();
-
         try {
-            // Job finden und reservieren - Atomic Update
-            $now = date('Y-m-d H:i:s');
-            $retryAfterTime = date('Y-m-d H:i:s', time() - $this->retryAfter);
+            return $this->db->transaction(function () use ($queue) {
+                $now = date('Y-m-d H:i:s');
+                $retryAfterTime = date('Y-m-d H:i:s', time() - $this->retryAfter);
 
-            $sql = "SELECT * FROM {$this->table}
-                    WHERE queue = ? 
-                    AND (reserved_at IS NULL OR reserved_at <= ?)
-                    AND available_at <= ?
-                    ORDER BY id ASC
-                    LIMIT 1 FOR UPDATE";
+                // Job finden mit QueryBuilder und FOR UPDATE
+                $jobData = $this->table()
+                    ->where('queue', '=', $queue)
+                    ->where(function ($query) use ($retryAfterTime) {
+                        $query->whereNull('reserved_at')
+                            ->orWhere('reserved_at', '<=', $retryAfterTime);
+                    })
+                    ->where('available_at', '<=', $now)
+                    ->orderBy('id')
+                    ->limit(1)
+                    ->forUpdate()
+                    ->first();
 
-            $stmt = $conn->prepare($sql);
-            $stmt->execute([$queue, $retryAfterTime, $now]);
+                if ($jobData === false) {
+                    return null;
+                }
 
-            $jobData = $stmt->fetch(PDO::FETCH_ASSOC);
+                // Job reservieren mit QueryBuilder
+                $this->table()
+                    ->where('id', '=', $jobData['id'])
+                    ->update([
+                        'reserved_at' => $now,
+                        'attempts' => $jobData['attempts'] + 1
+                    ]);
 
-            if (!$jobData) {
-                $conn->commit();
-                return null;
-            }
+                // Job deserialisieren
+                try {
+                    $jobPayload = json_decode($jobData['payload'], true, 512, JSON_THROW_ON_ERROR);
+                    $job = Job::unserialize($jobPayload);
+                    return $job;
+                } catch (Exception $e) {
+                    // Job-Fehler protokollieren und löschen
+                    app_log("Fehler beim Deserialisieren des Jobs", [
+                        'job_id' => $jobData['id'],
+                        'error' => $e->getMessage()
+                    ], 'error');
 
-            // Job reservieren
-            $updateSql = "UPDATE {$this->table} 
-                          SET reserved_at = ?, attempts = attempts + 1 
-                          WHERE id = ?";
-
-            $updateStmt = $conn->prepare($updateSql);
-            $updateStmt->execute([$now, $jobData['id']]);
-
-            $conn->commit();
-
-            // Job deserialisieren
-            try {
-                $jobPayload = json_decode($jobData['payload'], true, 512, JSON_THROW_ON_ERROR);
-                $job = Job::unserialize($jobPayload);
-                return $job;
-            } catch (Exception $e) {
-                // Job-Fehler protokollieren und löschen
-                app_log("Fehler beim Deserialisieren des Jobs", [
-                    'job_id' => $jobData['id'],
-                    'error' => $e->getMessage()
-                ], 'error');
-
-                $this->delete($jobData['id']);
-                return null;
-            }
+                    $this->delete($jobData['id']);
+                    return null;
+                }
+            }, $this->connection);
         } catch (Throwable $e) {
-            $conn->rollBack();
             throw new RuntimeException("Fehler beim Abrufen des Jobs: " . $e->getMessage(), 0, $e);
         }
     }
@@ -223,11 +235,9 @@ class DatabaseQueue implements Queue
      */
     public function exists(string $jobId): bool
     {
-        $sql = "SELECT COUNT(*) FROM {$this->table} WHERE id = ?";
-        $stmt = $this->db->connection()->prepare($sql);
-        $stmt->execute([$jobId]);
-
-        return (int)$stmt->fetchColumn() > 0;
+        return $this->table()
+                ->where('id', '=', $jobId)
+                ->count() > 0;
     }
 
     /**
@@ -238,11 +248,9 @@ class DatabaseQueue implements Queue
      */
     public function delete(string $jobId): bool
     {
-        $sql = "DELETE FROM {$this->table} WHERE id = ?";
-        $stmt = $this->db->connection()->prepare($sql);
-        $stmt->execute([$jobId]);
-
-        return $stmt->rowCount() > 0;
+        return $this->table()
+                ->where('id', '=', $jobId)
+                ->delete() > 0;
     }
 
     /**
@@ -253,11 +261,9 @@ class DatabaseQueue implements Queue
      */
     public function count(string $queue = 'default'): int
     {
-        $sql = "SELECT COUNT(*) FROM {$this->table} WHERE queue = ?";
-        $stmt = $this->db->connection()->prepare($sql);
-        $stmt->execute([$queue]);
-
-        return (int)$stmt->fetchColumn();
+        return $this->table()
+            ->where('queue', '=', $queue)
+            ->count();
     }
 
     /**
@@ -268,9 +274,9 @@ class DatabaseQueue implements Queue
      */
     public function clear(string $queue = 'default'): bool
     {
-        $sql = "DELETE FROM {$this->table} WHERE queue = ?";
-        $stmt = $this->db->connection()->prepare($sql);
-        $stmt->execute([$queue]);
+        $this->table()
+            ->where('queue', '=', $queue)
+            ->delete();
 
         return true;
     }
@@ -288,15 +294,14 @@ class DatabaseQueue implements Queue
     {
         $jobs = [];
 
-        $sql = "SELECT * FROM {$this->table} 
-                WHERE queue = ? 
-                ORDER BY available_at ASC
-                LIMIT ? OFFSET ?";
+        $jobsData = $this->table()
+            ->where('queue', '=', $queue)
+            ->orderBy('available_at')
+            ->limit($limit)
+            ->offset($offset)
+            ->get();
 
-        $stmt = $this->db->connection()->prepare($sql);
-        $stmt->execute([$queue, $limit, $offset]);
-
-        while ($jobData = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        foreach ($jobsData as $jobData) {
             try {
                 $jobPayload = json_decode($jobData['payload'], true, 512, JSON_THROW_ON_ERROR);
                 $job = Job::unserialize($jobPayload);
@@ -325,30 +330,27 @@ class DatabaseQueue implements Queue
     {
         $jobs = [];
 
-        $sql = "SELECT * FROM {$this->table} 
-                WHERE queue = ? AND payload LIKE ?
-                ORDER BY available_at ASC";
+        // Verwendung des QueryBuilders mit LIKE-Bedingung
+        $jobsData = $this->table()
+            ->where('queue', '=', $queue)
+            ->whereLike('payload', '%"tag":"' . $tag . '"%')
+            ->orderBy('available_at')
+            ->get();
 
-        $stmt = $this->db->connection()->prepare($sql);
-        $stmt->execute([$queue, '%"tag":"' . $tag . '"%']);
-
-        while ($jobData = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        foreach ($jobsData as $jobData) {
             try {
                 $jobPayload = json_decode($jobData['payload'], true, 512, JSON_THROW_ON_ERROR);
                 $job = Job::unserialize($jobPayload);
 
-                // Zusätzliche Prüfung, da LIKE ungenau sein kann
                 if ($job->getTag() === $tag) {
                     $jobs[] = $job;
                 }
             } catch (Exception $e) {
-                // Fehler beim Deserialisieren ignorieren
             }
         }
 
         return $jobs;
     }
-
     /**
      * Stellt sicher, dass die Jobs-Tabelle existiert
      *
@@ -357,15 +359,9 @@ class DatabaseQueue implements Queue
      */
     private function ensureTableExists(): void
     {
-        $conn = $this->db->connection();
-
         try {
-            // Prüfen, ob Tabelle existiert
-            $sql = "SELECT 1 FROM {$this->table} LIMIT 1";
-            $stmt = $conn->prepare($sql);
-            $stmt->execute();
-
-            // Tabelle existiert bereits
+            // Prüfen, ob Tabelle existiert mit QueryBuilder
+            $this->table()->first();
             return;
         } catch (Exception $e) {
             // Tabelle existiert nicht, erstellen
@@ -381,8 +377,6 @@ class DatabaseQueue implements Queue
      */
     private function createJobsTable(): void
     {
-        $conn = $this->db->connection();
-
         try {
             $sql = "CREATE TABLE IF NOT EXISTS {$this->table} (
                 id VARCHAR(50) NOT NULL PRIMARY KEY,
@@ -397,7 +391,7 @@ class DatabaseQueue implements Queue
                 INDEX reserved_at_index (reserved_at)
             )";
 
-            $conn->exec($sql);
+            $this->db->connection($this->connection)->query($sql);
 
             app_log("Jobs-Tabelle wurde erstellt", [
                 'table' => $this->table

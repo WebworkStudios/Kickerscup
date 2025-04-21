@@ -310,6 +310,54 @@ class WhereClause
     }
 
     /**
+     * Fügt eine WHERE LIKE-Bedingung hinzu
+     *
+     * @param string $column Spalte
+     * @param string $value Wert (kann Wildcards % oder _ enthalten)
+     * @return void
+     */
+    public function whereLike(string $column, string $value): void
+    {
+        $this->addCondition('AND', $column, 'LIKE', $value);
+    }
+
+    /**
+     * Fügt eine WHERE LIKE-Bedingung mit OR hinzu
+     *
+     * @param string $column Spalte
+     * @param string $value Wert (kann Wildcards % oder _ enthalten)
+     * @return void
+     */
+    public function orWhereLike(string $column, string $value): void
+    {
+        $this->addCondition('OR', $column, 'LIKE', $value);
+    }
+
+    /**
+     * Fügt eine WHERE NOT LIKE-Bedingung hinzu
+     *
+     * @param string $column Spalte
+     * @param string $value Wert (kann Wildcards % oder _ enthalten)
+     * @return void
+     */
+    public function whereNotLike(string $column, string $value): void
+    {
+        $this->addCondition('AND', $column, 'NOT LIKE', $value);
+    }
+
+    /**
+     * Fügt eine WHERE NOT LIKE-Bedingung mit OR hinzu
+     *
+     * @param string $column Spalte
+     * @param string $value Wert (kann Wildcards % oder _ enthalten)
+     * @return void
+     */
+    public function orWhereNotLike(string $column, string $value): void
+    {
+        $this->addCondition('OR', $column, 'NOT LIKE', $value);
+    }
+
+    /**
      * Generiert die SQL-Abfrage für die WHERE-Klausel
      *
      * @return string

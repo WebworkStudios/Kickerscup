@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\Core\Database;
 
+use AllowDynamicProperties;
 use App\Core\Database\Clauses\GroupByClause;
 use App\Core\Database\Clauses\HavingClause;
 use App\Core\Database\Clauses\JoinClause;
 use App\Core\Database\Clauses\LimitOffsetClause;
 use App\Core\Database\Clauses\OrderByClause;
 use App\Core\Database\Clauses\WhereClause;
+use App\Core\Database\Exceptions\QueryException;
 
 /**
  * QueryBuilder für SQL-Abfragen
@@ -17,7 +19,7 @@ use App\Core\Database\Clauses\WhereClause;
  * Diese Klasse wurde neu strukturiert, um eine bessere Trennung der Verantwortlichkeiten zu erreichen.
  * Jeder Teil der SQL-Abfrage wird von einer spezialisierten Klasse verwaltet.
  */
-class QueryBuilder
+#[AllowDynamicProperties] class QueryBuilder
 {
     /**
      * Zu selektierende Spalten
@@ -101,13 +103,19 @@ class QueryBuilder
     /**
      * Fügt eine WHERE-Bedingung hinzu
      *
-     * @param string $column Spalte
-     * @param string $operator Operator
-     * @param mixed $value Wert
+     * @param string|callable $column Spalte oder Callback für gruppierte Bedingungen
+     * @param string|null $operator Operator (nur bei string für $column)
+     * @param mixed|null $value Wert (nur bei string für $column)
      * @return self
      */
-    public function where(string $column, string $operator, mixed $value): self
+    public function where(string|callable $column, ?string $operator = null, mixed $value = null): self
     {
+        // Wenn ein Callback übergeben wurde, Gruppierung verwenden
+        if (is_callable($column)) {
+            return $this->whereGroup($column);
+        }
+
+        // Standard-Verhalten beibehalten
         $this->getWhereClause()->where($column, $operator, $value);
         return $this;
     }
@@ -426,6 +434,58 @@ class QueryBuilder
     }
 
     /**
+     * Fügt eine WHERE LIKE-Bedingung hinzu
+     *
+     * @param string $column Spalte
+     * @param string $value Wert (kann Wildcards % oder _ enthalten)
+     * @return self
+     */
+    public function whereLike(string $column, string $value): self
+    {
+        $this->getWhereClause()->whereLike($column, $value);
+        return $this;
+    }
+
+    /**
+     * Fügt eine WHERE LIKE-Bedingung mit OR hinzu
+     *
+     * @param string $column Spalte
+     * @param string $value Wert (kann Wildcards % oder _ enthalten)
+     * @return self
+     */
+    public function orWhereLike(string $column, string $value): self
+    {
+        $this->getWhereClause()->orWhereLike($column, $value);
+        return $this;
+    }
+
+    /**
+     * Fügt eine WHERE NOT LIKE-Bedingung hinzu
+     *
+     * @param string $column Spalte
+     * @param string $value Wert (kann Wildcards % oder _ enthalten)
+     * @return self
+     */
+    public function whereNotLike(string $column, string $value): self
+    {
+        $this->getWhereClause()->whereNotLike($column, $value);
+        return $this;
+    }
+
+    /**
+     * Fügt eine WHERE NOT LIKE-Bedingung mit OR hinzu
+     *
+     * @param string $column Spalte
+     * @param string $value Wert (kann Wildcards % oder _ enthalten)
+     * @return self
+     */
+    public function orWhereNotLike(string $column, string $value): self
+    {
+        $this->getWhereClause()->orWhereNotLike($column, $value);
+        return $this;
+    }
+
+    /**
      * Führt die Abfrage aus und gibt das erste Ergebnis zurück
      *
      * @param string[]|null $columns Spalten
@@ -513,6 +573,17 @@ class QueryBuilder
             $query .= ' ' . $limitOffsetSql;
         }
 
+        // UNION
+        foreach ($this->unions as $index => $unionQuery) {
+            $unionType = $this->unionAll[$index] ? 'UNION ALL' : 'UNION';
+            $query .= " $unionType " . $unionQuery->toSql();
+        }
+
+        // FOR UPDATE (am Ende der Abfrage hinzufügen)
+        if (isset($this->forUpdate) && $this->forUpdate === true) {
+            $query .= ' FOR UPDATE';
+        }
+
         return $query;
     }
 
@@ -529,11 +600,18 @@ class QueryBuilder
             $bindings = array_merge($bindings, $this->whereClause->getBindings());
         }
 
-        return array_merge(
+        $bindings = array_merge(
             $bindings,
             $this->joinClause->getBindings(),
             $this->havingClause->getBindings()
         );
+
+        // Bindings aus UNION-Abfragen hinzufügen
+        foreach ($this->unions as $unionQuery) {
+            $bindings = array_merge($bindings, $unionQuery->getBindings());
+        }
+
+        return $bindings;
     }
 
     /**
@@ -598,15 +676,16 @@ class QueryBuilder
      *
      * @param array $data Daten
      * @return int Letzte eingefügte ID
+     * @throws QueryException
      */
-    public function insert(string $table, array $data): int
+    public function insert(array $data): int
     {
         $columns = array_keys($data);
         $placeholders = array_map(fn($column) => ":$column", $columns);
 
         $query = sprintf(
             'INSERT INTO %s (%s) VALUES (%s)',
-            $this->sanitizeTableName($table),
+            $this->from,
             implode(', ', array_map([$this, 'sanitizeColumnName'], $columns)),
             implode(', ', $placeholders)
         );
@@ -902,6 +981,17 @@ class QueryBuilder
     {
         $this->connection->query("TRUNCATE TABLE {$this->from}");
         return true;
+    }
+
+    /**
+     * Fügt FOR UPDATE zur Abfrage hinzu
+     *
+     * @return self
+     */
+    public function forUpdate(): self
+    {
+        $this->forUpdate = true;
+        return $this;
     }
 
     /**
